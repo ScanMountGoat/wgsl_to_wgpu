@@ -1,2 +1,2 @@
 # wgsl_to_wgpu
-Generate typesafe bindings to WGSL shaders using macros
+Generate typesafe Rust bindings from wgsl shaders to wgpu using macros.

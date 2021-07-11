@@ -1,0 +1,15 @@
+[package]
+name = "wgsl_to_wgpu"
+version = "0.1.0"
+authors = ["ScanMountGoat <>"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+naga = { version = "0.5.0", features = ["wgsl-in"] }
+syn = "1"
+quote = "1"
+proc-macro2 = "1"
+wgpu = "0.9"
