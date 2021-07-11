@@ -2,6 +2,10 @@
 name = "wgsl_to_wgpu"
 version = "0.1.0"
 authors = ["ScanMountGoat <>"]
+description = "Generate typesafe Rust bindings from wgsl shaders to wgpu using macros"
+license = "MIT"
+documentation = "https://docs.rs/wgsl_to_wgpu"
+repository = "https://github.com/ScanMountGoat/wgsl_to_wgpu"
 edition = "2018"
 
 [lib]
