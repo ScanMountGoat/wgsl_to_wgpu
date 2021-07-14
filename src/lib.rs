@@ -5,6 +5,9 @@ use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::{parse_macro_input, LitStr};
 
+// TODO: It should be possible to configure the name and specify more than one shader file.
+// Possible API: wgsl_module!("My Shader", "frag.wgsl", "vert.wgsl");
+// TODO: Does wgsl support combining multiple shader files for the fragment and vertex stages?
 #[proc_macro]
 pub fn wgsl_module(input: TokenStream) -> TokenStream {
     // TODO: How to handle the errors from naga?
@@ -20,14 +23,15 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
 
     let bind_groups = get_binding_groups(&module);
     let generate_bind_groups: Vec<_> = bind_groups.iter().map(|(group_no, group)| {
-        let group_name = Ident::new(&format!("BindGroup{}", group_no), Span::call_site());
+        let group_name = indexed_name_to_ident("BindGroup", *group_no);
+        let layout_descriptor_const_name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", *group_no);
 
         // TODO: Clean this up.
         let binding_fields: Vec<_> = group.bindings.iter().map(generate_binding_field).collect();
 
-        let descriptor_entries = group.bindings.iter().map(
+        let descriptor_entries: Vec<_> = group.bindings.iter().map(
             generate_bind_group_layout_entry
-        );
+        ).collect();
 
         let bind_group_entries: Vec<_> = group.bindings.iter().map(generate_bind_group_entry).collect();
         
@@ -38,26 +42,26 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
                 )*
             }
 
-            impl<'a> #group_name<'a> {
-                fn get_layout_descriptor() -> wgpu::BindGroupLayoutDescriptor<'a> {
-                    wgpu::BindGroupLayoutDescriptor::<'a> {
-                        // TODO: Use the name here?
-                        label: None,
-                        entries: &[
-                            #(
-                                #descriptor_entries
-                            ),*
-                        ],
-                    }
-                }
+            const #layout_descriptor_const_name: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                // TODO: Use the name here?
+                label: None,
+                entries: &[
+                    #(
+                        #descriptor_entries
+                    ),*
+                ],
+            };
 
-                pub fn get_bind_group_layout(&self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
-                    device.create_bind_group_layout(&#group_name::get_layout_descriptor())
+            impl<'a> #group_name<'a> {
+                // TODO: It might be a better option to have these be constants in the module.
+                // The user can be responsible for calling the appropriate method on device.
+                pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+                    device.create_bind_group_layout(&#layout_descriptor_const_name)
                 }
 
                 pub fn get_bind_group(&self, device: &wgpu::Device) -> wgpu::BindGroup {
                     // TODO: Avoid creating this more than once?
-                    let bind_group_layout = device.create_bind_group_layout(&Self::get_layout_descriptor());
+                    let bind_group_layout = device.create_bind_group_layout(&#layout_descriptor_const_name);
                     device.create_bind_group(&wgpu::BindGroupDescriptor {
                         layout: &bind_group_layout,
                         entries: &[
@@ -72,12 +76,33 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
         }
     }).collect();
 
+    let bind_group_descriptors: Vec<_> = bind_groups.iter().map(|(group_no, _)| {
+        // TODO: We've already generated these names, so it doesn't make sense to generate them again.
+        let group_name = indexed_name_to_ident("BindGroup", *group_no);
+
+        quote! {
+            bind_groups::#group_name::get_bind_group_layout(&device)
+        }
+    }).collect();
+
     let expanded = quote! {
         mod shader_types {
             pub mod bind_groups {
                 #(
                     #generate_bind_groups
                 )*
+
+            }
+
+            // TODO: Generate documentation for generated code?
+            pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+                device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    // TODO: Labels?
+                    label: None,
+                    bind_group_layouts: &[#(&#bind_group_descriptors),*],
+                    // TODO: Does wgsl have push constants?
+                    push_constant_ranges: &[],
+                })
             }
         }
     };
@@ -85,9 +110,13 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
+    Ident::new(&format!("{}{}", name, index), Span::call_site())
+}
+
 fn generate_bind_group_entry(group_binding: &GroupBinding) -> proc_macro2::TokenStream {
     let binding_index = group_binding.binding_index;
-    let binding_name = Ident::new(&format!("binding{}", binding_index), Span::call_site());
+    let binding_name = indexed_name_to_ident("binding", binding_index);
     let resource_type = match group_binding.inner_type {
         naga::TypeInner::Struct { .. } => quote! {
             // TODO: Don't assume the entire buffer is used.
@@ -152,10 +181,7 @@ fn generate_bind_group_layout_entry(group_binding: &GroupBinding) -> proc_macro2
 }
 
 fn generate_binding_field(group_binding: &GroupBinding) -> proc_macro2::TokenStream {
-    let field_name = Ident::new(
-        &format!("binding{}", group_binding.binding_index),
-        Span::call_site(),
-    );
+    let field_name = indexed_name_to_ident("binding", group_binding.binding_index);
     // TODO: Support more types.
     let field_type = match group_binding.inner_type {
         naga::TypeInner::Struct { .. } => quote! { &'a wgpu::Buffer },
