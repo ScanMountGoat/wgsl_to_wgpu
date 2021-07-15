@@ -3,7 +3,21 @@ use std::collections::{BTreeMap};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{parse_macro_input, LitStr};
+use syn::{LitStr, parse::{Parse, ParseStream}, parse_macro_input};
+
+struct InputData {
+    shader_name: LitStr,
+    path: LitStr,
+}
+
+impl Parse for InputData {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let shader_name = input.parse()?;
+        input.parse::<syn::Token![,]>()?;
+        let path = input.parse()?;
+        Ok(InputData { shader_name, path })
+    }
+}
 
 // TODO: It should be possible to configure the name and specify more than one shader file.
 // Possible API: wgsl_module!("My Shader", "frag.wgsl", "vert.wgsl");
@@ -11,12 +25,15 @@ use syn::{parse_macro_input, LitStr};
 #[proc_macro]
 pub fn wgsl_module(input: TokenStream) -> TokenStream {
     // TODO: How to handle the errors from naga?
-    let input_path = parse_macro_input!(input as LitStr).value();
+    let input = parse_macro_input!(input as InputData);
+    let input_path = input.path.value();
+    let shader_name = Ident::new(&input.shader_name.value(), Span::call_site());
+
     // TODO: This won't always use the correct path.
     // TODO: Use include_str! to recompile when the source changes?
     let wgsl_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src")
-        .join(input_path);
+        .join(input_path.clone());
     let wgsl_source = std::fs::read_to_string(wgsl_path).unwrap();
 
     let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap();
@@ -53,14 +70,14 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
             };
 
             impl<'a> #group_name<'a> {
-                // TODO: It might be a better option to have these be constants in the module.
-                // The user can be responsible for calling the appropriate method on device.
                 pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
                     device.create_bind_group_layout(&#layout_descriptor_const_name)
                 }
 
                 pub fn get_bind_group(&self, device: &wgpu::Device) -> wgpu::BindGroup {
-                    // TODO: Avoid creating this more than once?
+                    // TODO: Is it possible to avoid creating the layout more than once?
+                    // The wgpu types are tied to a particular device.
+                    // Switching devices may invalidate the previous objects.
                     let bind_group_layout = device.create_bind_group_layout(&#layout_descriptor_const_name);
                     device.create_bind_group(&wgpu::BindGroupDescriptor {
                         layout: &bind_group_layout,
@@ -86,12 +103,20 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
     }).collect();
 
     let expanded = quote! {
-        mod shader_types {
+        mod #shader_name {
             pub mod bind_groups {
                 #(
                     #generate_bind_groups
                 )*
+            }
 
+            pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+                device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                    // TODO: Labels?
+                    label: None,
+                    flags: wgpu::ShaderFlags::all(),
+                    source: wgpu::ShaderSource::Wgsl(include_str!(#input_path).into()),
+                })
             }
 
             // TODO: Generate documentation for generated code?
