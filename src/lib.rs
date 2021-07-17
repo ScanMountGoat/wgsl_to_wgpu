@@ -102,11 +102,26 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
         }
     }).collect();
 
+    let vertex_input_locations: Vec<_> = get_vertex_input_locations(&module).iter().map(
+        |(name, location)| {
+            let name = Ident::new(&format!("{}_LOCATION", name.to_uppercase()), Span::call_site());
+            quote! {
+                const #name: u32 = #location;
+            }
+    }
+    ).collect();
+
     let expanded = quote! {
         mod #shader_name {
             pub mod bind_groups {
                 #(
                     #generate_bind_groups
+                )*
+            }
+
+            pub mod vertex {
+                #(
+                    #vertex_input_locations
                 )*
             }
 
@@ -205,6 +220,15 @@ fn generate_bind_group_layout_entry(group_binding: &GroupBinding) -> proc_macro2
     }
 }
 
+struct GroupData<'a> {
+    bindings: Vec<GroupBinding<'a>>,
+}
+
+struct GroupBinding<'a> {
+    binding_index: u32,
+    inner_type: &'a naga::TypeInner,
+}
+
 fn generate_binding_field(group_binding: &GroupBinding) -> proc_macro2::TokenStream {
     let field_name = indexed_name_to_ident("binding", group_binding.binding_index);
     // TODO: Support more types.
@@ -219,15 +243,6 @@ fn generate_binding_field(group_binding: &GroupBinding) -> proc_macro2::TokenStr
         pub #field_name: #field_type
     }
 
-}
-
-struct GroupData<'a> {
-    bindings: Vec<GroupBinding<'a>>,
-}
-
-struct GroupBinding<'a> {
-    binding_index: u32,
-    inner_type: &'a naga::TypeInner,
 }
 
 fn get_binding_groups(module: &naga::Module) -> BTreeMap<u32, GroupData> {
@@ -253,4 +268,36 @@ fn get_binding_groups(module: &naga::Module) -> BTreeMap<u32, GroupData> {
     }
 
     groups
+}
+
+// TODO: Handle errors.
+// TODO: Create a separate module for dealing with naga types.
+// TODO: It should be straightforward to add tests for this by harcoding small shader modules.
+fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
+    let vertex_entry = module.entry_points.iter().find(|e| e.stage == naga::ShaderStage::Vertex).unwrap();
+
+    let mut shader_locations = Vec::new();
+    // TODO: Support non structs by also checking the arguments.
+    // Arguments must have a binding unless they are a structure.
+    let arg_types: Vec<_> = vertex_entry
+        .function
+        .arguments
+        .iter()
+        .map(|a| &module.types[a.ty])
+        .collect();
+    for arg_type in arg_types {
+        match &arg_type.inner {
+            naga::TypeInner::Struct { top_level: _, members, span: _ } => {
+                for member in members {
+                    match member.binding.as_ref().unwrap() {
+                        naga::Binding::BuiltIn(_) => (),
+                        naga::Binding::Location { location, ..} => shader_locations.push((member.name.clone().unwrap(), *location)),
+                    }
+                }
+            },
+            _ => ()
+        }
+    }
+
+    shader_locations
 }
