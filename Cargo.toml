@@ -17,3 +17,6 @@ syn = "1"
 quote = "1"
 proc-macro2 = "1"
 wgpu = "0.9"
+
+[dev-dependencies]
+indoc = "1.0"

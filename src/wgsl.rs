@@ -35,8 +35,6 @@ pub fn get_bind_group_data(module: &naga::Module) -> BTreeMap<u32, GroupData> {
 }
 
 // TODO: Handle errors.
-// TODO: Create a separate module for dealing with naga types.
-// TODO: It should be straightforward to add tests for this by harcoding small shader modules.
 pub fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
     let vertex_entry = module
         .entry_points
@@ -45,33 +43,140 @@ pub fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
         .unwrap();
 
     let mut shader_locations = Vec::new();
-    // TODO: Support non structs by also checking the arguments.
-    // Arguments must have a binding unless they are a structure.
-    let arg_types: Vec<_> = vertex_entry
-        .function
-        .arguments
-        .iter()
-        .map(|a| &module.types[a.ty])
-        .collect();
-    for arg_type in arg_types {
-        match &arg_type.inner {
-            naga::TypeInner::Struct {
-                top_level: _,
-                members,
-                span: _,
-            } => {
-                for member in members {
-                    match member.binding.as_ref().unwrap() {
-                        naga::Binding::BuiltIn(_) => (),
-                        naga::Binding::Location { location, .. } => {
-                            shader_locations.push((member.name.clone().unwrap(), *location))
+
+    for argument in &vertex_entry.function.arguments {
+        // For entry points, arguments must have a binding unless they are a structure.
+        if let Some(binding) = &argument.binding {
+            if let naga::Binding::Location { location, .. } = binding {
+                shader_locations.push((argument.name.clone().unwrap(), *location));
+            }
+        } else {
+            let arg_type = &module.types[argument.ty];
+            match &arg_type.inner {
+                naga::TypeInner::Struct {
+                    top_level: _,
+                    members,
+                    span: _,
+                } => {
+                    for member in members {
+                        match member.binding.as_ref().unwrap() {
+                            naga::Binding::BuiltIn(_) => (),
+                            naga::Binding::Location { location, .. } => {
+                                shader_locations.push((member.name.clone().unwrap(), *location))
+                            }
                         }
                     }
                 }
+                // This case should be prevented by the checks above.
+                _ => unreachable!(),
             }
-            _ => (),
         }
     }
 
     shader_locations
+}
+
+#[cfg(test)]
+mod test {
+    use indoc::indoc;
+
+    use crate::wgsl::get_vertex_input_locations;
+
+    #[test]
+    fn vertex_locations_struct_two_fields() {
+        let source = indoc! {r#"
+            struct VertexInput {
+                [[location(0)]] position: vec3<f32>;
+                [[location(1)]] tex_coords: vec2<f32>;
+            };
+
+            [[stage(vertex)]]
+            fn main(
+                model: VertexInput,
+            ) -> [[builtin(position)]] vec4<f32> {
+                return vec4<f32>(0.0);
+            }
+        "#};
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let shader_locations = get_vertex_input_locations(&module);
+        assert_eq!(
+            &[("position".to_string(), 0), ("tex_coords".to_string(), 1)],
+            &shader_locations[..]
+        );
+    }
+
+    #[test]
+    fn vertex_locations_struct_no_fields() {
+        let source = indoc! {r#"
+            struct VertexInput {
+            };
+
+            [[stage(vertex)]]
+            fn main(
+                model: VertexInput,
+            ) -> [[builtin(position)]] vec4<f32> {
+                return vec4<f32>(0.0);
+            }
+        "#};
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let shader_locations = get_vertex_input_locations(&module);
+        assert!(shader_locations.is_empty());
+    }
+
+    #[test]
+    fn vertex_locations_struct_builtin_field() {
+        let source = indoc! {r#"
+            struct VertexInput {
+                [[builtin(vertex_index)]] VertexIndex : u32;
+            };
+
+            [[stage(vertex)]]
+            fn main(
+                model: VertexInput,
+            ) -> [[builtin(position)]] vec4<f32> {
+                return vec4<f32>(0.0);
+            }
+        "#};
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let shader_locations = get_vertex_input_locations(&module);
+        assert!(shader_locations.is_empty());
+    }
+
+    #[test]
+    fn vertex_locations_struct_builtin_parameter() {
+        let source = indoc! {r#"
+            [[stage(vertex)]]
+            fn main(
+                [[builtin(vertex_index)]] VertexIndex : u32,
+            ) -> [[builtin(position)]] vec4<f32> {
+                return vec4<f32>(0.0);
+            }
+        "#};
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let shader_locations = get_vertex_input_locations(&module);
+        assert!(shader_locations.is_empty());
+    }
+
+    #[test]
+    fn vertex_locations_two_parameters() {
+        let source = indoc! {r#"
+            [[stage(vertex)]]
+            fn main([[location(0)]] position: vec4<f32>,
+                    [[location(1)]] tex_coords: vec2<f32>
+            ) -> [[builtin(position)]] vec4<f32> {
+                return vec4<f32>(0.0);
+            }
+        "#};
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let shader_locations = get_vertex_input_locations(&module);
+        assert_eq!(
+            &[("position".to_string(), 0), ("tex_coords".to_string(), 1)],
+            &shader_locations[..]
+        );
+    }
 }
