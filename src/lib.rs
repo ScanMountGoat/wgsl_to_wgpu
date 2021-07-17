@@ -1,9 +1,13 @@
-use std::collections::{BTreeMap};
-
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{LitStr, parse::{Parse, ParseStream}, parse_macro_input};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, LitStr,
+};
+use wgsl::GroupBinding;
+
+mod wgsl;
 
 struct InputData {
     shader_name: LitStr,
@@ -38,8 +42,101 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
 
     let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap();
 
-    let bind_groups = get_binding_groups(&module);
-    let generate_bind_groups: Vec<_> = bind_groups.iter().map(|(group_no, group)| {
+    let bind_group_data = wgsl::get_bind_group_data(&module);
+
+    let bind_group_descriptors: Vec<_> = bind_group_data
+        .iter()
+        .map(|(group_no, _)| {
+            // TODO: We've already generated these names, so it doesn't make sense to generate them again.
+            let group_name = indexed_name_to_ident("BindGroup", *group_no);
+
+            quote! {
+                bind_groups::#group_name::get_bind_group_layout(&device)
+            }
+        })
+        .collect();
+
+    let bind_group_module = generate_bind_group_module(bind_group_data);
+
+    let vertex_module = generate_vertex_module(&module);
+
+    let create_pipeline_layout_function = quote! {
+        // TODO: Generate documentation for generated code?
+        pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                // TODO: Labels?
+                label: None,
+                bind_group_layouts: &[#(&#bind_group_descriptors),*],
+                // TODO: Does wgsl have push constants?
+                push_constant_ranges: &[],
+            })
+        }
+    };
+
+    let create_shader_module_function = quote! {
+        pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+            device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                // TODO: Labels?
+                label: None,
+                flags: wgpu::ShaderFlags::all(),
+                source: wgpu::ShaderSource::Wgsl(include_str!(#input_path).into()),
+            })
+        }
+    };
+
+    let expanded = quote! {
+        mod #shader_name {
+            #bind_group_module
+            #vertex_module
+
+            #create_shader_module_function
+            #create_pipeline_layout_function
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+fn generate_vertex_module(module: &naga::Module) -> proc_macro2::TokenStream {
+    let vertex_input_locations: Vec<_> = wgsl::get_vertex_input_locations(&module)
+        .iter()
+        .map(|(name, location)| {
+            let name = Ident::new(
+                &format!("{}_LOCATION", name.to_uppercase()),
+                Span::call_site(),
+            );
+            quote! {
+                const #name: u32 = #location;
+            }
+        })
+        .collect();
+
+    quote! {
+        pub mod vertex {
+            #(
+                #vertex_input_locations
+            )*
+        }
+    }
+}
+
+fn generate_bind_group_module(
+    bind_group_data: std::collections::BTreeMap<u32, wgsl::GroupData>,
+) -> proc_macro2::TokenStream {
+    let bind_groups = generate_bind_groups(&bind_group_data);
+    quote! {
+        pub mod bind_groups {
+            #(
+                #bind_groups
+            )*
+        }
+    }
+}
+
+fn generate_bind_groups(
+    bind_groups: &std::collections::BTreeMap<u32, wgsl::GroupData>,
+) -> Vec<proc_macro2::TokenStream> {
+    bind_groups.iter().map(|(group_no, group)| {
         let group_name = indexed_name_to_ident("BindGroup", *group_no);
         let layout_descriptor_const_name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", *group_no);
 
@@ -51,7 +148,6 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
         ).collect();
 
         let bind_group_entries: Vec<_> = group.bindings.iter().map(generate_bind_group_entry).collect();
-        
         quote! {
             pub struct #group_name<'a> {
                 #(
@@ -91,63 +187,7 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
                 }
             }
         }
-    }).collect();
-
-    let bind_group_descriptors: Vec<_> = bind_groups.iter().map(|(group_no, _)| {
-        // TODO: We've already generated these names, so it doesn't make sense to generate them again.
-        let group_name = indexed_name_to_ident("BindGroup", *group_no);
-
-        quote! {
-            bind_groups::#group_name::get_bind_group_layout(&device)
-        }
-    }).collect();
-
-    let vertex_input_locations: Vec<_> = get_vertex_input_locations(&module).iter().map(
-        |(name, location)| {
-            let name = Ident::new(&format!("{}_LOCATION", name.to_uppercase()), Span::call_site());
-            quote! {
-                const #name: u32 = #location;
-            }
-    }
-    ).collect();
-
-    let expanded = quote! {
-        mod #shader_name {
-            pub mod bind_groups {
-                #(
-                    #generate_bind_groups
-                )*
-            }
-
-            pub mod vertex {
-                #(
-                    #vertex_input_locations
-                )*
-            }
-
-            pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
-                device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                    // TODO: Labels?
-                    label: None,
-                    flags: wgpu::ShaderFlags::all(),
-                    source: wgpu::ShaderSource::Wgsl(include_str!(#input_path).into()),
-                })
-            }
-
-            // TODO: Generate documentation for generated code?
-            pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
-                device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    // TODO: Labels?
-                    label: None,
-                    bind_group_layouts: &[#(&#bind_group_descriptors),*],
-                    // TODO: Does wgsl have push constants?
-                    push_constant_ranges: &[],
-                })
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
+    }).collect()
 }
 
 fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
@@ -220,15 +260,6 @@ fn generate_bind_group_layout_entry(group_binding: &GroupBinding) -> proc_macro2
     }
 }
 
-struct GroupData<'a> {
-    bindings: Vec<GroupBinding<'a>>,
-}
-
-struct GroupBinding<'a> {
-    binding_index: u32,
-    inner_type: &'a naga::TypeInner,
-}
-
 fn generate_binding_field(group_binding: &GroupBinding) -> proc_macro2::TokenStream {
     let field_name = indexed_name_to_ident("binding", group_binding.binding_index);
     // TODO: Support more types.
@@ -242,62 +273,4 @@ fn generate_binding_field(group_binding: &GroupBinding) -> proc_macro2::TokenStr
     quote! {
         pub #field_name: #field_type
     }
-
-}
-
-fn get_binding_groups(module: &naga::Module) -> BTreeMap<u32, GroupData> {
-    // Use a BTree to sort type and field names by group index.
-    // This isn't strictly necessary but makes the generated code cleaner.
-    let mut groups = BTreeMap::new();
-
-    for global_handle in module.global_variables.iter() {
-        let global = &module.global_variables[global_handle.0];
-        if let Some(binding) = &global.binding {
-            let group = groups.entry(binding.group).or_insert(GroupData {
-                bindings: Vec::new(),
-            });
-            let inner_type = &module.types[module.global_variables[global_handle.0].ty].inner;
-
-            // Assume bindings are unique since duplicates would trigger a WGSL compiler error.
-            let group_binding = GroupBinding {
-                binding_index: binding.binding,
-                inner_type,
-            };
-            group.bindings.push(group_binding);
-        }
-    }
-
-    groups
-}
-
-// TODO: Handle errors.
-// TODO: Create a separate module for dealing with naga types.
-// TODO: It should be straightforward to add tests for this by harcoding small shader modules.
-fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
-    let vertex_entry = module.entry_points.iter().find(|e| e.stage == naga::ShaderStage::Vertex).unwrap();
-
-    let mut shader_locations = Vec::new();
-    // TODO: Support non structs by also checking the arguments.
-    // Arguments must have a binding unless they are a structure.
-    let arg_types: Vec<_> = vertex_entry
-        .function
-        .arguments
-        .iter()
-        .map(|a| &module.types[a.ty])
-        .collect();
-    for arg_type in arg_types {
-        match &arg_type.inner {
-            naga::TypeInner::Struct { top_level: _, members, span: _ } => {
-                for member in members {
-                    match member.binding.as_ref().unwrap() {
-                        naga::Binding::BuiltIn(_) => (),
-                        naga::Binding::Location { location, ..} => shader_locations.push((member.name.clone().unwrap(), *location)),
-                    }
-                }
-            },
-            _ => ()
-        }
-    }
-
-    shader_locations
 }
