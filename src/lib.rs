@@ -101,12 +101,12 @@ fn generate_vertex_module(module: &naga::Module) -> proc_macro2::TokenStream {
     let vertex_input_locations: Vec<_> = wgsl::get_vertex_input_locations(&module)
         .iter()
         .map(|(name, location)| {
-            let name = Ident::new(
+            let const_name = Ident::new(
                 &format!("{}_LOCATION", name.to_uppercase()),
                 Span::call_site(),
             );
             quote! {
-                const #name: u32 = #location;
+                pub const #const_name: u32 = #location;
             }
         })
         .collect();
@@ -155,7 +155,7 @@ fn generate_bind_groups(
                 )*
             }
 
-            const #layout_descriptor_const_name: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+            pub const #layout_descriptor_const_name: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                 // TODO: Use the name here?
                 label: None,
                 entries: &[
