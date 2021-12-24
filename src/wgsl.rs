@@ -54,7 +54,6 @@ pub fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
             let arg_type = &module.types[argument.ty];
             match &arg_type.inner {
                 naga::TypeInner::Struct {
-                    top_level: _,
                     members,
                     span: _,
                 } => {

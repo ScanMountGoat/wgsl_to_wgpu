@@ -78,7 +78,6 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
             device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 // TODO: Labels?
                 label: None,
-                flags: wgpu::ShaderFlags::all(),
                 source: wgpu::ShaderSource::Wgsl(include_str!(#input_path).into()),
             })
         }
@@ -239,10 +238,8 @@ fn generate_bind_group_layout_entry(group_binding: &GroupBinding) -> proc_macro2
             }
         },
         naga::TypeInner::Sampler { .. } => quote! {
-            wgpu::BindingType::Sampler {
-                comparison: false,
-                filtering: true,
-            }
+            // TODO: Don't assume filtering?
+            wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)
         },
         // TODO: Better error handling.
         _ => panic!("Failed to generate BindingType."),
@@ -252,7 +249,7 @@ fn generate_bind_group_layout_entry(group_binding: &GroupBinding) -> proc_macro2
         wgpu::BindGroupLayoutEntry {
             binding: #binding_index,
             // TODO: This can't  be determined easily from WGSL, so just use both (missing compute).
-            visibility: wgpu::ShaderStage::VERTEX_FRAGMENT,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
             ty: #binding_type,
             // TODO: Support arrays?
             count: None,
