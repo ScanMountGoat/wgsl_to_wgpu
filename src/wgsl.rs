@@ -5,6 +5,7 @@ pub struct GroupData<'a> {
 }
 
 pub struct GroupBinding<'a> {
+    pub name: Option<String>,
     pub binding_index: u32,
     pub inner_type: &'a naga::TypeInner,
 }
@@ -24,6 +25,7 @@ pub fn get_bind_group_data(module: &naga::Module) -> BTreeMap<u32, GroupData> {
 
             // Assume bindings are unique since duplicates would trigger a WGSL compiler error.
             let group_binding = GroupBinding {
+                name: global.name.clone(),
                 binding_index: binding.binding,
                 inner_type,
             };

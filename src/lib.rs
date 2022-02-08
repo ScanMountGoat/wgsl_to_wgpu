@@ -35,9 +35,10 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
 
     // TODO: This won't always use the correct path.
     // TODO: Use include_str! to recompile when the source changes?
-    let wgsl_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join(input_path.clone());
+    // let wgsl_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    //     .join("src")
+    //     .join(input_path.clone());
+    let wgsl_path = input_path.clone();
     let wgsl_source = std::fs::read_to_string(wgsl_path).unwrap();
 
     let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap();
@@ -84,7 +85,8 @@ pub fn wgsl_module(input: TokenStream) -> TokenStream {
     };
 
     let expanded = quote! {
-        mod #shader_name {
+        // TODO: Avoid making this outer module?
+        pub mod #shader_name {
             #bind_group_module
             #vertex_module
 
@@ -122,25 +124,73 @@ fn generate_vertex_module(module: &naga::Module) -> proc_macro2::TokenStream {
 fn generate_bind_group_module(
     bind_group_data: std::collections::BTreeMap<u32, wgsl::GroupData>,
 ) -> proc_macro2::TokenStream {
+    let bind_group_fields = generate_bind_groups_as_fields(&bind_group_data);
+
     let bind_groups = generate_bind_groups(&bind_group_data);
+
+    // TODO: How to generate setting all bind groups?
+    let set_bind_groups = generate_set_bind_groups(&bind_group_data);
+
     quote! {
         pub mod bind_groups {
             #(
                 #bind_groups
             )*
+
+            // TODO: Add a function for setting all bind groups on a render pass?
+            pub struct BindGroups<'a> {
+                #(
+                    pub #bind_group_fields
+                ),*
+            }
+
+            // TODO: Generate this individually for each bind group type?
+            pub fn set_bind_groups<'a>(render_pass: &mut wgpu::RenderPass<'a>, bind_groups: BindGroups<'a>) {
+                #(#set_bind_groups)*
+            }
         }
     }
+}
+
+fn generate_bind_groups_as_fields(
+    bind_groups: &std::collections::BTreeMap<u32, wgsl::GroupData>,
+) -> Vec<proc_macro2::TokenStream> {
+    bind_groups.iter().map(|(group_no, _)| {
+        let field_name = indexed_name_to_ident("bind_group", *group_no);
+        let type_name = indexed_name_to_ident("BindGroup", *group_no);
+        quote!{
+            #field_name: &'a #type_name
+        }
+    }).collect()
+}
+
+fn generate_set_bind_groups(
+    bind_groups: &std::collections::BTreeMap<u32, wgsl::GroupData>,
+) -> Vec<proc_macro2::TokenStream> {
+    bind_groups.iter().map(|(group_no, _)| {
+        let field_name = indexed_name_to_ident("bind_group", *group_no);
+        quote!{
+            render_pass.set_bind_group(#group_no, &bind_groups.#field_name.0, &[]);
+        }
+    }).collect()
 }
 
 fn generate_bind_groups(
     bind_groups: &std::collections::BTreeMap<u32, wgsl::GroupData>,
 ) -> Vec<proc_macro2::TokenStream> {
     bind_groups.iter().map(|(group_no, group)| {
+        // TODO: Creating a pipeline layout expects sets to be consecutive.
+        // i.e. having groups 0 and 3 won't work but 0,1,2 will.
         let group_name = indexed_name_to_ident("BindGroup", *group_no);
+
+        let layout_name = indexed_name_to_ident("BindGroupLayout", *group_no);
+        let layout_fields: Vec<_> = group.bindings.iter().map(generate_binding_param_field).collect();
+
         let layout_descriptor_const_name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", *group_no);
 
         // TODO: Clean this up.
-        let binding_fields: Vec<_> = group.bindings.iter().map(generate_binding_field).collect();
+        // TODO: These aren't really fields anymore.
+        let binding_params: Vec<_> = group.bindings.iter().map(generate_binding_param).collect();
 
         let descriptor_entries: Vec<_> = group.bindings.iter().map(
             generate_bind_group_layout_entry
@@ -148,13 +198,14 @@ fn generate_bind_groups(
 
         let bind_group_entries: Vec<_> = group.bindings.iter().map(generate_bind_group_entry).collect();
         quote! {
-            pub struct #group_name<'a> {
-                #(
-                    #binding_fields,
-                )*
+            // The field is private to ensure the correct slot is set on the render pass.
+            pub struct #group_name(wgpu::BindGroup);
+
+            pub struct #layout_name<'a> {
+                #(pub #layout_fields),*
             }
 
-            pub const #layout_descriptor_const_name: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+            const #layout_descriptor_const_name: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                 // TODO: Use the name here?
                 label: None,
                 entries: &[
@@ -164,17 +215,18 @@ fn generate_bind_groups(
                 ],
             };
 
-            impl<'a> #group_name<'a> {
+            impl #group_name {
                 pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
                     device.create_bind_group_layout(&#layout_descriptor_const_name)
                 }
-
-                pub fn get_bind_group(&self, device: &wgpu::Device) -> wgpu::BindGroup {
+                
+                // TODO: This can just take a struct with all the binding params as fields instead.
+                pub fn from_bindings(device: &wgpu::Device, bindings: #layout_name) -> Self {
                     // TODO: Is it possible to avoid creating the layout more than once?
                     // The wgpu types are tied to a particular device.
                     // Switching devices may invalidate the previous objects.
                     let bind_group_layout = device.create_bind_group_layout(&#layout_descriptor_const_name);
-                    device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                         layout: &bind_group_layout,
                         entries: &[
                             #(
@@ -182,7 +234,12 @@ fn generate_bind_groups(
                             ),*
                         ],
                         label: None,
-                    })
+                    });
+                    Self(bind_group)
+                }
+
+                pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+                    render_pass.set_bind_group(#group_no, &self.0, &[]);
                 }
             }
         }
@@ -195,17 +252,19 @@ fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
 
 fn generate_bind_group_entry(group_binding: &GroupBinding) -> proc_macro2::TokenStream {
     let binding_index = group_binding.binding_index;
-    let binding_name = indexed_name_to_ident("binding", binding_index);
+
+    let binding_name = group_binding_field_name(&group_binding);
+
     let resource_type = match group_binding.inner_type {
         naga::TypeInner::Struct { .. } => quote! {
             // TODO: Don't assume the entire buffer is used.
-            self.#binding_name.as_entire_binding()
+            bindings.#binding_name.as_entire_binding()
         },
         naga::TypeInner::Image { .. } => quote! {
-            wgpu::BindingResource::TextureView(self.#binding_name)
+            wgpu::BindingResource::TextureView(bindings.#binding_name)
         },
         naga::TypeInner::Sampler { .. } => quote! {
-            wgpu::BindingResource::Sampler(self.#binding_name)
+            wgpu::BindingResource::Sampler(bindings.#binding_name)
         },
         // TODO: Better error handling.
         _ => panic!("Failed to generate BindingType."),
@@ -257,10 +316,30 @@ fn generate_bind_group_layout_entry(group_binding: &GroupBinding) -> proc_macro2
     }
 }
 
-fn generate_binding_field(group_binding: &GroupBinding) -> proc_macro2::TokenStream {
-    let field_name = indexed_name_to_ident("binding", group_binding.binding_index);
+// TODO: Clean up repetition.
+fn generate_binding_param(group_binding: &GroupBinding) -> proc_macro2::TokenStream {
+    let field_name = group_binding_field_name(&group_binding);
     // TODO: Support more types.
     let field_type = match group_binding.inner_type {
+        // TODO: Is it possible to make structs strongly typed and handle buffer creation automatically?
+        // This could be its own module and associated tests.
+        naga::TypeInner::Struct { .. } => quote! { &wgpu::Buffer },
+        naga::TypeInner::Image { .. } => quote! { &wgpu::TextureView },
+        naga::TypeInner::Sampler { .. } => quote! { &wgpu::Sampler },
+        _ => panic!("Unsupported type for binding fields."),
+    };
+
+    quote! {
+        #field_name: #field_type
+    }
+}
+
+fn generate_binding_param_field(group_binding: &GroupBinding) -> proc_macro2::TokenStream {
+    let field_name = group_binding_field_name(&group_binding);
+    // TODO: Support more types.
+    let field_type = match group_binding.inner_type {
+        // TODO: Is it possible to make structs strongly typed and handle buffer creation automatically?
+        // This could be its own module and associated tests.
         naga::TypeInner::Struct { .. } => quote! { &'a wgpu::Buffer },
         naga::TypeInner::Image { .. } => quote! { &'a wgpu::TextureView },
         naga::TypeInner::Sampler { .. } => quote! { &'a wgpu::Sampler },
@@ -268,6 +347,11 @@ fn generate_binding_field(group_binding: &GroupBinding) -> proc_macro2::TokenStr
     };
 
     quote! {
-        pub #field_name: #field_type
+        #field_name: #field_type
     }
+}
+
+
+fn group_binding_field_name(binding: &GroupBinding) -> Ident {
+    binding.name.as_ref().map(|name| Ident::new(name, Span::call_site())).unwrap_or_else(|| indexed_name_to_ident("binding", binding.binding_index))
 }
