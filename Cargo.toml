@@ -6,14 +6,9 @@ description = "Generate typesafe Rust bindings for wgsl shaders in wgpu"
 license = "MIT"
 documentation = "https://docs.rs/wgsl_to_wgpu"
 repository = "https://github.com/ScanMountGoat/wgsl_to_wgpu"
-edition = "2018"
-
-# required for WGPU
-resolver = "2"
+edition = "2021"
 
 [dependencies]
 naga = { version = "0.8.5", features = ["wgsl-in"] }
 wgpu = "0.12.0"
-
-[dev-dependencies]
 indoc = "1.0"
