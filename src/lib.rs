@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io::{BufWriter, Write};
 use std::{fs::File, path::Path};
 pub mod wgsl;
-use indoc::{indoc, writedoc};
+use indoc::writedoc;
 
 // TODO: Simplify these templates and indentation?
 // TODO: Structure the code to make it easier to imagine what the output will look like.
@@ -40,7 +40,7 @@ pub fn write_module_file(file_path: &str, wgsl_path: &str, wgsl_include_path: &s
     let bind_group_layouts = bind_group_data
         .iter()
         .map(|(group_no, _)| {
-            format!("&bind_groups::BindGroup{group_no}::get_bind_group_layout(&device),")
+            format!("&bind_groups::BindGroup{group_no}::get_bind_group_layout(device),")
         })
         .collect::<Vec<String>>()
         .join("\n            ");
@@ -188,13 +188,12 @@ fn write_bind_group_layout_descriptor<W: Write>(f: &mut W, group_no: u32, group:
     for binding in &group.bindings {
         // TODO: Support more types.
         let binding_type = match binding.binding_type.inner {
-            naga::TypeInner::Struct { .. } => {
-                "wgpu::BindingType::Buffer {
+            naga::TypeInner::Struct { .. } => "wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: None,
-                    }".to_string()
-            }
+                    }"
+            .to_string(),
             naga::TypeInner::Image { dim, .. } => {
                 // TODO: Don't assume the dimensions.
                 let view_dim = match dim {
@@ -204,11 +203,13 @@ fn write_bind_group_layout_descriptor<W: Write>(f: &mut W, group_no: u32, group:
                     naga::ImageDimension::Cube => "wgpu::TextureViewDimension::Cube",
                 };
 
-                format!("wgpu::BindingType::Texture {{
+                format!(
+                    "wgpu::BindingType::Texture {{
                         multisampled: false,
                         view_dimension: {view_dim},
                         sample_type: wgpu::TextureSampleType::Float {{ filterable: true }},
-                    }}")
+                    }}"
+                )
             }
             naga::TypeInner::Sampler { .. } => {
                 // TODO: Don't assume filtering?
