@@ -165,9 +165,9 @@ fn write_structs<W: Write>(
                 for member in members {
                     let member_name = member.name.as_ref().unwrap();
                     let member_type = wgsl::rust_type(&module, &module.types[member.ty]);
-                    writeln!(f, "        pub {member_name}: {member_type},").unwrap();
+                    write_indented(f, 8, formatdoc!("pub {member_name}: {member_type},"));
                 }
-                writeln!(f, "    }}").unwrap();
+                write_indented(f, 4, formatdoc!("}}"));
             }
             _ => (),
         }
@@ -175,7 +175,11 @@ fn write_structs<W: Write>(
 }
 
 fn write_bind_group_layout<W: Write>(f: &mut W, group_no: u32, group: &wgsl::GroupData) {
-    writeln!(f, "    pub struct BindGroupLayout{group_no}<'a> {{").unwrap();
+    write_indented(
+        f,
+        4,
+        formatdoc!("pub struct BindGroupLayout{group_no}<'a> {{"),
+    );
     for binding in &group.bindings {
         let field_name = binding.name.as_ref().unwrap();
         // TODO: Support more types.
@@ -187,103 +191,111 @@ fn write_bind_group_layout<W: Write>(f: &mut W, group_no: u32, group: &wgsl::Gro
             naga::TypeInner::Sampler { .. } => "wgpu::Sampler",
             _ => panic!("Unsupported type for binding fields."),
         };
-
-        writeln!(f, "        pub {field_name}: &'a {field_type},").unwrap();
+        write_indented(f, 8, formatdoc!("pub {field_name}: &'a {field_type},"));
     }
-    writeln!(f, "    }}").unwrap();
+    write_indented(f, 4, formatdoc!("}}"));
 }
 
 fn write_bind_group_layout_descriptor<W: Write>(f: &mut W, group_no: u32, group: &wgsl::GroupData) {
-    writeln!(
+    write_indented(
         f,
-        "    const LAYOUT_DESCRIPTOR{group_no}: wgpu::BindGroupLayoutDescriptor ="
-    )
-    .unwrap();
-    writeln!(f, "        wgpu::BindGroupLayoutDescriptor {{").unwrap();
-    writeln!(f, "            label: None,").unwrap();
-    writeln!(f, "            entries: &[").unwrap();
-
+        4,
+        formatdoc!(
+            r#"
+                const LAYOUT_DESCRIPTOR{group_no}: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {{
+                    label: None,
+                    entries: &[
+            "#
+        ),
+    );
     for binding in &group.bindings {
-        let binding_index = binding.binding_index;
+        write_bind_group_layout_entry(f, binding, 12);
+    }
+    write_indented(
+        f,
+        4,
+        formatdoc!(
+            r#"
+                    ]
+                }};
+            "#
+        ),
+    );
+}
 
-        write_indented(
-            f,
-            16,
-            formatdoc!(
-                r#"
+fn write_bind_group_layout_entry<W: Write>(f: &mut W, binding: &wgsl::GroupBinding, indent: usize) {
+    let binding_index = binding.binding_index;
+    write_indented(
+        f,
+        indent,
+        formatdoc!(
+            r#"
                     wgpu::BindGroupLayoutEntry {{
                         binding: {binding_index}u32,
                         visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 "#
-            ),
-        );
+        ),
+    );
+    // TODO: Support more types.
+    match binding.binding_type.inner {
+        naga::TypeInner::Struct { .. } => {
+            write_indented(
+                f,
+                indent + 4,
+                formatdoc!(
+                    r#"
+                        ty: wgpu::BindingType::Buffer {{
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        }},
+                    "#
+                ),
+            );
+        }
+        naga::TypeInner::Image { dim, .. } => {
+            let view_dim = match dim {
+                naga::ImageDimension::D1 => "wgpu::TextureViewDimension::D1",
+                naga::ImageDimension::D2 => "wgpu::TextureViewDimension::D2",
+                naga::ImageDimension::D3 => "wgpu::TextureViewDimension::D3",
+                naga::ImageDimension::Cube => "wgpu::TextureViewDimension::Cube",
+            };
 
-        // TODO: Support more types.
-        match binding.binding_type.inner {
-            naga::TypeInner::Struct { .. } => {
-                write_indented(
-                    f,
-                    20,
-                    formatdoc!(
-                        r#"
-                            ty: wgpu::BindingType::Buffer {{
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            }},
-                        "#
-                    ),
-                );
-            }
-            naga::TypeInner::Image { dim, .. } => {
-                let view_dim = match dim {
-                    naga::ImageDimension::D1 => "wgpu::TextureViewDimension::D1",
-                    naga::ImageDimension::D2 => "wgpu::TextureViewDimension::D2",
-                    naga::ImageDimension::D3 => "wgpu::TextureViewDimension::D3",
-                    naga::ImageDimension::Cube => "wgpu::TextureViewDimension::Cube",
-                };
-
-                write_indented(
-                    f,
-                    20,
-                    formatdoc!(
-                        r#"
-                            ty: wgpu::BindingType::Texture {{
-                                multisampled: false,
-                                view_dimension: {view_dim},
-                                sample_type: wgpu::TextureSampleType::Float {{ filterable: true }},
-                            }},
-                        "#
-                    ),
-                );
-            }
-            naga::TypeInner::Sampler { .. } => {
-                // TODO: Don't assume filtering?
-                write_indented(
-                    f,
-                    20,
-                    "ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),"
-                        .to_string(),
-                );
-            }
-            // TODO: Better error handling.
-            _ => panic!("Failed to generate BindingType."),
-        };
-
-        write_indented(
-            f,
-            16,
-            formatdoc!(
-                r#"
-                        count: None,
-                    }},
-                "#
-            ),
-        );
-    }
-    writeln!(f, "            ]").unwrap();
-
-    writeln!(f, "        }};").unwrap();
+            write_indented(
+                f,
+                indent + 4,
+                formatdoc!(
+                    r#"
+                        ty: wgpu::BindingType::Texture {{
+                            multisampled: false,
+                            view_dimension: {view_dim},
+                            sample_type: wgpu::TextureSampleType::Float {{ filterable: true }},
+                        }},
+                    "#
+                ),
+            );
+        }
+        naga::TypeInner::Sampler { .. } => {
+            // TODO: Don't assume filtering?
+            write_indented(
+                f,
+                indent + 4,
+                "ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),".to_string(),
+            );
+        }
+        // TODO: Better error handling.
+        _ => panic!("Failed to generate BindingType."),
+    };
+    write_indented(
+        f,
+        indent,
+        formatdoc!(
+            r#"
+                    count: None,
+                }},
+            "#
+        ),
+    );
 }
 
 fn impl_bind_group<W: Write>(f: &mut W, group_no: u32, group: &wgsl::GroupData) {
@@ -292,17 +304,17 @@ fn impl_bind_group<W: Write>(f: &mut W, group_no: u32, group: &wgsl::GroupData) 
         4,
         formatdoc!(
             r#"
-            impl BindGroup{group_no} {{
-                pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {{
-                    device.create_bind_group_layout(&LAYOUT_DESCRIPTOR{group_no})
-                }}
+                impl BindGroup{group_no} {{
+                    pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {{
+                        device.create_bind_group_layout(&LAYOUT_DESCRIPTOR{group_no})
+                    }}
 
-                pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout{group_no}) -> Self {{
-                    let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR{group_no});
-                    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {{
-                        layout: &bind_group_layout,
-                        entries: &[
-        "#
+                    pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout{group_no}) -> Self {{
+                        let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR{group_no});
+                        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {{
+                            layout: &bind_group_layout,
+                            entries: &[
+            "#
         ),
     );
 
