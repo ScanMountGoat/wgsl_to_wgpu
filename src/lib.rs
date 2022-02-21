@@ -195,7 +195,6 @@ fn write_bind_group_layout_descriptor<W: Write>(f: &mut W, group_no: u32, group:
                     }"
             .to_string(),
             naga::TypeInner::Image { dim, .. } => {
-                // TODO: Don't assume the dimensions.
                 let view_dim = match dim {
                     naga::ImageDimension::D1 => "wgpu::TextureViewDimension::D1",
                     naga::ImageDimension::D2 => "wgpu::TextureViewDimension::D2",

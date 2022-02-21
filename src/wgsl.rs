@@ -10,26 +10,35 @@ pub struct GroupBinding<'a> {
     pub binding_type: &'a naga::Type,
 }
 
+// TODO: Improve error handling/error reporting.
+
+fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> String {
+    // TODO: Support other widths?
+    match (kind, width) {
+        (naga::ScalarKind::Sint, 4) => "i32".to_string(),
+        (naga::ScalarKind::Uint, 4) => "u32".to_string(),
+        (naga::ScalarKind::Float, 4) => "f32".to_string(),
+        // TODO: Do booleans have a width?
+        (naga::ScalarKind::Bool, _) => "bool".to_string(),
+        _ => todo!(),
+    }
+}
+
+// TODO: Can this be made easier to test?
 pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
-    // TODO: Don't force glam here?
     match &ty.inner {
-        naga::TypeInner::Scalar { kind, width } => match kind {
-            naga::ScalarKind::Sint => todo!(),
-            naga::ScalarKind::Uint => todo!(),
-            naga::ScalarKind::Float => "f32".to_string(),
-            naga::ScalarKind::Bool => "bool".to_string(),
-        },
-        // TODO: Just use arrays here instead?
-        naga::TypeInner::Vector { size, kind, width } => match (size, kind, width) {
-            (naga::VectorSize::Quad, naga::ScalarKind::Float, 4) => "glam::Vec4".to_string(),
-            (naga::VectorSize::Quad, naga::ScalarKind::Uint, 4) => "[u32; 4]".to_string(),
-            _ => todo!(),
+        naga::TypeInner::Scalar { kind, width } => rust_scalar_type(*kind, *width),
+        naga::TypeInner::Vector { size, kind, width } => match size {
+            naga::VectorSize::Bi => format!("[{}; 2]", rust_scalar_type(*kind, *width)),
+            naga::VectorSize::Tri => format!("[{}; 3]", rust_scalar_type(*kind, *width)),
+            naga::VectorSize::Quad => format!("[{}; 4]", rust_scalar_type(*kind, *width)),
         },
         naga::TypeInner::Matrix {
             columns,
             rows,
             width,
         } => match (rows, columns, width) {
+            // TODO: Don't force glam here?
             (naga::VectorSize::Quad, naga::VectorSize::Quad, 4) => "glam::Mat4".to_string(),
             _ => todo!(),
         },
@@ -46,23 +55,25 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
         naga::TypeInner::Array { base, size, stride } => {
             // TODO: Support arrays other than arrays with a static size?
             let element_type = rust_type(module, &module.types[*base]);
-            let count = match size {
-                naga::ArraySize::Constant(c) => {
-                    match &module.constants[*c].inner {
-                        naga::ConstantInner::Scalar { width, value } => match value {
-                            naga::ScalarValue::Sint(v) => format!("{}", v),
-                            naga::ScalarValue::Uint(v) => format!("{}", v),
-                            naga::ScalarValue::Float(v) => format!("{}", v),
-                            naga::ScalarValue::Bool(v) => format!("{}", v),
-                        },
-                        _ => todo!(),
-                    }
-                },
-                naga::ArraySize::Dynamic => todo!(),
-            };
+            let count = array_length(size, module);
             format!("[{element_type}; {count}]")
-        },
+        }
         naga::TypeInner::Struct { members, span } => todo!(),
+    }
+}
+
+fn array_length(size: &naga::ArraySize, module: &naga::Module) -> usize {
+    match size {
+        naga::ArraySize::Constant(c) => match &module.constants[*c].inner {
+            naga::ConstantInner::Scalar { value, .. } => match value {
+                naga::ScalarValue::Sint(v) => *v as usize,
+                naga::ScalarValue::Uint(v) => *v as usize,
+                naga::ScalarValue::Float(_) => todo!(),
+                naga::ScalarValue::Bool(_) => todo!(),
+            },
+            _ => todo!(),
+        },
+        naga::ArraySize::Dynamic => todo!(),
     }
 }
 
