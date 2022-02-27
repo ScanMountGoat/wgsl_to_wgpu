@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use naga::{Handle, Type, StructMember};
+use naga::{Handle, StructMember, Type};
 
 pub struct GroupData<'a> {
     pub bindings: Vec<GroupBinding<'a>>,
@@ -61,6 +61,31 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
             format!("[{element_type}; {count}]")
         }
         naga::TypeInner::Struct { members, span } => todo!(),
+    }
+}
+
+pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
+    // Not all wgsl types work as vertex attributes in wgpu.
+    match &ty.inner {
+        naga::TypeInner::Scalar { kind, width } => todo!(),
+        naga::TypeInner::Vector { size, kind, width } => match size {
+            naga::VectorSize::Bi => match (kind, width) {
+                (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x2,
+                (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x2,
+                _ => todo!(),
+            },
+            naga::VectorSize::Tri => match (kind, width) {
+                (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x3,
+                (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x3,
+                _ => todo!(),
+            },
+            naga::VectorSize::Quad => match (kind, width) {
+                (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x4,
+                (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x4,
+                _ => todo!(),
+            },
+        },
+        _ => todo!(), // are these types even valid as attributes?
     }
 }
 
@@ -194,8 +219,8 @@ pub fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
 
 #[cfg(test)]
 mod test {
-    use indoc::indoc;
     use super::*;
+    use indoc::indoc;
 
     #[test]
     fn vertex_input_structs_two_structs() {

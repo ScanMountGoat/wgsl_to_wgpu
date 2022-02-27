@@ -119,6 +119,39 @@ fn write_vertex_input_structs<W: Write>(f: &mut W, module: &naga::Module) {
         write_struct_members(f, 8, &members, module);
 
         write_indented(f, 4, formatdoc!("}}"));
+
+        let count = input.fields.len();
+        let attributes = input
+            .fields
+            .iter()
+            .map(|(location, m)| {
+                let format = wgsl::vertex_format(&module.types[m.ty]);
+                // TODO: Will the debug implementation always work with the macro?
+                format!("{location} => {:?}", format)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        // TODO: Account for alignment/padding?
+        let size_in_bytes: u64 = input
+            .fields
+            .iter()
+            .map(|(_, m)| wgsl::vertex_format(&module.types[m.ty]).size())
+            .sum();
+
+        write_indented(
+            f,
+            4,
+            formatdoc!(
+                r#"
+                    impl {name} {{
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; {count}] = wgpu::vertex_attr_array![{attributes}];
+                        /// The total size in bytes of all fields without considering padding or alignment.
+                        pub const SIZE_IN_BYTES: u64 = {size_in_bytes};
+                    }}
+                "#
+            ),
+        );
     }
 }
 
