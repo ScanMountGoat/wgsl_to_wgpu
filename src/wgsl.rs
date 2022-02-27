@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use naga::{Handle, Type, StructMember};
+
 pub struct GroupData<'a> {
     pub bindings: Vec<GroupBinding<'a>>,
 }
@@ -103,7 +105,56 @@ pub fn get_bind_group_data(module: &naga::Module) -> BTreeMap<u32, GroupData> {
     groups
 }
 
+pub struct VertexInput {
+    pub name: String,
+    pub fields: Vec<(u32, StructMember)>,
+}
+
 // TODO: Handle errors.
+// Collect the necessary data to generate an equivalent Rust struct.
+pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
+    let vertex_entry = module
+        .entry_points
+        .iter()
+        .find(|e| e.stage == naga::ShaderStage::Vertex)
+        .unwrap();
+
+    let mut structs = Vec::new();
+
+    for argument in &vertex_entry.function.arguments {
+        // For entry points, arguments must have a binding unless they are a structure.
+        if let Some(binding) = &argument.binding {
+            // TODO: How to create a structure for regular bindings?
+        } else {
+            let arg_type = &module.types[argument.ty];
+            match &arg_type.inner {
+                naga::TypeInner::Struct { members, span: _ } => {
+                    let input = VertexInput {
+                        name: arg_type.name.as_ref().unwrap().clone(),
+                        fields: members
+                            .iter()
+                            .map(|member| {
+                                let location = match member.binding.as_ref().unwrap() {
+                                    naga::Binding::BuiltIn(_) => todo!(), // TODO: is it possible to have builtins for inputs?
+                                    naga::Binding::Location { location, .. } => *location,
+                                };
+
+                                (location, member.clone())
+                            })
+                            .collect(),
+                    };
+
+                    structs.push(input);
+                }
+                // This case should be prevented by the checks above.
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    structs
+}
+
 pub fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
     let vertex_entry = module
         .entry_points
@@ -144,8 +195,48 @@ pub fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
 #[cfg(test)]
 mod test {
     use indoc::indoc;
+    use super::*;
 
-    use crate::wgsl::get_vertex_input_locations;
+    #[test]
+    fn vertex_input_structs_two_structs() {
+        let source = indoc! {r#"
+            struct VertexInput0 {
+                [[location(0)]] in0: vec4<f32>;
+                [[location(1)]] in1: vec4<f32>;
+                [[location(2)]] in2: vec4<f32>;
+            };
+            
+            struct VertexInput1 {
+                [[location(3)]] in3: vec4<f32>;
+                [[location(4)]] in4: vec4<f32>;
+                [[location(5)]] in5: vec4<f32>;
+                [[location(6)]] in6: vec4<u32>;
+            };
+
+            [[stage(vertex)]]
+            fn main(
+                in0: VertexInput0,
+                in1: VertexInput1
+            ) -> [[builtin(position)]] vec4<f32> {
+                return vec4<f32>(0.0);
+            }
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let vertex_inputs = get_vertex_input_structs(&module);
+        assert_eq!(2, vertex_inputs.len());
+
+        assert_eq!("VertexInput0", vertex_inputs[0].name);
+        assert_eq!(3, vertex_inputs[0].fields.len());
+        assert_eq!("in1", vertex_inputs[0].fields[1].1.name.as_ref().unwrap());
+        assert_eq!(1, vertex_inputs[0].fields[1].0);
+
+        assert_eq!("VertexInput1", vertex_inputs[1].name);
+        assert_eq!(4, vertex_inputs[1].fields.len());
+        assert_eq!("in5", vertex_inputs[1].fields[2].1.name.as_ref().unwrap());
+        assert_eq!(5, vertex_inputs[1].fields[2].0);
+    }
 
     #[test]
     fn vertex_locations_struct_two_fields() {

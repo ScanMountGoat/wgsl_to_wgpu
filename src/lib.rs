@@ -76,6 +76,16 @@ pub fn write_module_file(file_path: &str, wgsl_path: &str, wgsl_include_path: &s
 
 fn write_vertex_module<W: Write>(f: &mut W, module: &naga::Module) {
     writeln!(f, "pub mod vertex {{").unwrap();
+
+    write_attribute_locations(f, module);
+    write_vertex_input_structs(f, module);
+
+    writeln!(f, "}}").unwrap();
+}
+
+fn write_attribute_locations<W: Write>(f: &mut W, module: &naga::Module) {
+    // TODO: Should these be part of each struct?
+    // TODO: Generate the vertex state for each input?
     for (name, location) in wgsl::get_vertex_input_locations(&module) {
         // TODO: Use const case
         let const_name = name.to_uppercase();
@@ -85,7 +95,31 @@ fn write_vertex_module<W: Write>(f: &mut W, module: &naga::Module) {
         )
         .unwrap();
     }
-    writeln!(f, "}}").unwrap();
+}
+
+fn write_vertex_input_structs<W: Write>(f: &mut W, module: &naga::Module) {
+    let vertex_inputs = wgsl::get_vertex_input_structs(module);
+    for input in vertex_inputs {
+        let name = input.name;
+        // TODO: Do we need default here if it's already zeroable?
+        write_indented(
+            f,
+            4,
+            formatdoc!(
+                r#"
+                    #[repr(C)]
+                    #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Default)]
+                    pub struct {name} {{
+                "#
+            ),
+        );
+
+        // TODO: Avoid cloning here?
+        let members: Vec<_> = input.fields.iter().map(|f| f.1.clone()).collect();
+        write_struct_members(f, 8, &members, module);
+
+        write_indented(f, 4, formatdoc!("}}"));
+    }
 }
 
 // TODO: Take an iterator instead?
@@ -150,6 +184,7 @@ fn write_structs<W: Write>(
             naga::TypeInner::Struct { members, .. } => {
                 let name = binding.binding_type.name.as_ref().unwrap();
 
+                // TODO: Enforce std140 with crevice for uniform buffers to be safe?
                 write_indented(
                     f,
                     4,
@@ -162,15 +197,24 @@ fn write_structs<W: Write>(
                     ),
                 );
 
-                for member in members {
-                    let member_name = member.name.as_ref().unwrap();
-                    let member_type = wgsl::rust_type(&module, &module.types[member.ty]);
-                    write_indented(f, 8, formatdoc!("pub {member_name}: {member_type},"));
-                }
+                write_struct_members(f, 8, members, module);
                 write_indented(f, 4, formatdoc!("}}"));
             }
             _ => (),
         }
+    }
+}
+
+fn write_struct_members<W: Write>(
+    f: &mut W,
+    indent: usize,
+    members: &[naga::StructMember],
+    module: &naga::Module,
+) {
+    for member in members {
+        let member_name = member.name.as_ref().unwrap();
+        let member_type = wgsl::rust_type(&module, &module.types[member.ty]);
+        write_indented(f, indent, formatdoc!("pub {member_name}: {member_type},"));
     }
 }
 
