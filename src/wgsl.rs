@@ -1,6 +1,5 @@
+use naga::StructMember;
 use std::collections::BTreeMap;
-
-use naga::{Handle, StructMember, Type};
 
 pub struct GroupData<'a> {
     pub bindings: Vec<GroupBinding<'a>>,
@@ -10,6 +9,7 @@ pub struct GroupBinding<'a> {
     pub name: Option<String>,
     pub binding_index: u32,
     pub binding_type: &'a naga::Type,
+    pub storage_class: naga::StorageClass,
 }
 
 // TODO: Improve error handling/error reporting.
@@ -26,7 +26,24 @@ fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> String {
     }
 }
 
-// TODO: Can this be made easier to test?
+pub fn buffer_binding_type(storage: naga::StorageClass) -> String {
+    match storage {
+        naga::StorageClass::Uniform => "wgpu::BufferBindingType::Uniform".to_string(),
+        naga::StorageClass::Storage { access } => {
+            let is_read = access.contains(naga::StorageAccess::LOAD);
+            let is_write = access.contains(naga::StorageAccess::STORE);
+
+            // TODO: Is this correct?
+            if is_write {
+                "wgpu::BufferBindingType::Storage { read_only: false }".to_string()
+            } else {
+                "wgpu::BufferBindingType::Storage { read_only: true }".to_string()
+            }
+        }
+        _ => todo!(),
+    }
+}
+
 pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
     match &ty.inner {
         naga::TypeInner::Scalar { kind, width } => rust_scalar_type(*kind, *width),
@@ -60,7 +77,10 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
             let count = array_length(size, module);
             format!("[{element_type}; {count}]")
         }
-        naga::TypeInner::Struct { members, span } => todo!(),
+        naga::TypeInner::Struct { members, span } => {
+            // TODO: Support structs?
+            ty.name.as_ref().unwrap().to_string()
+        }
     }
 }
 
@@ -100,7 +120,7 @@ fn array_length(size: &naga::ArraySize, module: &naga::Module) -> usize {
             },
             _ => todo!(),
         },
-        naga::ArraySize::Dynamic => todo!(),
+        naga::ArraySize::Dynamic => 0, // TODO: how to handle dynamically sized arrays?
     }
 }
 
@@ -122,6 +142,7 @@ pub fn get_bind_group_data(module: &naga::Module) -> BTreeMap<u32, GroupData> {
                 name: global.name.clone(),
                 binding_index: binding.binding,
                 binding_type,
+                storage_class: global.class,
             };
             group.bindings.push(group_binding);
         }
@@ -138,41 +159,42 @@ pub struct VertexInput {
 // TODO: Handle errors.
 // Collect the necessary data to generate an equivalent Rust struct.
 pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
-    let vertex_entry = module
+    let mut structs = Vec::new();
+
+    // TODO: Just map/collect?
+    if let Some(vertex_entry) = module
         .entry_points
         .iter()
         .find(|e| e.stage == naga::ShaderStage::Vertex)
-        .unwrap();
+    {
+        for argument in &vertex_entry.function.arguments {
+            // For entry points, arguments must have a binding unless they are a structure.
+            if let Some(binding) = &argument.binding {
+                // TODO: How to create a structure for regular bindings?
+            } else {
+                let arg_type = &module.types[argument.ty];
+                match &arg_type.inner {
+                    naga::TypeInner::Struct { members, span: _ } => {
+                        let input = VertexInput {
+                            name: arg_type.name.as_ref().unwrap().clone(),
+                            fields: members
+                                .iter()
+                                .map(|member| {
+                                    let location = match member.binding.as_ref().unwrap() {
+                                        naga::Binding::BuiltIn(_) => todo!(), // TODO: is it possible to have builtins for inputs?
+                                        naga::Binding::Location { location, .. } => *location,
+                                    };
 
-    let mut structs = Vec::new();
+                                    (location, member.clone())
+                                })
+                                .collect(),
+                        };
 
-    for argument in &vertex_entry.function.arguments {
-        // For entry points, arguments must have a binding unless they are a structure.
-        if let Some(binding) = &argument.binding {
-            // TODO: How to create a structure for regular bindings?
-        } else {
-            let arg_type = &module.types[argument.ty];
-            match &arg_type.inner {
-                naga::TypeInner::Struct { members, span: _ } => {
-                    let input = VertexInput {
-                        name: arg_type.name.as_ref().unwrap().clone(),
-                        fields: members
-                            .iter()
-                            .map(|member| {
-                                let location = match member.binding.as_ref().unwrap() {
-                                    naga::Binding::BuiltIn(_) => todo!(), // TODO: is it possible to have builtins for inputs?
-                                    naga::Binding::Location { location, .. } => *location,
-                                };
-
-                                (location, member.clone())
-                            })
-                            .collect(),
-                    };
-
-                    structs.push(input);
+                        structs.push(input);
+                    }
+                    // This case should be prevented by the checks above.
+                    _ => unreachable!(),
                 }
-                // This case should be prevented by the checks above.
-                _ => unreachable!(),
             }
         }
     }
@@ -181,35 +203,36 @@ pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
 }
 
 pub fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
-    let vertex_entry = module
+    let mut shader_locations = Vec::new();
+
+    // TODO: Just map/collect?
+    if let Some(vertex_entry) = module
         .entry_points
         .iter()
         .find(|e| e.stage == naga::ShaderStage::Vertex)
-        .unwrap();
-
-    let mut shader_locations = Vec::new();
-
-    for argument in &vertex_entry.function.arguments {
-        // For entry points, arguments must have a binding unless they are a structure.
-        if let Some(binding) = &argument.binding {
-            if let naga::Binding::Location { location, .. } = binding {
-                shader_locations.push((argument.name.clone().unwrap(), *location));
-            }
-        } else {
-            let arg_type = &module.types[argument.ty];
-            match &arg_type.inner {
-                naga::TypeInner::Struct { members, span: _ } => {
-                    for member in members {
-                        match member.binding.as_ref().unwrap() {
-                            naga::Binding::BuiltIn(_) => (),
-                            naga::Binding::Location { location, .. } => {
-                                shader_locations.push((member.name.clone().unwrap(), *location))
+    {
+        for argument in &vertex_entry.function.arguments {
+            // For entry points, arguments must have a binding unless they are a structure.
+            if let Some(binding) = &argument.binding {
+                if let naga::Binding::Location { location, .. } = binding {
+                    shader_locations.push((argument.name.clone().unwrap(), *location));
+                }
+            } else {
+                let arg_type = &module.types[argument.ty];
+                match &arg_type.inner {
+                    naga::TypeInner::Struct { members, span: _ } => {
+                        for member in members {
+                            match member.binding.as_ref().unwrap() {
+                                naga::Binding::BuiltIn(_) => (),
+                                naga::Binding::Location { location, .. } => {
+                                    shader_locations.push((member.name.clone().unwrap(), *location))
+                                }
                             }
                         }
                     }
+                    // This case should be prevented by the checks above.
+                    _ => unreachable!(),
                 }
-                // This case should be prevented by the checks above.
-                _ => unreachable!(),
             }
         }
     }
