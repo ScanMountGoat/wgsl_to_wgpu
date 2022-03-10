@@ -221,7 +221,7 @@ fn write_structs<W: Write>(f: &mut W, indent: usize, module: &naga::Module) {
                     formatdoc!(
                         r"
                         #[repr(C)]
-                        #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+                        #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                         pub struct {name} {{
                         "
                     ),
@@ -270,6 +270,7 @@ fn write_bind_group_layout<W: Write>(f: &mut W, group_no: u32, group: &wgsl::Gro
     write_indented(f, 4, formatdoc!("}}"));
 }
 
+// TODO: Tests?
 fn write_bind_group_layout_descriptor<W: Write>(
     f: &mut W,
     group_no: u32,
@@ -321,14 +322,13 @@ fn write_bind_group_layout_entry<W: Write>(
         indent,
         formatdoc!(
             r#"
-                    wgpu::BindGroupLayoutEntry {{
-                        binding: {binding_index}u32,
-                        visibility: {stages},
-                "#
+                wgpu::BindGroupLayoutEntry {{
+                    binding: {binding_index}u32,
+                    visibility: {stages},
+            "#
         ),
     );
     // TODO: Support more types.
-    // TODO: Tests?
     match binding.binding_type.inner {
         naga::TypeInner::Struct { .. } => {
             let buffer_binding_type = wgsl::buffer_binding_type(binding.storage_class);
@@ -523,26 +523,26 @@ mod test {
             indoc! {
                 r"
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct VectorsF32 {
                     pub a: [f32; 2],
                     pub b: [f32; 3],
                     pub c: [f32; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct VectorsU32 {
                     pub a: [u32; 2],
                     pub b: [u32; 3],
                     pub c: [u32; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct MatricesF32 {
                     pub a: glam::Mat4,
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct StaticArrays {
                     pub a: [u32; 5],
                     pub b: [f32; 3],
