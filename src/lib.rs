@@ -7,7 +7,7 @@
 //! For example, changing the type of a uniform in WGSL will raise a compile error in Rust code using the generated struct to initialize the buffer.
 //! 
 //! ## Limitations
-//! This project currently supports a small subset of WGSl types and doesn't enforce certain key properties such as field alignment. 
+//! This project currently supports a small subset of WGSL types and doesn't enforce certain key properties such as field alignment. 
 //! It's recommended for now to only run the Rust file generation as needed and rely on WGPU's runtime validation to fix any potential errors.
 use std::collections::BTreeMap;
 use std::io::{BufWriter, Write};
