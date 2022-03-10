@@ -1,31 +1,33 @@
+//! # wgsl_to_wgpu
+//! wgsl_to_wgpu is an experimental library for generating typesafe Rust bindings from WGSL shaders to [wgpu](https://github.com/gfx-rs/wgpu).
+//! 
+//! ## Features
+//! The [write_module_file] function is intended for use in build scripts.
+//! This facilitates a shader focused workflow where edits to WGSL code are automatically reflected in the corresponding Rust file.
+//! For example, changing the type of a uniform in WGSL will raise a compile error in Rust code using the generated struct to initialize the buffer.
+//! 
+//! ## Limitations
+//! This project currently supports a small subset of WGSl types and doesn't enforce certain key properties such as field alignment. 
+//! It's recommended for now to only run the Rust file generation as needed and rely on WGPU's runtime validation to fix any potential errors.
 use std::collections::BTreeMap;
 use std::io::{BufWriter, Write};
 use std::{fs::File, path::Path};
-pub mod wgsl;
 use indoc::{formatdoc, writedoc};
 
-// Apply indentation to each level.
-fn indent(str: String, level: usize) -> String {
-    str.lines()
-        .map(|l| " ".repeat(level) + l)
-        .collect::<Vec<String>>()
-        .join("\n")
-}
-
-// Assume the input is already unindented with indoc.
-fn write_indented<W: Write>(w: &mut W, level: usize, str: String) {
-    writeln!(w, "{}", indent(str, level)).unwrap();
-}
+mod wgsl;
 
 // TODO: Simplify these templates and indentation?
 // TODO: Structure the code to make it easier to imagine what the output will look like.
+
+/// Parses the WGSL shader from `input_wgsl_path` and writes the Rust file to `output_path`.
+/// The `wgsl_include_path` should be a valid path for the `include_wgsl!` macro used in the output file.
 pub fn write_module_file(
-    file_path: &str,
     wgsl_path: &str,
+    output_path: &str,
     wgsl_include_path: &str,
     is_compute: bool,
 ) {
-    let file_path = Path::new(file_path);
+    let file_path = Path::new(output_path);
     std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
 
     let wgsl_source = std::fs::read_to_string(wgsl_path).unwrap();
@@ -83,6 +85,20 @@ pub fn write_module_file(
     )
     .unwrap();
 }
+
+// Apply indentation to each level.
+fn indent(str: String, level: usize) -> String {
+    str.lines()
+        .map(|l| " ".repeat(level) + l)
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+// Assume the input is already unindented with indoc.
+fn write_indented<W: Write>(w: &mut W, level: usize, str: String) {
+    writeln!(w, "{}", indent(str, level)).unwrap();
+}
+
 
 fn write_vertex_module<W: Write>(f: &mut W, module: &naga::Module) {
     writeln!(f, "pub mod vertex {{").unwrap();
