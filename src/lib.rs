@@ -174,9 +174,9 @@ fn write_bind_groups_module<W: Write>(
     for (group_no, group) in bind_group_data {
         writeln!(f, "    pub struct BindGroup{group_no}(wgpu::BindGroup);").unwrap();
 
-        write_bind_group_layout(f, *group_no, &group);
-        write_bind_group_layout_descriptor(f, *group_no, &group, is_compute);
-        impl_bind_group(f, *group_no, &group, is_compute);
+        write_bind_group_layout(f, 4, *group_no, &group);
+        write_bind_group_layout_descriptor(f, 4, *group_no, &group, is_compute);
+        impl_bind_group(f, 4, *group_no, &group, is_compute);
     }
 
     writeln!(f, "    pub struct BindGroups<'a> {{").unwrap();
@@ -260,10 +260,15 @@ fn write_struct_members<W: Write>(
     }
 }
 
-fn write_bind_group_layout<W: Write>(f: &mut W, group_no: u32, group: &wgsl::GroupData) {
+fn write_bind_group_layout<W: Write>(
+    f: &mut W,
+    indent: usize,
+    group_no: u32,
+    group: &wgsl::GroupData,
+) {
     write_indented(
         f,
-        4,
+        indent,
         formatdoc!("pub struct BindGroupLayout{group_no}<'a> {{"),
     );
     for binding in &group.bindings {
@@ -277,21 +282,25 @@ fn write_bind_group_layout<W: Write>(f: &mut W, group_no: u32, group: &wgsl::Gro
             naga::TypeInner::Sampler { .. } => "wgpu::Sampler",
             _ => panic!("Unsupported type for binding fields."),
         };
-        write_indented(f, 8, formatdoc!("pub {field_name}: &'a {field_type},"));
+        write_indented(
+            f,
+            indent + 4,
+            formatdoc!("pub {field_name}: &'a {field_type},"),
+        );
     }
-    write_indented(f, 4, formatdoc!("}}"));
+    write_indented(f, indent, formatdoc!("}}"));
 }
 
-// TODO: Tests?
 fn write_bind_group_layout_descriptor<W: Write>(
     f: &mut W,
+    indent: usize,
     group_no: u32,
     group: &wgsl::GroupData,
     is_compute: bool,
 ) {
     write_indented(
         f,
-        4,
+        indent,
         formatdoc!(
             r#"
                 const LAYOUT_DESCRIPTOR{group_no}: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {{
@@ -301,11 +310,11 @@ fn write_bind_group_layout_descriptor<W: Write>(
         ),
     );
     for binding in &group.bindings {
-        write_bind_group_layout_entry(f, binding, 12, is_compute);
+        write_bind_group_layout_entry(f, binding, indent + 8, is_compute);
     }
     write_indented(
         f,
-        4,
+        indent,
         formatdoc!(
             r#"
                     ]
@@ -321,7 +330,7 @@ fn write_bind_group_layout_entry<W: Write>(
     indent: usize,
     is_compute: bool,
 ) {
-    // HACK: Assume storage is only used for compute.
+    // TODO: Assume storage is only used for compute.
     // TODO: This can be inferred from the available entry points?
     let stages = if is_compute {
         "wgpu::ShaderStages::COMPUTE"
@@ -404,10 +413,16 @@ fn write_bind_group_layout_entry<W: Write>(
     );
 }
 
-fn impl_bind_group<W: Write>(f: &mut W, group_no: u32, group: &wgsl::GroupData, is_compute: bool) {
+fn impl_bind_group<W: Write>(
+    f: &mut W,
+    indent: usize,
+    group_no: u32,
+    group: &wgsl::GroupData,
+    is_compute: bool,
+) {
     write_indented(
         f,
-        4,
+        indent,
         formatdoc!(
             r#"
                 impl BindGroup{group_no} {{
@@ -444,7 +459,7 @@ fn impl_bind_group<W: Write>(f: &mut W, group_no: u32, group: &wgsl::GroupData, 
 
         write_indented(
             f,
-            20,
+            indent + 16,
             formatdoc!(
                 r#"
                     wgpu::BindGroupEntry {{
@@ -457,7 +472,7 @@ fn impl_bind_group<W: Write>(f: &mut W, group_no: u32, group: &wgsl::GroupData, 
     }
     write_indented(
         f,
-        8,
+        indent + 4,
         formatdoc!(
             r#"
                         ],
@@ -478,7 +493,7 @@ fn impl_bind_group<W: Write>(f: &mut W, group_no: u32, group: &wgsl::GroupData, 
 
     write_indented(
         f,
-        4,
+        indent,
         formatdoc!(
             r#"
 
@@ -559,6 +574,185 @@ mod test {
                     pub b: [f32; 3],
                     pub c: [glam::Mat4; 512],
                 }
+                "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn bind_group_layouts_descriptors_compute() {
+        // The actual content of the structs doesn't matter.
+        // We only care about the groups and bindings.
+        let source = indoc! {r#"
+            struct VertexInput0 {};
+            struct VertexWeight {};
+            struct Vertices {};
+            struct VertexWeights {};
+            struct Transforms {};
+
+            [[group(0), binding(0)]] var<storage, read> src : Vertices;
+            [[group(0), binding(1)]] var<storage, read> vertex_weights : VertexWeights;
+            [[group(0), binding(2)]] var<storage, read_write> dst : Vertices;
+
+            [[group(1), binding(0)]] var<uniform> transforms: Transforms;
+
+            [[stage(compute)]]
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let bind_group_data = wgsl::get_bind_group_data(&module);
+
+        let mut actual = String::new();
+        for (group_no, group) in bind_group_data {
+            write_bind_group_layout(&mut actual, 0, group_no, &group);
+            write_bind_group_layout_descriptor(&mut actual, 0, group_no, &group, true);
+        }
+
+        assert_eq!(
+            indoc! {
+                r"
+                pub struct BindGroupLayout0<'a> {
+                    pub src: &'a wgpu::Buffer,
+                    pub vertex_weights: &'a wgpu::Buffer,
+                    pub dst: &'a wgpu::Buffer,
+                }
+                const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0u32,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1u32,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2u32,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ]
+                };
+                pub struct BindGroupLayout1<'a> {
+                    pub transforms: &'a wgpu::Buffer,
+                }
+                const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0u32,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ]
+                };
+                "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn bind_group_layouts_descriptors_vertex_fragment() {
+        // The actual content of the structs doesn't matter.
+        // We only care about the groups and bindings.
+        let source = indoc! {r#"
+            struct Transforms {};
+
+            [[group(0), binding(0)]]
+            var color_texture: texture_2d<f32>;
+            [[group(0), binding(1)]]
+            var color_sampler: sampler;
+            [[group(1), binding(0)]] var<uniform> transforms: Transforms;
+
+            [[stage(vertex)]]
+            fn vs_main() {}
+
+            [[stage(fragment)]]
+            fn fs_main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let bind_group_data = wgsl::get_bind_group_data(&module);
+
+        let mut actual = String::new();
+        for (group_no, group) in bind_group_data {
+            write_bind_group_layout(&mut actual, 0, group_no, &group);
+            write_bind_group_layout_descriptor(&mut actual, 0, group_no, &group, false);
+        }
+
+        // TODO: Are storage buffers valid for vertex/fragment?
+        assert_eq!(
+            indoc! {
+                r"
+                pub struct BindGroupLayout0<'a> {
+                    pub color_texture: &'a wgpu::TextureView,
+                    pub color_sampler: &'a wgpu::Sampler,
+                }
+                const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0u32,
+                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1u32,
+                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ]
+                };
+                pub struct BindGroupLayout1<'a> {
+                    pub transforms: &'a wgpu::Buffer,
+                }
+                const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0u32,
+                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ]
+                };
                 "
             },
             actual
