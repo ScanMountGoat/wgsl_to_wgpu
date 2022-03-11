@@ -20,7 +20,7 @@ mod wgsl;
 
 /// Parses the WGSL shader from `wgsl_path` and returns the generated Rust module's source code as a [String].
 /// The `wgsl_include_path` should be a valid path for the `include_wgsl!` macro used in the generated file.
-pub fn create_shader_module(wgsl_path: &str, wgsl_include_path: &str, is_compute: bool) -> String {
+pub fn create_shader_module(wgsl_path: &str, wgsl_include_path: &str) -> String {
     let wgsl_source = std::fs::read_to_string(wgsl_path).unwrap();
     let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap();
     let bind_group_data = wgsl::get_bind_group_data(&module);
@@ -33,14 +33,14 @@ pub fn create_shader_module(wgsl_path: &str, wgsl_include_path: &str, is_compute
     )
     .unwrap();
 
+    let shader_stages = wgsl::shader_stages(&module);
+
     // Write all the structs, including uniforms and entry function inputs.
     write_structs(&mut output, 0, &module);
 
     // TODO: Avoid having a dependency on naga here?
-    write_bind_groups_module(&mut output, &bind_group_data, is_compute);
-    if !is_compute {
-        write_vertex_module(&mut output, &module);
-    }
+    write_bind_groups_module(&mut output, &bind_group_data, shader_stages);
+    write_vertex_module(&mut output, &module);
 
     writedoc!(
         output,
@@ -167,7 +167,7 @@ fn write_vertex_input_structs<W: Write>(f: &mut W, module: &naga::Module) {
 fn write_bind_groups_module<W: Write>(
     f: &mut W,
     bind_group_data: &BTreeMap<u32, wgsl::GroupData>,
-    is_compute: bool,
+    shader_stages: wgpu::ShaderStages,
 ) {
     writeln!(f, "pub mod bind_groups {{").unwrap();
 
@@ -175,8 +175,8 @@ fn write_bind_groups_module<W: Write>(
         writeln!(f, "    pub struct BindGroup{group_no}(wgpu::BindGroup);").unwrap();
 
         write_bind_group_layout(f, 4, *group_no, &group);
-        write_bind_group_layout_descriptor(f, 4, *group_no, &group, is_compute);
-        impl_bind_group(f, 4, *group_no, &group, is_compute);
+        write_bind_group_layout_descriptor(f, 4, *group_no, &group, shader_stages);
+        impl_bind_group(f, 4, *group_no, &group, shader_stages);
     }
 
     writeln!(f, "    pub struct BindGroups<'a> {{").unwrap();
@@ -190,6 +190,9 @@ fn write_bind_groups_module<W: Write>(
     writeln!(f, "    }}").unwrap();
 
     // TODO: Test this?
+    // TODO: Support compute shader with vertex/fragment in the same module?
+    let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
+
     let render_pass = if is_compute {
         "wgpu::ComputePass<'a>"
     } else {
@@ -296,7 +299,7 @@ fn write_bind_group_layout_descriptor<W: Write>(
     indent: usize,
     group_no: u32,
     group: &wgsl::GroupData,
-    is_compute: bool,
+    shader_stages: wgpu::ShaderStages,
 ) {
     write_indented(
         f,
@@ -310,7 +313,7 @@ fn write_bind_group_layout_descriptor<W: Write>(
         ),
     );
     for binding in &group.bindings {
-        write_bind_group_layout_entry(f, binding, indent + 8, is_compute);
+        write_bind_group_layout_entry(f, binding, indent + 8, shader_stages);
     }
     write_indented(
         f,
@@ -328,14 +331,15 @@ fn write_bind_group_layout_entry<W: Write>(
     f: &mut W,
     binding: &wgsl::GroupBinding,
     indent: usize,
-    is_compute: bool,
+    shader_stages: wgpu::ShaderStages,
 ) {
-    // TODO: Assume storage is only used for compute.
-    // TODO: This can be inferred from the available entry points?
-    let stages = if is_compute {
-        "wgpu::ShaderStages::COMPUTE"
-    } else {
-        "wgpu::ShaderStages::VERTEX_FRAGMENT"
+    // TODO: Assume storage is only used for compute?
+    // TODO: Support just vertex or fragment?
+    // TODO: Visible from all stages?
+    let stages = match shader_stages {
+        wgpu::ShaderStages::VERTEX_FRAGMENT => "wgpu::ShaderStages::VERTEX_FRAGMENT",
+        wgpu::ShaderStages::COMPUTE => "wgpu::ShaderStages::COMPUTE",
+        _ => todo!(),
     };
 
     let binding_index = binding.binding_index;
@@ -418,7 +422,7 @@ fn impl_bind_group<W: Write>(
     indent: usize,
     group_no: u32,
     group: &wgsl::GroupData,
-    is_compute: bool,
+    shader_stages: wgpu::ShaderStages,
 ) {
     write_indented(
         f,
@@ -485,6 +489,9 @@ fn impl_bind_group<W: Write>(
     );
 
     // TODO: Test this?
+    // TODO: Support compute shader with vertex/fragment in the same module?
+    let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
+
     let render_pass = if is_compute {
         "wgpu::ComputePass<'a>"
     } else {
@@ -607,7 +614,13 @@ mod test {
         let mut actual = String::new();
         for (group_no, group) in bind_group_data {
             write_bind_group_layout(&mut actual, 0, group_no, &group);
-            write_bind_group_layout_descriptor(&mut actual, 0, group_no, &group, true);
+            write_bind_group_layout_descriptor(
+                &mut actual,
+                0,
+                group_no,
+                &group,
+                wgpu::ShaderStages::COMPUTE,
+            );
         }
 
         assert_eq!(
@@ -703,7 +716,13 @@ mod test {
         let mut actual = String::new();
         for (group_no, group) in bind_group_data {
             write_bind_group_layout(&mut actual, 0, group_no, &group);
-            write_bind_group_layout_descriptor(&mut actual, 0, group_no, &group, false);
+            write_bind_group_layout_descriptor(
+                &mut actual,
+                0,
+                group_no,
+                &group,
+                wgpu::ShaderStages::VERTEX_FRAGMENT,
+            );
         }
 
         // TODO: Are storage buffers valid for vertex/fragment?

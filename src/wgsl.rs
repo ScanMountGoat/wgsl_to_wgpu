@@ -13,6 +13,17 @@ pub struct GroupBinding<'a> {
 }
 
 // TODO: Improve error handling/error reporting.
+pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
+    let mut shader_stages = wgpu::ShaderStages::NONE;
+    for entry in &module.entry_points {
+        match entry.stage {
+            naga::ShaderStage::Vertex => shader_stages.insert(wgpu::ShaderStages::VERTEX),
+            naga::ShaderStage::Fragment => shader_stages.insert(wgpu::ShaderStages::FRAGMENT),
+            naga::ShaderStage::Compute => shader_stages.insert(wgpu::ShaderStages::COMPUTE),
+        }
+    }
+    shader_stages
+}
 
 fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> String {
     // TODO: Support other widths?
@@ -244,6 +255,80 @@ pub fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
 mod test {
     use super::*;
     use indoc::indoc;
+
+    #[test]
+    fn shader_stages_none() {
+        let source = indoc! {r#"
+
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert_eq!(wgpu::ShaderStages::NONE, shader_stages(&module));
+    }
+
+    #[test]
+    fn shader_stages_vertex() {
+        let source = indoc! {r#"
+            [[stage(vertex)]]
+            fn main()  {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert_eq!(wgpu::ShaderStages::VERTEX, shader_stages(&module));
+    }
+
+    #[test]
+    fn shader_stages_fragment() {
+        let source = indoc! {r#"
+            [[stage(fragment)]]
+            fn main()  {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert_eq!(wgpu::ShaderStages::FRAGMENT, shader_stages(&module));
+    }
+
+    #[test]
+    fn shader_stages_vertex_fragment() {
+        let source = indoc! {r#"
+            [[stage(vertex)]]
+            fn vs_main()  {}
+
+            [[stage(fragment)]]
+            fn fs_main()  {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert_eq!(wgpu::ShaderStages::VERTEX_FRAGMENT, shader_stages(&module));
+    }
+
+    #[test]
+    fn shader_stages_compute() {
+        let source = indoc! {r#"
+            [[stage(compute)]]
+            fn main()  {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert_eq!(wgpu::ShaderStages::COMPUTE, shader_stages(&module));
+    }
+
+    #[test]
+    fn shader_stages_all() {
+        let source = indoc! {r#"
+            [[stage(vertex)]]
+            fn vs_main()  {}
+
+            [[stage(fragment)]]
+            fn fs_main()  {}
+
+            [[stage(compute)]]
+            fn cs_main()  {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert_eq!(wgpu::ShaderStages::all(), shader_stages(&module));
+    }
 
     #[test]
     fn vertex_input_structs_two_structs() {
