@@ -12,24 +12,22 @@
 use indoc::{formatdoc, writedoc};
 use std::collections::BTreeMap;
 use std::fmt::Write;
-use std::path::Path;
 
 mod wgsl;
 
 // TODO: Simplify these templates and indentation?
 // TODO: Structure the code to make it easier to imagine what the output will look like.
+#[derive(Debug, PartialEq, Eq)]
 pub enum CreateModuleError {
     NonConsectiveBindGroups,
 }
 
-/// Parses the WGSL shader from `wgsl_path` and returns the generated Rust module's source code as a [String].
+/// Parses the WGSL shader from `wgsl_source` and returns the generated Rust module's source code as a [String].
 /// The `wgsl_include_path` should be a valid path for the `include_wgsl!` macro used in the generated file.
-// TODO: Should this just take a &str as input?
-pub fn create_shader_module<P: AsRef<Path>>(
-    wgsl_path: P,
+pub fn create_shader_module(
+    wgsl_source: &str,
     wgsl_include_path: &str,
 ) -> Result<String, CreateModuleError> {
-    let wgsl_source = std::fs::read_to_string(wgsl_path).unwrap();
     let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap();
 
     let bind_group_data =
@@ -779,5 +777,42 @@ mod test {
             },
             actual
         );
+    }
+
+    #[test]
+    fn create_shader_module_consecutive_bind_groups() {
+        let source = indoc! {r#"
+            struct A {
+                f: vec4<f32>;
+            };
+            [[group(0), binding(0)]] var<uniform> a: A;
+            [[group(1), binding(0)]] var<uniform> b: A;
+
+            [[stage(vertex)]]
+            fn vs_main() {}
+
+            [[stage(fragment)]]
+            fn fs_main() {}
+        "#};
+
+        create_shader_module(&source, "shader.wgsl").unwrap();
+    }
+
+    #[test]
+    fn create_shader_module_non_consecutive_bind_groups() {
+        let source = indoc! {r#"
+            [[group(0), binding(0)]] var<uniform> a: vec4<f32>;
+            [[group(1), binding(0)]] var<uniform> b: vec4<f32>;
+            [[group(3), binding(0)]] var<uniform> c: vec4<f32>;
+
+            [[stage(fragment)]]
+            fn main() {}
+        "#};
+
+        let result = create_shader_module(&source, "shader.wgsl");
+        assert!(matches!(
+            result,
+            Err(CreateModuleError::NonConsectiveBindGroups)
+        ));
     }
 }
