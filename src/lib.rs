@@ -18,13 +18,22 @@ mod wgsl;
 
 // TODO: Simplify these templates and indentation?
 // TODO: Structure the code to make it easier to imagine what the output will look like.
+pub enum CreateModuleError {
+    NonConsectiveBindGroups,
+}
 
 /// Parses the WGSL shader from `wgsl_path` and returns the generated Rust module's source code as a [String].
 /// The `wgsl_include_path` should be a valid path for the `include_wgsl!` macro used in the generated file.
-pub fn create_shader_module<P: AsRef<Path>>(wgsl_path: P, wgsl_include_path: &str) -> String {
+// TODO: Should this just take a &str as input?
+pub fn create_shader_module<P: AsRef<Path>>(
+    wgsl_path: P,
+    wgsl_include_path: &str,
+) -> Result<String, CreateModuleError> {
     let wgsl_source = std::fs::read_to_string(wgsl_path).unwrap();
     let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap();
-    let bind_group_data = wgsl::get_bind_group_data(&module);
+
+    let bind_group_data =
+        wgsl::get_bind_group_data(&module).ok_or(CreateModuleError::NonConsectiveBindGroups)?;
 
     let mut output = String::new();
     let shader_stages = wgsl::shader_stages(&module);
@@ -74,7 +83,7 @@ pub fn create_shader_module<P: AsRef<Path>>(wgsl_path: P, wgsl_include_path: &st
     )
     .unwrap();
 
-    output
+    Ok(output)
 }
 
 // Apply indentation to each level.
@@ -603,7 +612,7 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let bind_group_data = wgsl::get_bind_group_data(&module);
+        let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
 
         let mut actual = String::new();
         for (group_no, group) in bind_group_data {
@@ -705,7 +714,7 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let bind_group_data = wgsl::get_bind_group_data(&module);
+        let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
 
         let mut actual = String::new();
         for (group_no, group) in bind_group_data {

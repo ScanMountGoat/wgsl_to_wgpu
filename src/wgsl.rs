@@ -135,7 +135,7 @@ fn array_length(size: &naga::ArraySize, module: &naga::Module) -> usize {
     }
 }
 
-pub fn get_bind_group_data(module: &naga::Module) -> BTreeMap<u32, GroupData> {
+pub fn get_bind_group_data(module: &naga::Module) -> Option<BTreeMap<u32, GroupData>> {
     // Use a BTree to sort type and field names by group index.
     // This isn't strictly necessary but makes the generated code cleaner.
     let mut groups = BTreeMap::new();
@@ -159,7 +159,13 @@ pub fn get_bind_group_data(module: &naga::Module) -> BTreeMap<u32, GroupData> {
         }
     }
 
-    groups
+    // wgpu expects bind groups to be consecutive starting from 0.
+    // TODO: Use a result instead?
+    if groups.iter().map(|(i, _)| *i as usize).eq(0..groups.len()) {
+        Some(groups)
+    } else {
+        None
+    }
 }
 
 pub struct VertexInput {
@@ -467,5 +473,48 @@ mod test {
             &[("position".to_string(), 0), ("tex_coords".to_string(), 1)],
             &shader_locations[..]
         );
+    }
+
+    #[test]
+    fn bind_group_data_consecutive_bind_groups() {
+        let source = indoc! {r#"
+            [[group(0), binding(0)]] var<uniform> a: vec4<f32>;
+            [[group(1), binding(0)]] var<uniform> b: vec4<f32>;
+            [[group(2), binding(0)]] var<uniform> c: vec4<f32>;
+
+            [[stage(fragment)]]
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert_eq!(3, get_bind_group_data(&module).unwrap().len());
+    }
+
+    #[test]
+    fn bind_group_data_first_group_not_zero() {
+        let source = indoc! {r#"
+            [[group(1), binding(0)]] var<uniform> a: vec4<f32>;
+
+            [[stage(fragment)]]
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert!(get_bind_group_data(&module).is_none());
+    }
+
+    #[test]
+    fn bind_group_data_non_consecutive_bind_groups() {
+        let source = indoc! {r#"
+            [[group(0), binding(0)]] var<uniform> a: vec4<f32>;
+            [[group(1), binding(0)]] var<uniform> b: vec4<f32>;
+            [[group(3), binding(0)]] var<uniform> c: vec4<f32>;
+
+            [[stage(fragment)]]
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert!(get_bind_group_data(&module).is_none());
     }
 }
