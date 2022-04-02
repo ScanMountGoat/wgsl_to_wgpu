@@ -22,7 +22,8 @@ pub enum CreateModuleError {
     NonConsectiveBindGroups,
 }
 
-/// Parses the WGSL shader from `wgsl_source` and returns the generated Rust module's source code as a [String].
+/// Parses the WGSL shader from `wgsl_source` and returns the generated Rust module's source code.
+///
 /// The `wgsl_include_path` should be a valid path for the `include_wgsl!` macro used in the generated file.
 pub fn create_shader_module(
     wgsl_source: &str,
@@ -85,15 +86,16 @@ pub fn create_shader_module(
 }
 
 // Apply indentation to each level.
-fn indent(str: String, level: usize) -> String {
-    str.lines()
+fn indent<S: Into<String>>(str: S, level: usize) -> String {
+    str.into()
+        .lines()
         .map(|l| " ".repeat(level) + l)
         .collect::<Vec<String>>()
         .join("\n")
 }
 
 // Assume the input is already unindented with indoc.
-fn write_indented<W: Write>(w: &mut W, level: usize, str: String) {
+fn write_indented<W: Write, S: Into<String>>(w: &mut W, level: usize, str: S) {
     writeln!(w, "{}", indent(str, level)).unwrap();
 }
 
@@ -190,30 +192,48 @@ fn write_bind_groups_module<W: Write>(
     }
     writeln!(f, "    }}").unwrap();
 
-    // TODO: Test this?
     // TODO: Support compute shader with vertex/fragment in the same module?
     let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
 
+    write_set_bind_groups(f, 4, bind_group_data, is_compute);
+
+    writeln!(f, "}}").unwrap();
+}
+
+fn write_set_bind_groups<W: Write>(
+    f: &mut W,
+    indent: usize,
+    bind_group_data: &BTreeMap<u32, wgsl::GroupData>,
+    is_compute: bool,
+) {
     let render_pass = if is_compute {
         "wgpu::ComputePass<'a>"
     } else {
         "wgpu::RenderPass<'a>"
     };
 
-    writeln!(f, "    pub fn set_bind_groups<'a>(").unwrap();
-    writeln!(f, "        pass: &mut {render_pass},").unwrap();
-    writeln!(f, "        bind_groups: BindGroups<'a>,").unwrap();
-    writeln!(f, "    ) {{").unwrap();
-    for (group_no, _) in bind_group_data {
-        writeln!(
-            f,
-            "        pass.set_bind_group({group_no}u32, &bind_groups.bind_group{group_no}.0, &[]);"
-        )
-        .unwrap();
-    }
-    writeln!(f, "    }}").unwrap();
+    write_indented(
+        f,
+        indent,
+        formatdoc!(
+            r#"
+            pub fn set_bind_groups<'a>(
+                pass: &mut {render_pass},
+                bind_groups: BindGroups<'a>,
+            ) {{
+            "#
+        ),
+    );
 
-    writeln!(f, "}}").unwrap();
+    // The set function for each bind group already sets the index.
+    for (group_no, _) in bind_group_data {
+        write_indented(
+            f,
+            indent + 4,
+            format!("bind_groups.bind_group{group_no}.set(pass);"),
+        );
+    }
+    write_indented(f, indent, "}");
 }
 
 fn write_structs<W: Write>(f: &mut W, indent: usize, module: &naga::Module) {
@@ -400,7 +420,7 @@ fn write_bind_group_layout_entry<W: Write>(
             write_indented(
                 f,
                 indent + 4,
-                "ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),".to_string(),
+                "ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),",
             );
         }
         // TODO: Better error handling.
@@ -814,5 +834,79 @@ mod test {
             result,
             Err(CreateModuleError::NonConsectiveBindGroups)
         ));
+    }
+
+    #[test]
+    fn set_bind_groups_vertex_fragment() {
+        let source = indoc! {r#"
+            struct Transforms {};
+
+            [[group(0), binding(0)]]
+            var color_texture: texture_2d<f32>;
+            [[group(1), binding(0)]] var<uniform> transforms: Transforms;
+
+            [[stage(vertex)]]
+            fn vs_main() {}
+
+            [[stage(fragment)]]
+            fn fs_main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
+
+        let mut actual = String::new();
+        write_set_bind_groups(&mut actual, 0, &bind_group_data, false);
+
+        assert_eq!(
+            indoc! {
+                r"
+            pub fn set_bind_groups<'a>(
+                pass: &mut wgpu::RenderPass<'a>,
+                bind_groups: BindGroups<'a>,
+            ) {
+                bind_groups.bind_group0.set(pass);
+                bind_groups.bind_group1.set(pass);
+            }
+            "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn set_bind_groups_compute() {
+        let source = indoc! {r#"
+            struct Transforms {};
+
+            [[group(0), binding(0)]]
+            var color_texture: texture_2d<f32>;
+            [[group(1), binding(0)]] var<uniform> transforms: Transforms;
+
+            [[stage(compute)]]
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
+
+        let mut actual = String::new();
+        write_set_bind_groups(&mut actual, 0, &bind_group_data, true);
+
+        // The only change is that the function takes a ComputePass instead.
+        assert_eq!(
+            indoc! {
+                r"
+            pub fn set_bind_groups<'a>(
+                pass: &mut wgpu::ComputePass<'a>,
+                bind_groups: BindGroups<'a>,
+            ) {
+                bind_groups.bind_group0.set(pass);
+                bind_groups.bind_group1.set(pass);
+            }
+            "
+            },
+            actual
+        );
     }
 }
