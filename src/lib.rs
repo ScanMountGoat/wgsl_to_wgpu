@@ -2,13 +2,14 @@
 //! wgsl_to_wgpu is an experimental library for generating typesafe Rust bindings from WGSL shaders to [wgpu](https://github.com/gfx-rs/wgpu).
 //!
 //! ## Features
-//! The [write_module_file] function is intended for use in build scripts.
+//! The [create_shader_module] function is intended for use in build scripts.
 //! This facilitates a shader focused workflow where edits to WGSL code are automatically reflected in the corresponding Rust file.
 //! For example, changing the type of a uniform in WGSL will raise a compile error in Rust code using the generated struct to initialize the buffer.
 //!
 //! ## Limitations
 //! This project currently supports a small subset of WGSL types and doesn't enforce certain key properties such as field alignment.
-//! It's recommended for now to only run the Rust file generation as needed and rely on WGPU's runtime validation to fix any potential errors.
+//! It may be necessary to disable running this function for shaders with unsupported types or features.
+//! The current implementation assumes all shader stages are part of a single WGSL source file.
 use indoc::{formatdoc, writedoc};
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -17,14 +18,30 @@ mod wgsl;
 
 // TODO: Simplify these templates and indentation?
 // TODO: Structure the code to make it easier to imagine what the output will look like.
+/// Errors while generating Rust source for a WGSl shader module.
 #[derive(Debug, PartialEq, Eq)]
 pub enum CreateModuleError {
+    /// Bind group sets must be consecutive and start from 0.
+    /// See `bind_group_layouts` for [wgpu::PipelineLayoutDescriptor].
     NonConsectiveBindGroups,
 }
 
 /// Parses the WGSL shader from `wgsl_source` and returns the generated Rust module's source code.
 ///
 /// The `wgsl_include_path` should be a valid path for the `include_wgsl!` macro used in the generated file.
+///
+/// # Examples
+/// This function is intended to be called at build time such as in a build script.
+/**
+```rust no_run
+// build.rs
+fn main() {
+    let wgsl_source = std::fs::read_to_string("src/shader.wgsl").unwrap();
+    let text = wgsl_to_wgpu::create_shader_module(&wgsl_source, "shader.wgsl").unwrap();
+    std::fs::write("src/shader.rs", text.as_bytes()).unwrap();
+}
+```
+ */
 pub fn create_shader_module(
     wgsl_source: &str,
     wgsl_include_path: &str,
