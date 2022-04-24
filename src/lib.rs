@@ -377,6 +377,8 @@ fn write_bind_group_layout_entry<W: Write>(
     let stages = match shader_stages {
         wgpu::ShaderStages::VERTEX_FRAGMENT => "wgpu::ShaderStages::VERTEX_FRAGMENT",
         wgpu::ShaderStages::COMPUTE => "wgpu::ShaderStages::COMPUTE",
+        wgpu::ShaderStages::VERTEX => "wgpu::ShaderStages::VERTEX",
+        wgpu::ShaderStages::FRAGMENT => "wgpu::ShaderStages::FRAGMENT",
         _ => todo!(),
     };
 
@@ -801,6 +803,116 @@ mod test {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0u32,
                             visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ]
+                };
+                "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn bind_group_layouts_descriptors_vertex() {
+        // The actual content of the structs doesn't matter.
+        // We only care about the groups and bindings.
+        let source = indoc! {r#"
+            struct Transforms {};
+
+            [[group(0), binding(0)]] var<uniform> transforms: Transforms;
+
+            [[stage(vertex)]]
+            fn vs_main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
+
+        let mut actual = String::new();
+        for (group_no, group) in bind_group_data {
+            write_bind_group_layout(&mut actual, 0, group_no, &group);
+            write_bind_group_layout_descriptor(
+                &mut actual,
+                0,
+                group_no,
+                &group,
+                wgpu::ShaderStages::VERTEX,
+            );
+        }
+
+        assert_eq!(
+            indoc! {
+                r"
+                pub struct BindGroupLayout0<'a> {
+                    pub transforms: &'a wgpu::Buffer,
+                }
+                const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0u32,
+                            visibility: wgpu::ShaderStages::VERTEX,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ]
+                };
+                "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn bind_group_layouts_descriptors_fragment() {
+        // The actual content of the structs doesn't matter.
+        // We only care about the groups and bindings.
+        let source = indoc! {r#"
+            struct Transforms {};
+
+            [[group(0), binding(0)]] var<uniform> transforms: Transforms;
+
+            [[stage(fragment)]]
+            fn fs_main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
+
+        let mut actual = String::new();
+        for (group_no, group) in bind_group_data {
+            write_bind_group_layout(&mut actual, 0, group_no, &group);
+            write_bind_group_layout_descriptor(
+                &mut actual,
+                0,
+                group_no,
+                &group,
+                wgpu::ShaderStages::FRAGMENT,
+            );
+        }
+
+        assert_eq!(
+            indoc! {
+                r"
+                pub struct BindGroupLayout0<'a> {
+                    pub transforms: &'a wgpu::Buffer,
+                }
+                const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0u32,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Uniform,
                                 has_dynamic_offset: false,
