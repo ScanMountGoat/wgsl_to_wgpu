@@ -23,7 +23,10 @@ mod wgsl;
 pub enum CreateModuleError {
     /// Bind group sets must be consecutive and start from 0.
     /// See `bind_group_layouts` for [wgpu::PipelineLayoutDescriptor].
-    NonConsectiveBindGroups,
+    NonConsecutiveBindGroups,
+
+    /// Each binding resource must be associated with exactly one binding index.
+    DuplicateBinding { binding: u32 },
 }
 
 /// Parses the WGSL shader from `wgsl_source` and returns the generated Rust module's source code.
@@ -48,8 +51,7 @@ pub fn create_shader_module(
 ) -> Result<String, CreateModuleError> {
     let module = naga::front::wgsl::parse_str(wgsl_source).unwrap();
 
-    let bind_group_data =
-        wgsl::get_bind_group_data(&module).ok_or(CreateModuleError::NonConsectiveBindGroups)?;
+    let bind_group_data = wgsl::get_bind_group_data(&module)?;
 
     let mut output = String::new();
     let shader_stages = wgsl::shader_stages(&module);
@@ -996,7 +998,27 @@ mod test {
         let result = create_shader_module(source, "shader.wgsl");
         assert!(matches!(
             result,
-            Err(CreateModuleError::NonConsectiveBindGroups)
+            Err(CreateModuleError::NonConsecutiveBindGroups)
+        ));
+    }
+
+    #[test]
+    fn create_shader_module_repeated_bindings() {
+        let source = indoc! {r#"
+            struct A {
+                f: vec4<f32>;
+            };
+            [[group(0), binding(2)]] var<uniform> a: A;
+            [[group(0), binding(2)]] var<uniform> b: A;
+
+            [[stage(fragment)]]
+            fn main() {}
+        "#};
+
+        let result = create_shader_module(source, "shader.wgsl");
+        assert!(matches!(
+            result,
+            Err(CreateModuleError::DuplicateBinding { binding: 2 })
         ));
     }
 

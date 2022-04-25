@@ -1,5 +1,7 @@
 use naga::StructMember;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap};
+
+use crate::CreateModuleError;
 
 pub struct GroupData<'a> {
     pub bindings: Vec<GroupBinding<'a>>,
@@ -135,7 +137,7 @@ fn array_length(size: &naga::ArraySize, module: &naga::Module) -> usize {
     }
 }
 
-pub fn get_bind_group_data(module: &naga::Module) -> Option<BTreeMap<u32, GroupData>> {
+pub fn get_bind_group_data(module: &naga::Module) -> Result<BTreeMap<u32, GroupData>, CreateModuleError> {
     // Use a BTree to sort type and field names by group index.
     // This isn't strictly necessary but makes the generated code cleaner.
     let mut groups = BTreeMap::new();
@@ -148,13 +150,17 @@ pub fn get_bind_group_data(module: &naga::Module) -> Option<BTreeMap<u32, GroupD
             });
             let binding_type = &module.types[module.global_variables[global_handle.0].ty];
 
-            // Assume bindings are unique since duplicates would trigger a WGSL compiler error.
             let group_binding = GroupBinding {
                 name: global.name.clone(),
                 binding_index: binding.binding,
                 binding_type,
                 storage_class: global.class,
             };
+            // Repeated bindings will probably cause a compile error.
+            // We'll still check for it here just in case.
+            if group.bindings.iter().any(|g| g.binding_index == binding.binding) {
+                return Err(CreateModuleError::DuplicateBinding { binding: binding.binding });
+            }
             group.bindings.push(group_binding);
         }
     }
@@ -162,9 +168,9 @@ pub fn get_bind_group_data(module: &naga::Module) -> Option<BTreeMap<u32, GroupD
     // wgpu expects bind groups to be consecutive starting from 0.
     // TODO: Use a result instead?
     if groups.iter().map(|(i, _)| *i as usize).eq(0..groups.len()) {
-        Some(groups)
+        Ok(groups)
     } else {
-        None
+        Err(CreateModuleError::NonConsecutiveBindGroups)
     }
 }
 
@@ -501,7 +507,7 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert!(get_bind_group_data(&module).is_none());
+        assert!(matches!(get_bind_group_data(&module), Err(CreateModuleError::NonConsecutiveBindGroups)));
     }
 
     #[test]
@@ -516,6 +522,6 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert!(get_bind_group_data(&module).is_none());
+        assert!(matches!(get_bind_group_data(&module), Err(CreateModuleError::NonConsecutiveBindGroups)));
     }
 }
