@@ -46,7 +46,7 @@ pub fn create_shader_module(
     wgsl_source: &str,
     wgsl_include_path: &str,
 ) -> Result<String, CreateModuleError> {
-    let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap();
+    let module = naga::front::wgsl::parse_str(wgsl_source).unwrap();
 
     let bind_group_data =
         wgsl::get_bind_group_data(&module).ok_or(CreateModuleError::NonConsectiveBindGroups)?;
@@ -129,7 +129,7 @@ fn write_vertex_module<W: Write>(f: &mut W, module: &naga::Module) {
 fn write_attribute_locations<W: Write>(f: &mut W, module: &naga::Module) {
     // TODO: Should these be part of each struct?
     // TODO: Generate the vertex state for each input?
-    for (name, location) in wgsl::get_vertex_input_locations(&module) {
+    for (name, location) in wgsl::get_vertex_input_locations(module) {
         // TODO: Use const case
         let const_name = name.to_uppercase();
         writeln!(
@@ -194,13 +194,13 @@ fn write_bind_groups_module<W: Write>(
     for (group_no, group) in bind_group_data {
         writeln!(f, "    pub struct BindGroup{group_no}(wgpu::BindGroup);").unwrap();
 
-        write_bind_group_layout(f, 4, *group_no, &group);
-        write_bind_group_layout_descriptor(f, 4, *group_no, &group, shader_stages);
-        impl_bind_group(f, 4, *group_no, &group, shader_stages);
+        write_bind_group_layout(f, 4, *group_no, group);
+        write_bind_group_layout_descriptor(f, 4, *group_no, group, shader_stages);
+        impl_bind_group(f, 4, *group_no, group, shader_stages);
     }
 
     writeln!(f, "    pub struct BindGroups<'a> {{").unwrap();
-    for (group_no, _) in bind_group_data {
+    for group_no in bind_group_data.keys() {
         writeln!(
             f,
             "        pub bind_group{group_no}: &'a BindGroup{group_no},"
@@ -243,7 +243,7 @@ fn write_set_bind_groups<W: Write>(
     );
 
     // The set function for each bind group already sets the index.
-    for (group_no, _) in bind_group_data {
+    for group_no in bind_group_data.keys() {
         write_indented(
             f,
             indent + 4,
@@ -264,26 +264,23 @@ fn write_structs<W: Write>(f: &mut W, indent: usize, module: &naga::Module) {
 
     // This is a UniqueArena, so types will only be defined once.
     for (_, t) in module.types.iter() {
-        match &t.inner {
-            naga::TypeInner::Struct { members, .. } => {
-                let name = t.name.as_ref().unwrap();
-                // TODO: Enforce std140 with crevice for uniform buffers to be safe?
-                write_indented(
-                    f,
-                    indent,
-                    formatdoc!(
-                        r"
+        if let naga::TypeInner::Struct { members, .. } = &t.inner {
+            let name = t.name.as_ref().unwrap();
+            // TODO: Enforce std140 with crevice for uniform buffers to be safe?
+            write_indented(
+                f,
+                indent,
+                formatdoc!(
+                    r"
                         #[repr(C)]
                         #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                         pub struct {name} {{
                         "
-                    ),
-                );
+                ),
+            );
 
-                write_struct_members(f, indent + 4, members, module);
-                write_indented(f, indent, formatdoc!("}}"));
-            }
-            _ => (),
+            write_struct_members(f, indent + 4, members, module);
+            write_indented(f, indent, formatdoc!("}}"));
         }
     }
 }
@@ -296,7 +293,7 @@ fn write_struct_members<W: Write>(
 ) {
     for member in members {
         let member_name = member.name.as_ref().unwrap();
-        let member_type = wgsl::rust_type(&module, &module.types[member.ty]);
+        let member_type = wgsl::rust_type(module, &module.types[member.ty]);
         write_indented(f, indent, formatdoc!("pub {member_name}: {member_type},"));
     }
 }
@@ -412,12 +409,23 @@ fn write_bind_group_layout_entry<W: Write>(
                 ),
             );
         }
-        naga::TypeInner::Image { dim, .. } => {
+        naga::TypeInner::Image { dim, class, .. } => {
             let view_dim = match dim {
                 naga::ImageDimension::D1 => "wgpu::TextureViewDimension::D1",
                 naga::ImageDimension::D2 => "wgpu::TextureViewDimension::D2",
                 naga::ImageDimension::D3 => "wgpu::TextureViewDimension::D3",
                 naga::ImageDimension::Cube => "wgpu::TextureViewDimension::Cube",
+            };
+
+            let sample_type = match class {
+                naga::ImageClass::Sampled { kind: _, multi: _ } => {
+                    "wgpu::TextureSampleType::Float { filterable: true }"
+                }
+                naga::ImageClass::Depth { multi: _ } => "wgpu::TextureSampleType::Depth",
+                naga::ImageClass::Storage {
+                    format: _,
+                    access: _,
+                } => todo!(),
             };
 
             write_indented(
@@ -428,18 +436,22 @@ fn write_bind_group_layout_entry<W: Write>(
                         ty: wgpu::BindingType::Texture {{
                             multisampled: false,
                             view_dimension: {view_dim},
-                            sample_type: wgpu::TextureSampleType::Float {{ filterable: true }},
+                            sample_type: {sample_type},
                         }},
                     "#
                 ),
             );
         }
-        naga::TypeInner::Sampler { .. } => {
-            // TODO: Don't assume filtering?
+        naga::TypeInner::Sampler { comparison } => {
+            let sampler_type = if comparison {
+                "wgpu::SamplerBindingType::Comparison"
+            } else {
+                "wgpu::SamplerBindingType::Filtering"
+            };
             write_indented(
                 f,
                 indent + 4,
-                "ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),",
+                format!("ty: wgpu::BindingType::Sampler({sampler_type}),"),
             );
         }
         // TODO: Better error handling.
@@ -528,7 +540,6 @@ fn impl_bind_group<W: Write>(
         ),
     );
 
-    // TODO: Test this?
     // TODO: Support compute shader with vertex/fragment in the same module?
     let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
 
@@ -556,10 +567,10 @@ fn impl_bind_group<W: Write>(
 mod test {
     use super::*;
     use indoc::indoc;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn write_all_structs() {
-        // TODO: Test different types.
         let source = indoc! {r#"
             struct VectorsF32 {
                 a: vec2<f32>;
@@ -734,6 +745,7 @@ mod test {
     fn bind_group_layouts_descriptors_vertex_fragment() {
         // The actual content of the structs doesn't matter.
         // We only care about the groups and bindings.
+        // Test different texture and sampler types.
         let source = indoc! {r#"
             struct Transforms {};
 
@@ -741,6 +753,11 @@ mod test {
             var color_texture: texture_2d<f32>;
             [[group(0), binding(1)]]
             var color_sampler: sampler;
+            [[group(0), binding(2)]]
+            var depth_texture: texture_depth_2d;
+            [[group(0), binding(3)]]
+            var comparison_sampler: sampler_comparison;
+
             [[group(1), binding(0)]] var<uniform> transforms: Transforms;
 
             [[stage(vertex)]]
@@ -772,6 +789,8 @@ mod test {
                 pub struct BindGroupLayout0<'a> {
                     pub color_texture: &'a wgpu::TextureView,
                     pub color_sampler: &'a wgpu::Sampler,
+                    pub depth_texture: &'a wgpu::TextureView,
+                    pub comparison_sampler: &'a wgpu::Sampler,
                 }
                 const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                     label: None,
@@ -790,6 +809,22 @@ mod test {
                             binding: 1u32,
                             visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2u32,
+                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Depth,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3u32,
+                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                             count: None,
                         },
                     ]
@@ -944,7 +979,7 @@ mod test {
             fn fs_main() {}
         "#};
 
-        create_shader_module(&source, "shader.wgsl").unwrap();
+        create_shader_module(source, "shader.wgsl").unwrap();
     }
 
     #[test]
@@ -958,7 +993,7 @@ mod test {
             fn main() {}
         "#};
 
-        let result = create_shader_module(&source, "shader.wgsl");
+        let result = create_shader_module(source, "shader.wgsl");
         assert!(matches!(
             result,
             Err(CreateModuleError::NonConsectiveBindGroups)

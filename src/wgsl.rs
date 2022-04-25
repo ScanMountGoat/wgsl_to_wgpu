@@ -41,7 +41,7 @@ pub fn buffer_binding_type(storage: naga::StorageClass) -> String {
     match storage {
         naga::StorageClass::Uniform => "wgpu::BufferBindingType::Uniform".to_string(),
         naga::StorageClass::Storage { access } => {
-            let is_read = access.contains(naga::StorageAccess::LOAD);
+            let _is_read = access.contains(naga::StorageAccess::LOAD);
             let is_write = access.contains(naga::StorageAccess::STORE);
 
             // TODO: Is this correct?
@@ -74,21 +74,21 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
         },
         naga::TypeInner::Image { .. } => todo!(),
         naga::TypeInner::Sampler { .. } => todo!(),
-        naga::TypeInner::Atomic { kind, width } => todo!(),
-        naga::TypeInner::Pointer { base, class } => todo!(),
+        naga::TypeInner::Atomic { kind: _, width: _ } => todo!(),
+        naga::TypeInner::Pointer { base: _, class: _ } => todo!(),
         naga::TypeInner::ValuePointer {
-            size,
-            kind,
-            width,
-            class,
+            size: _,
+            kind: _,
+            width: _,
+            class: _,
         } => todo!(),
-        naga::TypeInner::Array { base, size, stride } => {
+        naga::TypeInner::Array { base, size, stride: _ } => {
             // TODO: Support arrays other than arrays with a static size?
             let element_type = rust_type(module, &module.types[*base]);
             let count = array_length(size, module);
             format!("[{element_type}; {count}]")
         }
-        naga::TypeInner::Struct { members, span } => {
+        naga::TypeInner::Struct { members: _, span: _ } => {
             // TODO: Support structs?
             ty.name.as_ref().unwrap().to_string()
         }
@@ -98,7 +98,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
 pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
     // Not all wgsl types work as vertex attributes in wgpu.
     match &ty.inner {
-        naga::TypeInner::Scalar { kind, width } => todo!(),
+        naga::TypeInner::Scalar { kind: _, width: _ } => todo!(),
         naga::TypeInner::Vector { size, kind, width } => match size {
             naga::VectorSize::Bi => match (kind, width) {
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x2,
@@ -186,7 +186,7 @@ pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
     {
         for argument in &vertex_entry.function.arguments {
             // For entry points, arguments must have a binding unless they are a structure.
-            if let Some(binding) = &argument.binding {
+            if let Some(_binding) = &argument.binding {
                 // TODO: How to create a structure for regular bindings?
             } else {
                 let arg_type = &module.types[argument.ty];
@@ -261,6 +261,7 @@ pub fn get_vertex_input_locations(module: &naga::Module) -> Vec<(String, u32)> {
 mod test {
     use super::*;
     use indoc::indoc;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn shader_stages_none() {
