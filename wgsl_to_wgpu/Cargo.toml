@@ -1,0 +1,21 @@
+[package]
+name = "wgsl_to_wgpu"
+version = "0.2.0"
+authors = ["ScanMountGoat <>"]
+description = "Generate typesafe Rust bindings for wgsl shaders in wgpu"
+license = "MIT"
+documentation = "https://docs.rs/wgsl_to_wgpu"
+repository = "https://github.com/ScanMountGoat/wgsl_to_wgpu"
+edition = "2021"
+
+[dependencies]
+naga = { version = "0.8.5", features = ["wgsl-in"] }
+wgpu = "0.12.0"
+indoc = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.2.1"
+winit = "0.26"
+wgpu = "0.12.0"
+futures = "0.3"
+nutexb = "0.6.0"
