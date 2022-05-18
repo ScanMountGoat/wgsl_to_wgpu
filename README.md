@@ -7,6 +7,8 @@ The provided functions can be incorporated into the compilation process using a 
 This enables catching many instances of invalid API usage at compile time such as incorrectly configuring group and binding indices.
 The amount of boilerplate code needed to initialize data in WGSL shaders is greatly reduced since binding layouts and descriptor code is generated automatically.
 
+See the example crate for how to use the generated code. Run the example with `cargo run`.
+
 # Credits
 - [naga](https://github.com/gfx-rs/naga) - WGSL parser and syntax
 - [wgpu](https://github.com/gfx-rs/wgpu) - Rust implementation of WebGPU
