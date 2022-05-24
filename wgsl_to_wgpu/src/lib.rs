@@ -121,25 +121,10 @@ fn write_indented<W: Write, S: Into<String>>(w: &mut W, level: usize, str: S) {
 fn write_vertex_module<W: Write>(f: &mut W, module: &naga::Module) {
     writeln!(f, "pub mod vertex {{").unwrap();
 
-    write_attribute_locations(f, module);
     // TODO: This is redundant with above?
     write_vertex_input_structs(f, module);
 
     writeln!(f, "}}").unwrap();
-}
-
-fn write_attribute_locations<W: Write>(f: &mut W, module: &naga::Module) {
-    // TODO: Should these be part of each struct?
-    // TODO: Generate the vertex state for each input?
-    for (name, location) in wgsl::get_vertex_input_locations(module) {
-        // TODO: Use const case
-        let const_name = name.to_uppercase();
-        writeln!(
-            f,
-            "    pub const {const_name}_LOCATION: u32 = {location}u32;"
-        )
-        .unwrap();
-    }
 }
 
 // TODO: Test this?
