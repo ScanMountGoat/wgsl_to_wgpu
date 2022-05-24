@@ -317,16 +317,12 @@ fn write_bind_group_layout<W: Write>(
         let field_type = match binding.binding_type.inner {
             // TODO: Is it possible to make structs strongly typed and handle buffer creation automatically?
             // This could be its own module and associated tests.
-            naga::TypeInner::Struct { .. } => "wgpu::Buffer",
-            naga::TypeInner::Image { .. } => "wgpu::TextureView",
-            naga::TypeInner::Sampler { .. } => "wgpu::Sampler",
+            naga::TypeInner::Struct { .. } => "wgpu::BufferBinding<'a>",
+            naga::TypeInner::Image { .. } => "&'a wgpu::TextureView",
+            naga::TypeInner::Sampler { .. } => "&'a wgpu::Sampler",
             _ => panic!("Unsupported type for binding fields."),
         };
-        write_indented(
-            f,
-            indent + 4,
-            formatdoc!("pub {field_name}: &'a {field_type},"),
-        );
+        write_indented(f, indent + 4, formatdoc!("pub {field_name}: {field_type},"));
     }
     write_indented(f, indent, formatdoc!("}}"));
 }
@@ -502,8 +498,7 @@ fn impl_bind_group<W: Write>(
         let binding_name = binding.name.as_ref().unwrap();
         let resource_type = match binding.binding_type.inner {
             naga::TypeInner::Struct { .. } => {
-                // TODO: Don't assume the entire buffer is used.
-                format!("bindings.{binding_name}.as_entire_binding()")
+                format!("wgpu::BindingResource::Buffer(bindings.{binding_name})")
             }
             naga::TypeInner::Image { .. } => {
                 format!("wgpu::BindingResource::TextureView(bindings.{binding_name})")
@@ -680,9 +675,9 @@ mod test {
             indoc! {
                 r"
                 pub struct BindGroupLayout0<'a> {
-                    pub src: &'a wgpu::Buffer,
-                    pub vertex_weights: &'a wgpu::Buffer,
-                    pub dst: &'a wgpu::Buffer,
+                    pub src: wgpu::BufferBinding<'a>,
+                    pub vertex_weights: wgpu::BufferBinding<'a>,
+                    pub dst: wgpu::BufferBinding<'a>,
                 }
                 const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                     label: None,
@@ -720,7 +715,7 @@ mod test {
                     ]
                 };
                 pub struct BindGroupLayout1<'a> {
-                    pub transforms: &'a wgpu::Buffer,
+                    pub transforms: wgpu::BufferBinding<'a>,
                 }
                 const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                     label: None,
@@ -832,7 +827,7 @@ mod test {
                     ]
                 };
                 pub struct BindGroupLayout1<'a> {
-                    pub transforms: &'a wgpu::Buffer,
+                    pub transforms: wgpu::BufferBinding<'a>,
                 }
                 const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                     label: None,
@@ -887,7 +882,7 @@ mod test {
             indoc! {
                 r"
                 pub struct BindGroupLayout0<'a> {
-                    pub transforms: &'a wgpu::Buffer,
+                    pub transforms: wgpu::BufferBinding<'a>,
                 }
                 const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                     label: None,
@@ -942,7 +937,7 @@ mod test {
             indoc! {
                 r"
                 pub struct BindGroupLayout0<'a> {
-                    pub transforms: &'a wgpu::Buffer,
+                    pub transforms: wgpu::BufferBinding<'a>,
                 }
                 const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                     label: None,
