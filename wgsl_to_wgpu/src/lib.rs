@@ -13,12 +13,10 @@
 
 extern crate wgpu_types as wgpu;
 
-use indoc::formatdoc;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
-use std::fmt::Write;
-use syn::Ident;
+use syn::{Ident, Index};
 
 mod wgsl;
 
@@ -58,19 +56,12 @@ pub fn create_shader_module(
     let module = naga::front::wgsl::parse_str(wgsl_source).unwrap();
 
     let bind_group_data = wgsl::get_bind_group_data(&module)?;
-
-    let mut output = String::new();
     let shader_stages = wgsl::shader_stages(&module);
 
     // Write all the structs, including uniforms and entry function inputs.
-    // TODO: Use quote for everything.
-    let structs_output = structs(&module);
-    let structs_output = quote!(#(#structs_output)*);
-
-    write!(&mut output, "{}", pretty_print(&structs_output)).unwrap();
-
-    write_bind_groups_module(&mut output, &bind_group_data, shader_stages);
-    write_vertex_module(&mut output, &module);
+    let structs = structs(&module);
+    let bind_groups_module = bind_groups_module(&bind_group_data, shader_stages);
+    let vertex_module = vertex_module(&module);
 
     let create_shader_module = quote! {
         pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
@@ -81,7 +72,6 @@ pub fn create_shader_module(
             })
         }
     };
-    write!(&mut output, "{}", pretty_print(&create_shader_module)).unwrap();
 
     let bind_group_layouts: Vec<_> = bind_group_data
         .iter()
@@ -102,12 +92,22 @@ pub fn create_shader_module(
             })
         }
     };
-    write!(&mut output, "{}", pretty_print(&create_pipeline_layout)).unwrap();
 
-    Ok(output)
+    let output = quote! {
+        #(#structs)*
+
+        #bind_groups_module
+
+        #vertex_module
+
+        #create_shader_module
+
+        #create_pipeline_layout
+    };
+    Ok(pretty_print(output))
 }
 
-fn pretty_print(tokens: &TokenStream) -> String {
+fn pretty_print(tokens: TokenStream) -> String {
     let file = syn::parse_file(&tokens.to_string()).unwrap();
     prettyplease::unparse(&file)
 }
@@ -116,45 +116,32 @@ fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
     Ident::new(&format!("{}{}", name, index), Span::call_site())
 }
 
-// Apply indentation to each level.
-fn indent<S: Into<String>>(str: S, level: usize) -> String {
-    str.into()
-        .lines()
-        .map(|l| " ".repeat(level) + l)
-        .collect::<Vec<String>>()
-        .join("\n")
+fn vertex_module(module: &naga::Module) -> TokenStream {
+    let structs = vertex_input_structs(module);
+    quote! {
+        pub mod vertex {
+            #(#structs)*
+        }
+    }
 }
 
-// Assume the input is already unindented with indoc.
-fn write_indented<W: Write, S: Into<String>>(w: &mut W, level: usize, str: S) {
-    writeln!(w, "{}", indent(str, level)).unwrap();
-}
-
-fn write_vertex_module<W: Write>(f: &mut W, module: &naga::Module) {
-    writeln!(f, "pub mod vertex {{").unwrap();
-
-    write_vertex_input_structs(f, module);
-
-    writeln!(f, "}}").unwrap();
-}
-
-// TODO: Test this?
-fn write_vertex_input_structs<W: Write>(f: &mut W, module: &naga::Module) {
+fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
     let vertex_inputs = wgsl::get_vertex_input_structs(module);
-    for input in vertex_inputs {
-        let name = input.name;
+    vertex_inputs.iter().map(|input|  {
+        let name = Ident::new(&input.name, Span::call_site());
 
-        let count = input.fields.len();
-        let attributes = input
+        let count = Index::from(input.fields.len());
+        let attributes: Vec<_> = input
             .fields
             .iter()
             .map(|(location, m)| {
+                let location = Index::from(*location as usize);
                 let format = wgsl::vertex_format(&module.types[m.ty]);
                 // TODO: Will the debug implementation always work with the macro?
-                format!("{location} => {:?}", format)
+                let format = syn::Ident::new(&format!("{:?}", format), Span::call_site());
+                quote!(#location => #format)
             })
-            .collect::<Vec<_>>()
-            .join(", ");
+            .collect();
 
         // TODO: Account for alignment/padding?
         let size_in_bytes: u64 = input
@@ -162,93 +149,96 @@ fn write_vertex_input_structs<W: Write>(f: &mut W, module: &naga::Module) {
             .iter()
             .map(|(_, m)| wgsl::vertex_format(&module.types[m.ty]).size())
             .sum();
+        let size_in_bytes = Index::from(size_in_bytes as usize);
 
         // The vertex input structs should already be written at this point.
         // TODO: Support vertex inputs that aren't in a struct.
-        write_indented(
-            f,
-            4,
-            formatdoc!(
-                r#"
-                    impl super::{name} {{
-                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; {count}] = wgpu::vertex_attr_array![{attributes}];
-                        /// The total size in bytes of all fields without considering padding or alignment.
-                        pub const SIZE_IN_BYTES: u64 = {size_in_bytes};
-                    }}
-                "#
-            ),
-        );
-    }
+        quote! {
+            impl super::#name {
+                pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; #count] = wgpu::vertex_attr_array![#(#attributes),*];
+                /// The total size in bytes of all fields without considering padding or alignment.
+                pub const SIZE_IN_BYTES: u64 = #size_in_bytes;
+            }
+        }
+    }).collect()
 }
 
 // TODO: Take an iterator instead?
-fn write_bind_groups_module<W: Write>(
-    f: &mut W,
+fn bind_groups_module(
     bind_group_data: &BTreeMap<u32, wgsl::GroupData>,
     shader_stages: wgpu::ShaderStages,
-) {
-    writeln!(f, "pub mod bind_groups {{").unwrap();
+) -> TokenStream {
+    let bind_groups: Vec<_> = bind_group_data
+        .iter()
+        .map(|(group_no, group)| {
+            let group_name = indexed_name_to_ident("BindGroup", *group_no);
 
-    for (group_no, group) in bind_group_data {
-        writeln!(f, "    pub struct BindGroup{group_no}(wgpu::BindGroup);").unwrap();
+            let layout = bind_group_layout(*group_no, group);
+            let layout_descriptor = bind_group_layout_descriptor(*group_no, group, shader_stages);
+            let group_impl = bind_group(*group_no, group, shader_stages);
 
-        write_bind_group_layout(f, 4, *group_no, group);
-        write_bind_group_layout_descriptor(f, 4, *group_no, group, shader_stages);
-        impl_bind_group(f, 4, *group_no, group, shader_stages);
-    }
+            quote! {
+                pub struct #group_name(wgpu::BindGroup);
+                #layout
+                #layout_descriptor
+                #group_impl
+            }
+        })
+        .collect();
 
-    writeln!(f, "    pub struct BindGroups<'a> {{").unwrap();
-    for group_no in bind_group_data.keys() {
-        writeln!(
-            f,
-            "        pub bind_group{group_no}: &'a BindGroup{group_no},"
-        )
-        .unwrap();
-    }
-    writeln!(f, "    }}").unwrap();
+    let bind_group_fields: Vec<_> = bind_group_data
+        .keys()
+        .map(|group_no| {
+            let group_name = indexed_name_to_ident("BindGroup", *group_no);
+            let field = indexed_name_to_ident("bind_group", *group_no);
+            quote!(pub #field: &'a #group_name)
+        })
+        .collect();
 
     // TODO: Support compute shader with vertex/fragment in the same module?
     let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
+    let set_bind_groups = set_bind_groups(bind_group_data, is_compute);
 
-    write_set_bind_groups(f, 4, bind_group_data, is_compute);
+    quote! {
+        pub mod bind_groups {
+            #(#bind_groups)*
 
-    writeln!(f, "}}").unwrap();
+            pub struct BindGroups<'a> {
+                #(#bind_group_fields),*
+            }
+
+            #set_bind_groups
+        }
+    }
 }
 
-fn write_set_bind_groups<W: Write>(
-    f: &mut W,
-    indent: usize,
+fn set_bind_groups(
     bind_group_data: &BTreeMap<u32, wgsl::GroupData>,
     is_compute: bool,
-) {
+) -> TokenStream {
     let render_pass = if is_compute {
-        "wgpu::ComputePass<'a>"
+        quote!(wgpu::ComputePass<'a>)
     } else {
-        "wgpu::RenderPass<'a>"
+        quote!(wgpu::RenderPass<'a>)
     };
 
-    write_indented(
-        f,
-        indent,
-        formatdoc!(
-            r#"
-            pub fn set_bind_groups<'a>(
-                pass: &mut {render_pass},
-                bind_groups: BindGroups<'a>,
-            ) {{
-            "#
-        ),
-    );
-
     // The set function for each bind group already sets the index.
-    for group_no in bind_group_data.keys() {
-        write_indented(
-            f,
-            indent + 4,
-            format!("bind_groups.bind_group{group_no}.set(pass);"),
-        );
+    let groups: Vec<_> = bind_group_data
+        .keys()
+        .map(|group_no| {
+            let group = indexed_name_to_ident("bind_group", *group_no);
+            quote!(bind_groups.#group.set(pass);)
+        })
+        .collect();
+
+    quote! {
+        pub fn set_bind_groups<'a>(
+            pass: &mut #render_pass,
+            bind_groups: BindGroups<'a>,
+        ) {
+            #(#groups)*
+        }
     }
-    write_indented(f, indent, "}");
 }
 
 fn structs(module: &naga::Module) -> Vec<TokenStream> {
@@ -294,264 +284,202 @@ fn struct_members(members: &[naga::StructMember], module: &naga::Module) -> Vec<
         .collect()
 }
 
-fn write_bind_group_layout<W: Write>(
-    f: &mut W,
-    indent: usize,
+fn bind_group_layout(group_no: u32, group: &wgsl::GroupData) -> TokenStream {
+    let fields: Vec<_> = group
+        .bindings
+        .iter()
+        .map(|binding| {
+            let field_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
+            // TODO: Support more types.
+            let field_type = match binding.binding_type.inner {
+                // TODO: Is it possible to make structs strongly typed and handle buffer creation automatically?
+                // This could be its own module and associated tests.
+                naga::TypeInner::Struct { .. } => quote!(wgpu::BufferBinding<'a>),
+                naga::TypeInner::Image { .. } => quote!(&'a wgpu::TextureView),
+                naga::TypeInner::Sampler { .. } => quote!(&'a wgpu::Sampler),
+                _ => panic!("Unsupported type for binding fields."),
+            };
+            quote!(pub #field_name: #field_type)
+        })
+        .collect();
+
+    let name = indexed_name_to_ident("BindGroupLayout", group_no);
+    quote! {
+        pub struct #name<'a> {
+            #(#fields),*
+        }
+    }
+}
+
+fn bind_group_layout_descriptor(
     group_no: u32,
     group: &wgsl::GroupData,
-) {
-    write_indented(
-        f,
-        indent,
-        formatdoc!("pub struct BindGroupLayout{group_no}<'a> {{"),
-    );
-    for binding in &group.bindings {
-        let field_name = binding.name.as_ref().unwrap();
-        // TODO: Support more types.
-        let field_type = match binding.binding_type.inner {
-            // TODO: Is it possible to make structs strongly typed and handle buffer creation automatically?
-            // This could be its own module and associated tests.
-            naga::TypeInner::Struct { .. } => "wgpu::BufferBinding<'a>",
-            naga::TypeInner::Image { .. } => "&'a wgpu::TextureView",
-            naga::TypeInner::Sampler { .. } => "&'a wgpu::Sampler",
-            _ => panic!("Unsupported type for binding fields."),
+    shader_stages: wgpu::ShaderStages,
+) -> TokenStream {
+    let entries: Vec<_> = group
+        .bindings
+        .iter()
+        .map(|binding| bind_group_layout_entry(binding, shader_stages))
+        .collect();
+
+    let name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
+    quote! {
+        const #name: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                #(#entries),*
+            ],
         };
-        write_indented(f, indent + 4, formatdoc!("pub {field_name}: {field_type},"));
     }
-    write_indented(f, indent, formatdoc!("}}"));
 }
 
-fn write_bind_group_layout_descriptor<W: Write>(
-    f: &mut W,
-    indent: usize,
-    group_no: u32,
-    group: &wgsl::GroupData,
-    shader_stages: wgpu::ShaderStages,
-) {
-    write_indented(
-        f,
-        indent,
-        formatdoc!(
-            r#"
-                const LAYOUT_DESCRIPTOR{group_no}: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {{
-                    label: None,
-                    entries: &[
-            "#
-        ),
-    );
-    for binding in &group.bindings {
-        write_bind_group_layout_entry(f, binding, indent + 8, shader_stages);
-    }
-    write_indented(
-        f,
-        indent,
-        formatdoc!(
-            r#"
-                    ]
-                }};
-            "#
-        ),
-    );
-}
-
-fn write_bind_group_layout_entry<W: Write>(
-    f: &mut W,
+fn bind_group_layout_entry(
     binding: &wgsl::GroupBinding,
-    indent: usize,
     shader_stages: wgpu::ShaderStages,
-) {
+) -> TokenStream {
     // TODO: Assume storage is only used for compute?
     // TODO: Support just vertex or fragment?
     // TODO: Visible from all stages?
     let stages = match shader_stages {
-        wgpu::ShaderStages::VERTEX_FRAGMENT => "wgpu::ShaderStages::VERTEX_FRAGMENT",
-        wgpu::ShaderStages::COMPUTE => "wgpu::ShaderStages::COMPUTE",
-        wgpu::ShaderStages::VERTEX => "wgpu::ShaderStages::VERTEX",
-        wgpu::ShaderStages::FRAGMENT => "wgpu::ShaderStages::FRAGMENT",
+        wgpu::ShaderStages::VERTEX_FRAGMENT => quote!(wgpu::ShaderStages::VERTEX_FRAGMENT),
+        wgpu::ShaderStages::COMPUTE => quote!(wgpu::ShaderStages::COMPUTE),
+        wgpu::ShaderStages::VERTEX => quote!(wgpu::ShaderStages::VERTEX),
+        wgpu::ShaderStages::FRAGMENT => quote!(wgpu::ShaderStages::FRAGMENT),
         _ => todo!(),
     };
 
-    let binding_index = binding.binding_index;
-    write_indented(
-        f,
-        indent,
-        formatdoc!(
-            r#"
-                wgpu::BindGroupLayoutEntry {{
-                    binding: {binding_index}u32,
-                    visibility: {stages},
-            "#
-        ),
-    );
+    let binding_index = Index::from(binding.binding_index as usize);
     // TODO: Support more types.
-    match binding.binding_type.inner {
+    let binding_type = match binding.binding_type.inner {
         naga::TypeInner::Struct { .. } => {
             let buffer_binding_type = wgsl::buffer_binding_type(binding.storage_class);
-            write_indented(
-                f,
-                indent + 4,
-                formatdoc!(
-                    r#"
-                        ty: wgpu::BindingType::Buffer {{
-                            ty: {buffer_binding_type},
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        }},
-                    "#
-                ),
-            );
+
+            quote!(gpu::BindingType::Buffer {
+                ty: #buffer_binding_type,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            })
         }
         naga::TypeInner::Image { dim, class, .. } => {
             let view_dim = match dim {
-                naga::ImageDimension::D1 => "wgpu::TextureViewDimension::D1",
-                naga::ImageDimension::D2 => "wgpu::TextureViewDimension::D2",
-                naga::ImageDimension::D3 => "wgpu::TextureViewDimension::D3",
-                naga::ImageDimension::Cube => "wgpu::TextureViewDimension::Cube",
+                naga::ImageDimension::D1 => quote!(wgpu::TextureViewDimension::D1),
+                naga::ImageDimension::D2 => quote!(wgpu::TextureViewDimension::D2),
+                naga::ImageDimension::D3 => quote!(wgpu::TextureViewDimension::D3),
+                naga::ImageDimension::Cube => quote!(wgpu::TextureViewDimension::Cube),
             };
 
             let sample_type = match class {
                 naga::ImageClass::Sampled { kind: _, multi: _ } => {
-                    "wgpu::TextureSampleType::Float { filterable: true }"
+                    quote!(wgpu::TextureSampleType::Float { filterable: true })
                 }
-                naga::ImageClass::Depth { multi: _ } => "wgpu::TextureSampleType::Depth",
+                naga::ImageClass::Depth { multi: _ } => quote!(wgpu::TextureSampleType::Depth),
                 naga::ImageClass::Storage {
                     format: _,
                     access: _,
                 } => todo!(),
             };
 
-            write_indented(
-                f,
-                indent + 4,
-                formatdoc!(
-                    r#"
-                        ty: wgpu::BindingType::Texture {{
-                            multisampled: false,
-                            view_dimension: {view_dim},
-                            sample_type: {sample_type},
-                        }},
-                    "#
-                ),
-            );
+            quote!(wgpu::BindingType::Texture {
+                multisampled: false,
+                view_dimension: #view_dim,
+                sample_type: #sample_type,
+            })
         }
         naga::TypeInner::Sampler { comparison } => {
             let sampler_type = if comparison {
-                "wgpu::SamplerBindingType::Comparison"
+                quote!(wgpu::SamplerBindingType::Comparison)
             } else {
-                "wgpu::SamplerBindingType::Filtering"
+                quote!(wgpu::SamplerBindingType::Filtering)
             };
-            write_indented(
-                f,
-                indent + 4,
-                format!("ty: wgpu::BindingType::Sampler({sampler_type}),"),
-            );
+            quote!(wgpu::BindingType::Sampler(#sampler_type))
         }
         // TODO: Better error handling.
         _ => panic!("Failed to generate BindingType."),
     };
-    write_indented(
-        f,
-        indent,
-        formatdoc!(
-            r#"
-                    count: None,
-                }},
-            "#
-        ),
-    );
+
+    quote! {
+        wgpu::BindGroupLayoutEntry {
+            binding: #binding_index,
+            visibility: #stages,
+            ty: #binding_type,
+            count: None,
+        }
+    }
 }
 
-fn impl_bind_group<W: Write>(
-    f: &mut W,
-    indent: usize,
+fn bind_group(
     group_no: u32,
     group: &wgsl::GroupData,
     shader_stages: wgpu::ShaderStages,
-) {
-    write_indented(
-        f,
-        indent,
-        formatdoc!(
-            r#"
-                impl BindGroup{group_no} {{
-                    pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {{
-                        device.create_bind_group_layout(&LAYOUT_DESCRIPTOR{group_no})
-                    }}
+) -> TokenStream {
+    let entries: Vec<_> = group
+        .bindings
+        .iter()
+        .map(|binding| {
+            let binding_index = Index::from(binding.binding_index as usize);
+            let binding_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
+            let resource_type = match binding.binding_type.inner {
+                naga::TypeInner::Struct { .. } => {
+                    quote!(wgpu::BindingResource::Buffer(bindings.#binding_name))
+                }
+                naga::TypeInner::Image { .. } => {
+                    quote!(wgpu::BindingResource::TextureView(bindings.#binding_name))
+                }
+                naga::TypeInner::Sampler { .. } => {
+                    quote!(wgpu::BindingResource::Sampler(bindings.#binding_name))
+                }
+                // TODO: Better error handling.
+                _ => panic!("Failed to generate BindingType."),
+            };
 
-                    pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout{group_no}) -> Self {{
-                        let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR{group_no});
-                        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {{
-                            layout: &bind_group_layout,
-                            entries: &[
-            "#
-        ),
-    );
-
-    for binding in &group.bindings {
-        let binding_index = binding.binding_index;
-        let binding_name = binding.name.as_ref().unwrap();
-        let resource_type = match binding.binding_type.inner {
-            naga::TypeInner::Struct { .. } => {
-                format!("wgpu::BindingResource::Buffer(bindings.{binding_name})")
+            quote! {
+                wgpu::BindGroupEntry {
+                    binding: #binding_index,
+                    resource: #resource_type,
+                }
             }
-            naga::TypeInner::Image { .. } => {
-                format!("wgpu::BindingResource::TextureView(bindings.{binding_name})")
-            }
-            naga::TypeInner::Sampler { .. } => {
-                format!("wgpu::BindingResource::Sampler(bindings.{binding_name})")
-            }
-            // TODO: Better error handling.
-            _ => panic!("Failed to generate BindingType."),
-        };
-
-        write_indented(
-            f,
-            indent + 16,
-            formatdoc!(
-                r#"
-                    wgpu::BindGroupEntry {{
-                        binding: {binding_index}u32,
-                        resource: {resource_type},
-                    }},
-                "#
-            ),
-        );
-    }
-    write_indented(
-        f,
-        indent + 4,
-        formatdoc!(
-            r#"
-                        ],
-                        label: None,
-                    }});
-                    Self(bind_group)
-                }}
-            "#
-        ),
-    );
+        })
+        .collect();
 
     // TODO: Support compute shader with vertex/fragment in the same module?
     let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
 
     let render_pass = if is_compute {
-        "wgpu::ComputePass<'a>"
+        quote!(wgpu::ComputePass<'a>)
     } else {
-        "wgpu::RenderPass<'a>"
+        quote!(wgpu::RenderPass<'a>)
     };
 
-    write_indented(
-        f,
-        indent,
-        formatdoc!(
-            r#"
+    let bind_group_name = indexed_name_to_ident("BindGroup", group_no);
+    let bind_group_layout_name = indexed_name_to_ident("BindGroupLayout", group_no);
 
-                pub fn set<'a>(&'a self, render_pass: &mut {render_pass}) {{
-                    render_pass.set_bind_group({group_no}u32, &self.0, &[]);
-                }}
-            }}"#
-        ),
-    );
+    let layout_descriptor_name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
+
+    let group_no = Index::from(group_no as usize);
+
+    quote! {
+        impl #bind_group_name {
+            pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+                device.create_bind_group_layout(&#layout_descriptor_name)
+            }
+
+            pub fn from_bindings(device: &wgpu::Device, bindings: #bind_group_layout_name) -> Self {
+                let bind_group_layout = device.create_bind_group_layout(&#layout_descriptor_name);
+                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &bind_group_layout,
+                    entries: &[
+                        #(#entries),*
+                    ],
+                    label: None,
+                });
+                Self(bind_group)
+            }
+
+            pub fn set<'a>(&'a self, render_pass: &mut #render_pass) {
+                render_pass.set_bind_group(#group_no, &self.0, &[]);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -631,9 +559,7 @@ mod test {
     }
 
     #[test]
-    fn bind_group_layouts_descriptors_compute() {
-        // The actual content of the structs doesn't matter.
-        // We only care about the groups and bindings.
+    fn bind_groups_module_compute() {
         let source = indoc! {r#"
             struct VertexInput0 {};
             struct VertexWeight {};
@@ -654,89 +580,155 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
 
-        let mut actual = String::new();
-        for (group_no, group) in bind_group_data {
-            write_bind_group_layout(&mut actual, 0, group_no, &group);
-            write_bind_group_layout_descriptor(
-                &mut actual,
-                0,
-                group_no,
-                &group,
-                wgpu::ShaderStages::COMPUTE,
-            );
-        }
+        let actual = pretty_print(bind_groups_module(
+            &bind_group_data,
+            wgpu::ShaderStages::COMPUTE,
+        ));
 
         assert_eq!(
             indoc! {
-                r"
-                pub struct BindGroupLayout0<'a> {
-                    pub src: wgpu::BufferBinding<'a>,
-                    pub vertex_weights: wgpu::BufferBinding<'a>,
-                    pub dst: wgpu::BufferBinding<'a>,
+                r#"
+                pub mod bind_groups {
+                    pub struct BindGroup0(wgpu::BindGroup);
+                    pub struct BindGroupLayout0<'a> {
+                        pub src: wgpu::BufferBinding<'a>,
+                        pub vertex_weights: wgpu::BufferBinding<'a>,
+                        pub dst: wgpu::BufferBinding<'a>,
+                    }
+                    const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: gpu::BindingType::Buffer {
+                                    ty: "wgpu::BufferBindingType::Storage { read_only: true }",
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: gpu::BindingType::Buffer {
+                                    ty: "wgpu::BufferBindingType::Storage { read_only: true }",
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 2,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: gpu::BindingType::Buffer {
+                                    ty: "wgpu::BufferBindingType::Storage { read_only: false }",
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                        ],
+                    };
+                    impl BindGroup0 {
+                        pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+                            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0)
+                        }
+                        pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout0) -> Self {
+                            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0);
+                            let bind_group = device
+                                .create_bind_group(
+                                    &wgpu::BindGroupDescriptor {
+                                        layout: &bind_group_layout,
+                                        entries: &[
+                                            wgpu::BindGroupEntry {
+                                                binding: 0,
+                                                resource: wgpu::BindingResource::Buffer(bindings.src),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 1,
+                                                resource: wgpu::BindingResource::Buffer(
+                                                    bindings.vertex_weights,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 2,
+                                                resource: wgpu::BindingResource::Buffer(bindings.dst),
+                                            },
+                                        ],
+                                        label: None,
+                                    },
+                                );
+                            Self(bind_group)
+                        }
+                        pub fn set<'a>(&'a self, render_pass: &mut wgpu::ComputePass<'a>) {
+                            render_pass.set_bind_group(0, &self.0, &[]);
+                        }
+                    }
+                    pub struct BindGroup1(wgpu::BindGroup);
+                    pub struct BindGroupLayout1<'a> {
+                        pub transforms: wgpu::BufferBinding<'a>,
+                    }
+                    const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: gpu::BindingType::Buffer {
+                                    ty: "wgpu::BufferBindingType::Uniform",
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                        ],
+                    };
+                    impl BindGroup1 {
+                        pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+                            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR1)
+                        }
+                        pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout1) -> Self {
+                            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR1);
+                            let bind_group = device
+                                .create_bind_group(
+                                    &wgpu::BindGroupDescriptor {
+                                        layout: &bind_group_layout,
+                                        entries: &[
+                                            wgpu::BindGroupEntry {
+                                                binding: 0,
+                                                resource: wgpu::BindingResource::Buffer(bindings.transforms),
+                                            },
+                                        ],
+                                        label: None,
+                                    },
+                                );
+                            Self(bind_group)
+                        }
+                        pub fn set<'a>(&'a self, render_pass: &mut wgpu::ComputePass<'a>) {
+                            render_pass.set_bind_group(1, &self.0, &[]);
+                        }
+                    }
+                    pub struct BindGroups<'a> {
+                        pub bind_group0: &'a BindGroup0,
+                        pub bind_group1: &'a BindGroup1,
+                    }
+                    pub fn set_bind_groups<'a>(
+                        pass: &mut wgpu::ComputePass<'a>,
+                        bind_groups: BindGroups<'a>,
+                    ) {
+                        bind_groups.bind_group0.set(pass);
+                        bind_groups.bind_group1.set(pass);
+                    }
                 }
-                const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0u32,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1u32,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2u32,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                    ]
-                };
-                pub struct BindGroupLayout1<'a> {
-                    pub transforms: wgpu::BufferBinding<'a>,
-                }
-                const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0u32,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                    ]
-                };
-                "
+                "#
             },
             actual
         );
     }
 
     #[test]
-    fn bind_group_layouts_descriptors_vertex_fragment() {
-        // The actual content of the structs doesn't matter.
-        // We only care about the groups and bindings.
+    fn bind_groups_module_vertex_fragment() {
         // Test different texture and sampler types.
         let source = indoc! {r#"
             struct Transforms {};
@@ -762,91 +754,171 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
 
-        let mut actual = String::new();
-        for (group_no, group) in bind_group_data {
-            write_bind_group_layout(&mut actual, 0, group_no, &group);
-            write_bind_group_layout_descriptor(
-                &mut actual,
-                0,
-                group_no,
-                &group,
-                wgpu::ShaderStages::VERTEX_FRAGMENT,
-            );
-        }
+        let actual = pretty_print(bind_groups_module(
+            &bind_group_data,
+            wgpu::ShaderStages::VERTEX_FRAGMENT,
+        ));
 
         // TODO: Are storage buffers valid for vertex/fragment?
         assert_eq!(
             indoc! {
-                r"
-                pub struct BindGroupLayout0<'a> {
-                    pub color_texture: &'a wgpu::TextureView,
-                    pub color_sampler: &'a wgpu::Sampler,
-                    pub depth_texture: &'a wgpu::TextureView,
-                    pub comparison_sampler: &'a wgpu::Sampler,
+                r#"
+                pub mod bind_groups {
+                    pub struct BindGroup0(wgpu::BindGroup);
+                    pub struct BindGroupLayout0<'a> {
+                        pub color_texture: &'a wgpu::TextureView,
+                        pub color_sampler: &'a wgpu::Sampler,
+                        pub depth_texture: &'a wgpu::TextureView,
+                        pub comparison_sampler: &'a wgpu::Sampler,
+                    }
+                    const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Texture {
+                                    multisampled: false,
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    sample_type: wgpu::TextureSampleType::Float {
+                                        filterable: true,
+                                    },
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 2,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Texture {
+                                    multisampled: false,
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    sample_type: wgpu::TextureSampleType::Depth,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 3,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                                count: None,
+                            },
+                        ],
+                    };
+                    impl BindGroup0 {
+                        pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+                            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0)
+                        }
+                        pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout0) -> Self {
+                            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0);
+                            let bind_group = device
+                                .create_bind_group(
+                                    &wgpu::BindGroupDescriptor {
+                                        layout: &bind_group_layout,
+                                        entries: &[
+                                            wgpu::BindGroupEntry {
+                                                binding: 0,
+                                                resource: wgpu::BindingResource::TextureView(
+                                                    bindings.color_texture,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 1,
+                                                resource: wgpu::BindingResource::Sampler(
+                                                    bindings.color_sampler,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 2,
+                                                resource: wgpu::BindingResource::TextureView(
+                                                    bindings.depth_texture,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 3,
+                                                resource: wgpu::BindingResource::Sampler(
+                                                    bindings.comparison_sampler,
+                                                ),
+                                            },
+                                        ],
+                                        label: None,
+                                    },
+                                );
+                            Self(bind_group)
+                        }
+                        pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+                            render_pass.set_bind_group(0, &self.0, &[]);
+                        }
+                    }
+                    pub struct BindGroup1(wgpu::BindGroup);
+                    pub struct BindGroupLayout1<'a> {
+                        pub transforms: wgpu::BufferBinding<'a>,
+                    }
+                    const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: gpu::BindingType::Buffer {
+                                    ty: "wgpu::BufferBindingType::Uniform",
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                        ],
+                    };
+                    impl BindGroup1 {
+                        pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+                            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR1)
+                        }
+                        pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout1) -> Self {
+                            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR1);
+                            let bind_group = device
+                                .create_bind_group(
+                                    &wgpu::BindGroupDescriptor {
+                                        layout: &bind_group_layout,
+                                        entries: &[
+                                            wgpu::BindGroupEntry {
+                                                binding: 0,
+                                                resource: wgpu::BindingResource::Buffer(bindings.transforms),
+                                            },
+                                        ],
+                                        label: None,
+                                    },
+                                );
+                            Self(bind_group)
+                        }
+                        pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+                            render_pass.set_bind_group(1, &self.0, &[]);
+                        }
+                    }
+                    pub struct BindGroups<'a> {
+                        pub bind_group0: &'a BindGroup0,
+                        pub bind_group1: &'a BindGroup1,
+                    }
+                    pub fn set_bind_groups<'a>(
+                        pass: &mut wgpu::RenderPass<'a>,
+                        bind_groups: BindGroups<'a>,
+                    ) {
+                        bind_groups.bind_group0.set(pass);
+                        bind_groups.bind_group1.set(pass);
+                    }
                 }
-                const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0u32,
-                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1u32,
-                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2u32,
-                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Depth,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 3u32,
-                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
-                            count: None,
-                        },
-                    ]
-                };
-                pub struct BindGroupLayout1<'a> {
-                    pub transforms: wgpu::BufferBinding<'a>,
-                }
-                const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0u32,
-                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                    ]
-                };
-                "
+                "#
             },
             actual
         );
     }
 
     #[test]
-    fn bind_group_layouts_descriptors_vertex() {
+    fn bind_groups_module_vertex() {
         // The actual content of the structs doesn't matter.
         // We only care about the groups and bindings.
         let source = indoc! {r#"
@@ -861,47 +933,77 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
 
-        let mut actual = String::new();
-        for (group_no, group) in bind_group_data {
-            write_bind_group_layout(&mut actual, 0, group_no, &group);
-            write_bind_group_layout_descriptor(
-                &mut actual,
-                0,
-                group_no,
-                &group,
-                wgpu::ShaderStages::VERTEX,
-            );
-        }
+        let actual = pretty_print(bind_groups_module(
+            &bind_group_data,
+            wgpu::ShaderStages::VERTEX,
+        ));
 
         assert_eq!(
             indoc! {
-                r"
-                pub struct BindGroupLayout0<'a> {
-                    pub transforms: wgpu::BufferBinding<'a>,
-                }
-                const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0u32,
-                            visibility: wgpu::ShaderStages::VERTEX,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
+                r#"
+                pub mod bind_groups {
+                    pub struct BindGroup0(wgpu::BindGroup);
+                    pub struct BindGroupLayout0<'a> {
+                        pub transforms: wgpu::BufferBinding<'a>,
+                    }
+                    const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::VERTEX,
+                                ty: gpu::BindingType::Buffer {
+                                    ty: "wgpu::BufferBindingType::Uniform",
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
                             },
-                            count: None,
-                        },
-                    ]
-                };
-                "
+                        ],
+                    };
+                    impl BindGroup0 {
+                        pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+                            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0)
+                        }
+                        pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout0) -> Self {
+                            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0);
+                            let bind_group = device
+                                .create_bind_group(
+                                    &wgpu::BindGroupDescriptor {
+                                        layout: &bind_group_layout,
+                                        entries: &[
+                                            wgpu::BindGroupEntry {
+                                                binding: 0,
+                                                resource: wgpu::BindingResource::Buffer(bindings.transforms),
+                                            },
+                                        ],
+                                        label: None,
+                                    },
+                                );
+                            Self(bind_group)
+                        }
+                        pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+                            render_pass.set_bind_group(0, &self.0, &[]);
+                        }
+                    }
+                    pub struct BindGroups<'a> {
+                        pub bind_group0: &'a BindGroup0,
+                    }
+                    pub fn set_bind_groups<'a>(
+                        pass: &mut wgpu::RenderPass<'a>,
+                        bind_groups: BindGroups<'a>,
+                    ) {
+                        bind_groups.bind_group0.set(pass);
+                    }
+                }
+                "#
             },
             actual
         );
     }
 
     #[test]
-    fn bind_group_layouts_descriptors_fragment() {
+    fn bind_groups_module_fragment() {
         // The actual content of the structs doesn't matter.
         // We only care about the groups and bindings.
         let source = indoc! {r#"
@@ -916,40 +1018,70 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
 
-        let mut actual = String::new();
-        for (group_no, group) in bind_group_data {
-            write_bind_group_layout(&mut actual, 0, group_no, &group);
-            write_bind_group_layout_descriptor(
-                &mut actual,
-                0,
-                group_no,
-                &group,
-                wgpu::ShaderStages::FRAGMENT,
-            );
-        }
+        let actual = pretty_print(bind_groups_module(
+            &bind_group_data,
+            wgpu::ShaderStages::FRAGMENT,
+        ));
 
         assert_eq!(
             indoc! {
-                r"
-                pub struct BindGroupLayout0<'a> {
-                    pub transforms: wgpu::BufferBinding<'a>,
-                }
-                const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0u32,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
+                r#"
+                pub mod bind_groups {
+                    pub struct BindGroup0(wgpu::BindGroup);
+                    pub struct BindGroupLayout0<'a> {
+                        pub transforms: wgpu::BufferBinding<'a>,
+                    }
+                    const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: gpu::BindingType::Buffer {
+                                    ty: "wgpu::BufferBindingType::Uniform",
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
                             },
-                            count: None,
-                        },
-                    ]
-                };
-                "
+                        ],
+                    };
+                    impl BindGroup0 {
+                        pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+                            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0)
+                        }
+                        pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout0) -> Self {
+                            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0);
+                            let bind_group = device
+                                .create_bind_group(
+                                    &wgpu::BindGroupDescriptor {
+                                        layout: &bind_group_layout,
+                                        entries: &[
+                                            wgpu::BindGroupEntry {
+                                                binding: 0,
+                                                resource: wgpu::BindingResource::Buffer(bindings.transforms),
+                                            },
+                                        ],
+                                        label: None,
+                                    },
+                                );
+                            Self(bind_group)
+                        }
+                        pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+                            render_pass.set_bind_group(0, &self.0, &[]);
+                        }
+                    }
+                    pub struct BindGroups<'a> {
+                        pub bind_group0: &'a BindGroup0,
+                    }
+                    pub fn set_bind_groups<'a>(
+                        pass: &mut wgpu::RenderPass<'a>,
+                        bind_groups: BindGroups<'a>,
+                    ) {
+                        bind_groups.bind_group0.set(pass);
+                    }
+                }
+                "#
             },
             actual
         );
@@ -1031,8 +1163,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
 
-        let mut actual = String::new();
-        write_set_bind_groups(&mut actual, 0, &bind_group_data, false);
+        let actual = pretty_print(set_bind_groups(&bind_group_data, false));
 
         assert_eq!(
             indoc! {
@@ -1066,8 +1197,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = wgsl::get_bind_group_data(&module).unwrap();
 
-        let mut actual = String::new();
-        write_set_bind_groups(&mut actual, 0, &bind_group_data, true);
+        let actual = pretty_print(set_bind_groups(&bind_group_data, true));
 
         // The only change is that the function takes a ComputePass instead.
         assert_eq!(
@@ -1081,6 +1211,53 @@ mod test {
                 bind_groups.bind_group1.set(pass);
             }
             "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_vertex_module_empty() {
+        let source = indoc! {r#"
+            [[stage(vertex)]]
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = pretty_print(vertex_module(&module));
+
+        assert_eq!("pub mod vertex {}\n", actual);
+    }
+
+    #[test]
+    fn write_vertex_module_single_input() {
+        let source = indoc! {r#"
+            struct VertexInput0 {
+                [[location(0)]] position0: vec4<f32>;
+                [[location(1)]] normal0: vec4<f32>;
+                [[location(2)]] tangent0: vec4<f32>;
+            };
+
+            [[stage(vertex)]]
+            fn main(in0: VertexInput0) {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = pretty_print(vertex_module(&module));
+
+        assert_eq!(
+            indoc! {
+                r"
+                pub mod vertex {
+                    impl super::VertexInput0 {
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
+                            0 => Float32x4, 1 => Float32x4, 2 => Float32x4
+                        ];
+                        /// The total size in bytes of all fields without considering padding or alignment.
+                        pub const SIZE_IN_BYTES: u64 = 48;
+                    }
+                }
+                "
             },
             actual
         );
