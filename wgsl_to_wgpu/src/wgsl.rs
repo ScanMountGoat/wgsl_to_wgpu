@@ -1,7 +1,9 @@
-use naga::StructMember;
-use std::collections::BTreeMap;
-
 use crate::CreateModuleError;
+use naga::StructMember;
+use proc_macro2::{Span, TokenStream};
+use quote::quote;
+use std::collections::BTreeMap;
+use syn::{Ident, Index};
 
 pub struct GroupData<'a> {
     pub bindings: Vec<GroupBinding<'a>>,
@@ -27,14 +29,14 @@ pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
     shader_stages
 }
 
-fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> String {
+fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> TokenStream {
     // TODO: Support other widths?
     match (kind, width) {
-        (naga::ScalarKind::Sint, 4) => "i32".to_string(),
-        (naga::ScalarKind::Uint, 4) => "u32".to_string(),
-        (naga::ScalarKind::Float, 4) => "f32".to_string(),
+        (naga::ScalarKind::Sint, 4) => quote!(i32),
+        (naga::ScalarKind::Uint, 4) => quote!(u32),
+        (naga::ScalarKind::Float, 4) => quote!(f32),
         // TODO: Do booleans have a width?
-        (naga::ScalarKind::Bool, _) => "bool".to_string(),
+        (naga::ScalarKind::Bool, _) => quote!(bool),
         _ => todo!(),
     }
 }
@@ -57,21 +59,24 @@ pub fn buffer_binding_type(storage: naga::StorageClass) -> String {
     }
 }
 
-pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
+pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
     match &ty.inner {
         naga::TypeInner::Scalar { kind, width } => rust_scalar_type(*kind, *width),
-        naga::TypeInner::Vector { size, kind, width } => match size {
-            naga::VectorSize::Bi => format!("[{}; 2]", rust_scalar_type(*kind, *width)),
-            naga::VectorSize::Tri => format!("[{}; 3]", rust_scalar_type(*kind, *width)),
-            naga::VectorSize::Quad => format!("[{}; 4]", rust_scalar_type(*kind, *width)),
-        },
+        naga::TypeInner::Vector { size, kind, width } => {
+            let inner_type = rust_scalar_type(*kind, *width);
+            match size {
+                naga::VectorSize::Bi => quote!([#inner_type; 2]),
+                naga::VectorSize::Tri => quote!([#inner_type; 3]),
+                naga::VectorSize::Quad => quote!([#inner_type; 4]),
+            }
+        }
         naga::TypeInner::Matrix {
             columns,
             rows,
             width,
         } => match (rows, columns, width) {
             // TODO: Don't force glam here?
-            (naga::VectorSize::Quad, naga::VectorSize::Quad, 4) => "glam::Mat4".to_string(),
+            (naga::VectorSize::Quad, naga::VectorSize::Quad, 4) => quote!(glam::Mat4),
             _ => todo!(),
         },
         naga::TypeInner::Image { .. } => todo!(),
@@ -91,15 +96,16 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
         } => {
             // TODO: Support arrays other than arrays with a static size?
             let element_type = rust_type(module, &module.types[*base]);
-            let count = array_length(size, module);
-            format!("[{element_type}; {count}]")
+            let count = Index::from(array_length(size, module));
+            quote!([#element_type; #count])
         }
         naga::TypeInner::Struct {
             members: _,
             span: _,
         } => {
             // TODO: Support structs?
-            ty.name.as_ref().unwrap().to_string()
+            let name = Ident::new(ty.name.as_ref().unwrap(), Span::call_site());
+            quote!(#name)
         }
     }
 }

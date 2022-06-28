@@ -13,9 +13,12 @@
 
 extern crate wgpu_types as wgpu;
 
-use indoc::{formatdoc, writedoc};
+use indoc::formatdoc;
+use proc_macro2::{Span, TokenStream};
+use quote::quote;
 use std::collections::BTreeMap;
 use std::fmt::Write;
+use syn::Ident;
 
 mod wgsl;
 
@@ -60,51 +63,57 @@ pub fn create_shader_module(
     let shader_stages = wgsl::shader_stages(&module);
 
     // Write all the structs, including uniforms and entry function inputs.
-    write_structs(&mut output, 0, &module);
+    // TODO: Use quote for everything.
+    let structs_output = structs(&module);
+    let structs_output = quote!(#(#structs_output)*);
 
-    // TODO: Avoid having a dependency on naga here?
+    write!(&mut output, "{}", pretty_print(&structs_output)).unwrap();
+
     write_bind_groups_module(&mut output, &bind_group_data, shader_stages);
     write_vertex_module(&mut output, &module);
 
-    writedoc!(
-        output,
-        r#"
-            pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {{
-                device.create_shader_module(&wgpu::ShaderModuleDescriptor {{
-                    label: None,
-                    source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("{wgsl_include_path}")))
-                }})
-            }}
-        "#
-    )
-    .unwrap();
+    let create_shader_module = quote! {
+        pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+            let source = std::borrow::Cow::Borrowed(include_str!(#wgsl_include_path));
+            device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(source)
+            })
+        }
+    };
+    write!(&mut output, "{}", pretty_print(&create_shader_module)).unwrap();
 
-    // TODO: Find a cleaner way of doing this?
-    let bind_group_layouts = bind_group_data
+    let bind_group_layouts: Vec<_> = bind_group_data
         .iter()
         .map(|(group_no, _)| {
-            format!("&bind_groups::BindGroup{group_no}::get_bind_group_layout(device),")
+            let group = indexed_name_to_ident("BindGroup", *group_no);
+            quote!(bind_groups::#group::get_bind_group_layout(device))
         })
-        .collect::<Vec<String>>()
-        .join("\n            ");
+        .collect();
 
-    writedoc!(
-        output,
-        r#"
-            pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {{
-                device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {{
-                    label: None,
-                    bind_group_layouts: &[
-                        {bind_group_layouts}
-                    ],
-                    push_constant_ranges: &[],
-                }})
-            }}
-        "#
-    )
-    .unwrap();
+    let create_pipeline_layout = quote! {
+        pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[
+                    #(&#bind_group_layouts),*
+                ],
+                push_constant_ranges: &[],
+            })
+        }
+    };
+    write!(&mut output, "{}", pretty_print(&create_pipeline_layout)).unwrap();
 
     Ok(output)
+}
+
+fn pretty_print(tokens: &TokenStream) -> String {
+    let file = syn::parse_file(&tokens.to_string()).unwrap();
+    prettyplease::unparse(&file)
+}
+
+fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
+    Ident::new(&format!("{}{}", name, index), Span::call_site())
 }
 
 // Apply indentation to each level.
@@ -124,7 +133,6 @@ fn write_indented<W: Write, S: Into<String>>(w: &mut W, level: usize, str: S) {
 fn write_vertex_module<W: Write>(f: &mut W, module: &naga::Module) {
     writeln!(f, "pub mod vertex {{").unwrap();
 
-    // TODO: This is redundant with above?
     write_vertex_input_structs(f, module);
 
     writeln!(f, "}}").unwrap();
@@ -243,7 +251,7 @@ fn write_set_bind_groups<W: Write>(
     write_indented(f, indent, "}");
 }
 
-fn write_structs<W: Write>(f: &mut W, indent: usize, module: &naga::Module) {
+fn structs(module: &naga::Module) -> Vec<TokenStream> {
     // Create matching Rust structs for WGSL structs.
     // The goal is to eventually have safe ways to initialize uniform buffers.
 
@@ -253,39 +261,37 @@ fn write_structs<W: Write>(f: &mut W, indent: usize, module: &naga::Module) {
     // This requires the user to keep track of the buffer separately from the BindGroup itself.
 
     // This is a UniqueArena, so types will only be defined once.
-    for (_, t) in module.types.iter() {
-        if let naga::TypeInner::Struct { members, .. } = &t.inner {
-            let name = t.name.as_ref().unwrap();
-            // TODO: Enforce std140 with crevice for uniform buffers to be safe?
-            write_indented(
-                f,
-                indent,
-                formatdoc!(
-                    r"
-                        #[repr(C)]
-                        #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
-                        pub struct {name} {{
-                        "
-                ),
-            );
-
-            write_struct_members(f, indent + 4, members, module);
-            write_indented(f, indent, formatdoc!("}}"));
-        }
-    }
+    module
+        .types
+        .iter()
+        .filter_map(|(_, t)| {
+            if let naga::TypeInner::Struct { members, .. } = &t.inner {
+                let name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
+                // TODO: Enforce std140 with crevice for uniform buffers to be safe?
+                let members = struct_members(members, module);
+                Some(quote! {
+                    #[repr(C)]
+                    #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                    pub struct #name {
+                        #(#members),*
+                    }
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
-fn write_struct_members<W: Write>(
-    f: &mut W,
-    indent: usize,
-    members: &[naga::StructMember],
-    module: &naga::Module,
-) {
-    for member in members {
-        let member_name = member.name.as_ref().unwrap();
-        let member_type = wgsl::rust_type(module, &module.types[member.ty]);
-        write_indented(f, indent, formatdoc!("pub {member_name}: {member_type},"));
-    }
+fn struct_members(members: &[naga::StructMember], module: &naga::Module) -> Vec<TokenStream> {
+    members
+        .iter()
+        .map(|member| {
+            let member_name = Ident::new(member.name.as_ref().unwrap(), Span::call_site());
+            let member_type = wgsl::rust_type(module, &module.types[member.ty]);
+            quote!(pub #member_name: #member_type)
+        })
+        .collect()
 }
 
 fn write_bind_group_layout<W: Write>(
@@ -585,8 +591,9 @@ mod test {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let mut actual = String::new();
-        write_structs(&mut actual, 0, &module);
+        let structs = structs(&module);
+        let file = syn::parse_file(&quote!(#(#structs)*).to_string()).unwrap();
+        let actual = prettyplease::unparse(&file);
 
         assert_eq!(
             indoc! {

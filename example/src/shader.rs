@@ -2,11 +2,6 @@
 // Changes made to this file will not be saved.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct VertexInput {
-    pub position: [f32; 3],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct VertexOutput {
     pub clip_position: [f32; 4],
     pub tex_coords: [f32; 2],
@@ -36,13 +31,13 @@ pub mod bind_groups {
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
-        ]
+        ],
     };
     impl BindGroup0 {
         pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
             device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0)
         }
-    
+
         pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout0) -> Self {
             let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0);
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -61,7 +56,7 @@ pub mod bind_groups {
             });
             Self(bind_group)
         }
-    
+
         pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
             render_pass.set_bind_group(0u32, &self.0, &[]);
         }
@@ -69,27 +64,22 @@ pub mod bind_groups {
     pub struct BindGroups<'a> {
         pub bind_group0: &'a BindGroup0,
     }
-    pub fn set_bind_groups<'a>(
-        pass: &mut wgpu::RenderPass<'a>,
-        bind_groups: BindGroups<'a>,
-    ) {
+    pub fn set_bind_groups<'a>(pass: &mut wgpu::RenderPass<'a>, bind_groups: BindGroups<'a>) {
         bind_groups.bind_group0.set(pass);
     }
 }
-pub mod vertex {
-}
+pub mod vertex {}
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+    let source = std::borrow::Cow::Borrowed(include_str!("shader.wgsl"));
     device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
-        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("shader.wgsl")))
+        source: wgpu::ShaderSource::Wgsl(source),
     })
 }
 pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[
-            &bind_groups::BindGroup0::get_bind_group_layout(device),
-        ],
+        bind_group_layouts: &[&bind_groups::BindGroup0::get_bind_group_layout(device)],
         push_constant_ranges: &[],
     })
 }
