@@ -354,7 +354,7 @@ fn bind_group_layout_entry(
         naga::TypeInner::Struct { .. } => {
             let buffer_binding_type = wgsl::buffer_binding_type(binding.storage_class);
 
-            quote!(gpu::BindingType::Buffer {
+            quote!(wgpu::BindingType::Buffer {
                 ty: #buffer_binding_type,
                 has_dynamic_offset: false,
                 min_binding_size: None,
