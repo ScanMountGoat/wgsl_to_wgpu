@@ -1,5 +1,5 @@
 use naga::StructMember;
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 
 use crate::CreateModuleError;
 
@@ -84,13 +84,20 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> String {
             width: _,
             class: _,
         } => todo!(),
-        naga::TypeInner::Array { base, size, stride: _ } => {
+        naga::TypeInner::Array {
+            base,
+            size,
+            stride: _,
+        } => {
             // TODO: Support arrays other than arrays with a static size?
             let element_type = rust_type(module, &module.types[*base]);
             let count = array_length(size, module);
             format!("[{element_type}; {count}]")
         }
-        naga::TypeInner::Struct { members: _, span: _ } => {
+        naga::TypeInner::Struct {
+            members: _,
+            span: _,
+        } => {
             // TODO: Support structs?
             ty.name.as_ref().unwrap().to_string()
         }
@@ -137,7 +144,9 @@ fn array_length(size: &naga::ArraySize, module: &naga::Module) -> usize {
     }
 }
 
-pub fn get_bind_group_data(module: &naga::Module) -> Result<BTreeMap<u32, GroupData>, CreateModuleError> {
+pub fn get_bind_group_data(
+    module: &naga::Module,
+) -> Result<BTreeMap<u32, GroupData>, CreateModuleError> {
     // Use a BTree to sort type and field names by group index.
     // This isn't strictly necessary but makes the generated code cleaner.
     let mut groups = BTreeMap::new();
@@ -158,8 +167,14 @@ pub fn get_bind_group_data(module: &naga::Module) -> Result<BTreeMap<u32, GroupD
             };
             // Repeated bindings will probably cause a compile error.
             // We'll still check for it here just in case.
-            if group.bindings.iter().any(|g| g.binding_index == binding.binding) {
-                return Err(CreateModuleError::DuplicateBinding { binding: binding.binding });
+            if group
+                .bindings
+                .iter()
+                .any(|g| g.binding_index == binding.binding)
+            {
+                return Err(CreateModuleError::DuplicateBinding {
+                    binding: binding.binding,
+                });
             }
             group.bindings.push(group_binding);
         }
@@ -507,7 +522,10 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert!(matches!(get_bind_group_data(&module), Err(CreateModuleError::NonConsecutiveBindGroups)));
+        assert!(matches!(
+            get_bind_group_data(&module),
+            Err(CreateModuleError::NonConsecutiveBindGroups)
+        ));
     }
 
     #[test]
@@ -522,6 +540,9 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert!(matches!(get_bind_group_data(&module), Err(CreateModuleError::NonConsecutiveBindGroups)));
+        assert!(matches!(
+            get_bind_group_data(&module),
+            Err(CreateModuleError::NonConsecutiveBindGroups)
+        ));
     }
 }
