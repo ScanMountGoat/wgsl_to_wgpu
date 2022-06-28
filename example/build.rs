@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 fn main() {
+    println!("cargo:rerun-if-changed=src/shader.wgsl");
     let wgsl_source = std::fs::read_to_string("src/shader.wgsl").unwrap();
 
     // Generate the Rust bindings and write to a file.
