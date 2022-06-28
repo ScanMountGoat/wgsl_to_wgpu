@@ -10,6 +10,9 @@
 //! This project currently supports a small subset of WGSL types and doesn't enforce certain key properties such as field alignment.
 //! It may be necessary to disable running this function for shaders with unsupported types or features.
 //! The current implementation assumes all shader stages are part of a single WGSL source file.
+
+extern crate wgpu_types as wgpu;
+
 use indoc::{formatdoc, writedoc};
 use std::collections::BTreeMap;
 use std::fmt::Write;

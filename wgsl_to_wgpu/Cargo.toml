@@ -10,7 +10,7 @@ edition = "2021"
 
 [dependencies]
 naga = { version = "0.8.5", features = ["wgsl-in"] }
-wgpu = "0.12.0"
+wgpu-types = "0.12.0"
 indoc = "1.0"
 
 [dev-dependencies]
