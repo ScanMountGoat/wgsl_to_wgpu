@@ -41,18 +41,18 @@ fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> TokenStream {
     }
 }
 
-pub fn buffer_binding_type(storage: naga::StorageClass) -> String {
+pub fn buffer_binding_type(storage: naga::StorageClass) -> TokenStream {
     match storage {
-        naga::StorageClass::Uniform => "wgpu::BufferBindingType::Uniform".to_string(),
+        naga::StorageClass::Uniform => quote!(wgpu::BufferBindingType::Uniform),
         naga::StorageClass::Storage { access } => {
             let _is_read = access.contains(naga::StorageAccess::LOAD);
             let is_write = access.contains(naga::StorageAccess::STORE);
 
             // TODO: Is this correct?
             if is_write {
-                "wgpu::BufferBindingType::Storage { read_only: false }".to_string()
+                quote!(wgpu::BufferBindingType::Storage { read_only: false })
             } else {
-                "wgpu::BufferBindingType::Storage { read_only: true }".to_string()
+                quote!(wgpu::BufferBindingType::Storage { read_only: true })
             }
         }
         _ => todo!(),

@@ -601,8 +601,10 @@ mod test {
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
                                 visibility: wgpu::ShaderStages::COMPUTE,
-                                ty: gpu::BindingType::Buffer {
-                                    ty: "wgpu::BufferBindingType::Storage { read_only: true }",
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage {
+                                        read_only: true,
+                                    },
                                     has_dynamic_offset: false,
                                     min_binding_size: None,
                                 },
@@ -611,8 +613,10 @@ mod test {
                             wgpu::BindGroupLayoutEntry {
                                 binding: 1,
                                 visibility: wgpu::ShaderStages::COMPUTE,
-                                ty: gpu::BindingType::Buffer {
-                                    ty: "wgpu::BufferBindingType::Storage { read_only: true }",
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage {
+                                        read_only: true,
+                                    },
                                     has_dynamic_offset: false,
                                     min_binding_size: None,
                                 },
@@ -621,8 +625,10 @@ mod test {
                             wgpu::BindGroupLayoutEntry {
                                 binding: 2,
                                 visibility: wgpu::ShaderStages::COMPUTE,
-                                ty: gpu::BindingType::Buffer {
-                                    ty: "wgpu::BufferBindingType::Storage { read_only: false }",
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage {
+                                        read_only: false,
+                                    },
                                     has_dynamic_offset: false,
                                     min_binding_size: None,
                                 },
@@ -675,8 +681,8 @@ mod test {
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
                                 visibility: wgpu::ShaderStages::COMPUTE,
-                                ty: gpu::BindingType::Buffer {
-                                    ty: "wgpu::BufferBindingType::Uniform",
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
                                     has_dynamic_offset: false,
                                     min_binding_size: None,
                                 },
@@ -865,8 +871,8 @@ mod test {
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                ty: gpu::BindingType::Buffer {
-                                    ty: "wgpu::BufferBindingType::Uniform",
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
                                     has_dynamic_offset: false,
                                     min_binding_size: None,
                                 },
@@ -952,8 +958,8 @@ mod test {
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
                                 visibility: wgpu::ShaderStages::VERTEX,
-                                ty: gpu::BindingType::Buffer {
-                                    ty: "wgpu::BufferBindingType::Uniform",
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
                                     has_dynamic_offset: false,
                                     min_binding_size: None,
                                 },
@@ -1037,8 +1043,8 @@ mod test {
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
                                 visibility: wgpu::ShaderStages::FRAGMENT,
-                                ty: gpu::BindingType::Buffer {
-                                    ty: "wgpu::BufferBindingType::Uniform",
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
                                     has_dynamic_offset: false,
                                     min_binding_size: None,
                                 },
