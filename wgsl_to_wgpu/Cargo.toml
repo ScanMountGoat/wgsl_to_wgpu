@@ -11,11 +11,11 @@ edition = "2021"
 [dependencies]
 naga = { version = "0.8.5", features = ["wgsl-in"] }
 wgpu-types = "0.12.0"
-indoc = "1.0"
 syn = "1.0"
 quote = "1.0"
 proc-macro2 = "1"
 prettyplease = "0.1.15"
 
 [dev-dependencies]
+indoc = "1.0"
 pretty_assertions = "1.2.1"
