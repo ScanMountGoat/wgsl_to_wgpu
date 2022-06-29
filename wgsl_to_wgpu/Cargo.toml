@@ -16,6 +16,7 @@ syn = "1.0"
 quote = "1.0"
 proc-macro2 = "1"
 prettyplease = "0.1.15"
+thiserror = "1"
 
 [dev-dependencies]
 pretty_assertions = "1.2.1"
