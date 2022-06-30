@@ -17,19 +17,22 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
 use syn::{Ident, Index};
+use thiserror::Error;
 
 mod wgsl;
 
 // TODO: Simplify these templates and indentation?
 // TODO: Structure the code to make it easier to imagine what the output will look like.
 /// Errors while generating Rust source for a WGSl shader module.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Error)]
 pub enum CreateModuleError {
     /// Bind group sets must be consecutive and start from 0.
     /// See `bind_group_layouts` for [wgpu::PipelineLayoutDescriptor].
+    #[error("bind groups are non-consecutive or do not start from 0")]
     NonConsecutiveBindGroups,
 
     /// Each binding resource must be associated with exactly one binding index.
+    #[error("duplicate binding found with index `{binding}`")]
     DuplicateBinding { binding: u32 },
 }
 
