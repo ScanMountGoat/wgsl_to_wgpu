@@ -13,7 +13,7 @@ pub struct GroupBinding<'a> {
     pub name: Option<String>,
     pub binding_index: u32,
     pub binding_type: &'a naga::Type,
-    pub storage_class: naga::StorageClass,
+    pub address_space: naga::AddressSpace,
 }
 
 // TODO: Improve error handling/error reporting.
@@ -41,10 +41,10 @@ fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> TokenStream {
     }
 }
 
-pub fn buffer_binding_type(storage: naga::StorageClass) -> TokenStream {
+pub fn buffer_binding_type(storage: naga::AddressSpace) -> TokenStream {
     match storage {
-        naga::StorageClass::Uniform => quote!(wgpu::BufferBindingType::Uniform),
-        naga::StorageClass::Storage { access } => {
+        naga::AddressSpace::Uniform => quote!(wgpu::BufferBindingType::Uniform),
+        naga::AddressSpace::Storage { access } => {
             let _is_read = access.contains(naga::StorageAccess::LOAD);
             let is_write = access.contains(naga::StorageAccess::STORE);
 
@@ -82,12 +82,12 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
         naga::TypeInner::Image { .. } => todo!(),
         naga::TypeInner::Sampler { .. } => todo!(),
         naga::TypeInner::Atomic { kind: _, width: _ } => todo!(),
-        naga::TypeInner::Pointer { base: _, class: _ } => todo!(),
+        naga::TypeInner::Pointer { base: _, space: _ } => todo!(),
         naga::TypeInner::ValuePointer {
             size: _,
             kind: _,
             width: _,
-            class: _,
+            space: _,
         } => todo!(),
         naga::TypeInner::Array {
             base,
@@ -107,6 +107,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
             let name = Ident::new(ty.name.as_ref().unwrap(), Span::call_site());
             quote!(#name)
         }
+        naga::TypeInner::BindingArray { base: _, size: _ } => todo!(),
     }
 }
 
@@ -169,7 +170,7 @@ pub fn get_bind_group_data(
                 name: global.name.clone(),
                 binding_index: binding.binding,
                 binding_type,
-                storage_class: global.class,
+                address_space: global.space,
             };
             // Repeated bindings will probably cause a compile error.
             // We'll still check for it here just in case.
@@ -265,7 +266,7 @@ mod test {
     #[test]
     fn shader_stages_vertex() {
         let source = indoc! {r#"
-            [[stage(vertex)]]
+            @vertex
             fn main()  {}
         "#};
 
@@ -276,7 +277,7 @@ mod test {
     #[test]
     fn shader_stages_fragment() {
         let source = indoc! {r#"
-            [[stage(fragment)]]
+            @fragment
             fn main()  {}
         "#};
 
@@ -287,10 +288,10 @@ mod test {
     #[test]
     fn shader_stages_vertex_fragment() {
         let source = indoc! {r#"
-            [[stage(vertex)]]
+            @vertex
             fn vs_main()  {}
 
-            [[stage(fragment)]]
+            @fragment
             fn fs_main()  {}
         "#};
 
@@ -301,7 +302,7 @@ mod test {
     #[test]
     fn shader_stages_compute() {
         let source = indoc! {r#"
-            [[stage(compute)]]
+            @compute
             fn main()  {}
         "#};
 
@@ -312,13 +313,13 @@ mod test {
     #[test]
     fn shader_stages_all() {
         let source = indoc! {r#"
-            [[stage(vertex)]]
+            @vertex
             fn vs_main()  {}
 
-            [[stage(fragment)]]
+            @fragment
             fn fs_main()  {}
 
-            [[stage(compute)]]
+            @compute
             fn cs_main()  {}
         "#};
 
@@ -330,23 +331,23 @@ mod test {
     fn vertex_input_structs_two_structs() {
         let source = indoc! {r#"
             struct VertexInput0 {
-                [[location(0)]] in0: vec4<f32>;
-                [[location(1)]] in1: vec4<f32>;
-                [[location(2)]] in2: vec4<f32>;
+                @location(0) in0: vec4<f32>,
+                @location(1) in1: vec4<f32>,
+                @location(2) in2: vec4<f32>,
             };
             
             struct VertexInput1 {
-                [[location(3)]] in3: vec4<f32>;
-                [[location(4)]] in4: vec4<f32>;
-                [[location(5)]] in5: vec4<f32>;
-                [[location(6)]] in6: vec4<u32>;
+                @location(3) in3: vec4<f32>,
+                @location(4) in4: vec4<f32>,
+                @location(5) in5: vec4<f32>,
+                @location(6) in6: vec4<u32>,
             };
 
-            [[stage(vertex)]]
+            @vertex
             fn main(
                 in0: VertexInput0,
                 in1: VertexInput1
-            ) -> [[builtin(position)]] vec4<f32> {
+            ) -> @builtin(position) vec4<f32> {
                 return vec4<f32>(0.0);
             }
         "#};
@@ -370,11 +371,11 @@ mod test {
     #[test]
     fn bind_group_data_consecutive_bind_groups() {
         let source = indoc! {r#"
-            [[group(0), binding(0)]] var<uniform> a: vec4<f32>;
-            [[group(1), binding(0)]] var<uniform> b: vec4<f32>;
-            [[group(2), binding(0)]] var<uniform> c: vec4<f32>;
+            @group(0) @binding(0) var<uniform> a: vec4<f32>;
+            @group(1) @binding(0) var<uniform> b: vec4<f32>;
+            @group(2) @binding(0) var<uniform> c: vec4<f32>;
 
-            [[stage(fragment)]]
+            @fragment
             fn main() {}
         "#};
 
@@ -385,9 +386,9 @@ mod test {
     #[test]
     fn bind_group_data_first_group_not_zero() {
         let source = indoc! {r#"
-            [[group(1), binding(0)]] var<uniform> a: vec4<f32>;
+            @group(1) @binding(0) var<uniform> a: vec4<f32>;
 
-            [[stage(fragment)]]
+            @fragment
             fn main() {}
         "#};
 
@@ -401,11 +402,11 @@ mod test {
     #[test]
     fn bind_group_data_non_consecutive_bind_groups() {
         let source = indoc! {r#"
-            [[group(0), binding(0)]] var<uniform> a: vec4<f32>;
-            [[group(1), binding(0)]] var<uniform> b: vec4<f32>;
-            [[group(3), binding(0)]] var<uniform> c: vec4<f32>;
+            @group(0) @binding(0) var<uniform> a: vec4<f32>;
+            @group(1) @binding(0) var<uniform> b: vec4<f32>;
+            @group(3) @binding(0) var<uniform> c: vec4<f32>;
 
-            [[stage(fragment)]]
+            @fragment
             fn main() {}
         "#};
 

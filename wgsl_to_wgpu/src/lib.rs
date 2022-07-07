@@ -69,7 +69,7 @@ pub fn create_shader_module(
     let create_shader_module = quote! {
         pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
             let source = std::borrow::Cow::Borrowed(include_str!(#wgsl_include_path));
-            device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(source)
             })
@@ -355,7 +355,7 @@ fn bind_group_layout_entry(
     // TODO: Support more types.
     let binding_type = match binding.binding_type.inner {
         naga::TypeInner::Struct { .. } => {
-            let buffer_binding_type = wgsl::buffer_binding_type(binding.storage_class);
+            let buffer_binding_type = wgsl::buffer_binding_type(binding.address_space);
 
             quote!(wgpu::BindingType::Buffer {
                 ty: #buffer_binding_type,
@@ -495,28 +495,28 @@ mod test {
     fn write_all_structs() {
         let source = indoc! {r#"
             struct VectorsF32 {
-                a: vec2<f32>;
-                b: vec3<f32>;
-                c: vec4<f32>;
+                a: vec2<f32>,
+                b: vec3<f32>,
+                c: vec4<f32>,
             };
 
             struct VectorsU32 {
-                a: vec2<u32>;
-                b: vec3<u32>;
-                c: vec4<u32>;
+                a: vec2<u32>,
+                b: vec3<u32>,
+                c: vec4<u32>,
             };
 
             struct MatricesF32 {
-                a: mat4x4<f32>;
+                a: mat4x4<f32>
             };
             
             struct StaticArrays {
-                a: array<u32, 5>;
-                b: array<f32, 3>;
-                c: array<mat4x4<f32>, 512>;
+                a: array<u32, 5>,
+                b: array<f32, 3>,
+                c: array<mat4x4<f32>, 512>,
             };
 
-            [[stage(fragment)]]
+            @fragment
             fn main() {}
         "#};
 
@@ -570,13 +570,13 @@ mod test {
             struct VertexWeights {};
             struct Transforms {};
 
-            [[group(0), binding(0)]] var<storage, read> src : Vertices;
-            [[group(0), binding(1)]] var<storage, read> vertex_weights : VertexWeights;
-            [[group(0), binding(2)]] var<storage, read_write> dst : Vertices;
+            @group(0) @binding(0)var<storage, read> src: Vertices;
+            @group(0) @binding(1) var<storage, read> vertex_weights: VertexWeights;
+            @group(0) @binding(2) var<storage, read_write> dst: Vertices;
 
-            [[group(1), binding(0)]] var<uniform> transforms: Transforms;
+            @group(1) @binding(0) var<uniform> transforms: Transforms;
 
-            [[stage(compute)]]
+            @compute
             fn main() {}
         "#};
 
@@ -742,21 +742,21 @@ mod test {
         let source = indoc! {r#"
             struct Transforms {};
 
-            [[group(0), binding(0)]]
+            @group(0) @binding(0)
             var color_texture: texture_2d<f32>;
-            [[group(0), binding(1)]]
+            @group(0) @binding(1)
             var color_sampler: sampler;
-            [[group(0), binding(2)]]
+            @group(0) @binding(2)
             var depth_texture: texture_depth_2d;
-            [[group(0), binding(3)]]
+            @group(0) @binding(3)
             var comparison_sampler: sampler_comparison;
 
-            [[group(1), binding(0)]] var<uniform> transforms: Transforms;
+            @group(1) @binding(0) var<uniform> transforms: Transforms;
 
-            [[stage(vertex)]]
+            @vertex
             fn vs_main() {}
 
-            [[stage(fragment)]]
+            @fragment
             fn fs_main() {}
         "#};
 
@@ -933,9 +933,9 @@ mod test {
         let source = indoc! {r#"
             struct Transforms {};
 
-            [[group(0), binding(0)]] var<uniform> transforms: Transforms;
+            @group(0) @binding(0) var<uniform> transforms: Transforms;
 
-            [[stage(vertex)]]
+            @vertex
             fn vs_main() {}
         "#};
 
@@ -1018,9 +1018,9 @@ mod test {
         let source = indoc! {r#"
             struct Transforms {};
 
-            [[group(0), binding(0)]] var<uniform> transforms: Transforms;
+            @group(0) @binding(0) var<uniform> transforms: Transforms;
 
-            [[stage(fragment)]]
+            @fragment
             fn fs_main() {}
         "#};
 
@@ -1100,15 +1100,15 @@ mod test {
     fn create_shader_module_consecutive_bind_groups() {
         let source = indoc! {r#"
             struct A {
-                f: vec4<f32>;
+                f: vec4<f32>
             };
-            [[group(0), binding(0)]] var<uniform> a: A;
-            [[group(1), binding(0)]] var<uniform> b: A;
+            @group(0) @binding(0) var<uniform> a: A;
+            @group(1) @binding(0) var<uniform> b: A;
 
-            [[stage(vertex)]]
+            @vertex
             fn vs_main() {}
 
-            [[stage(fragment)]]
+            @fragment
             fn fs_main() {}
         "#};
 
@@ -1118,11 +1118,11 @@ mod test {
     #[test]
     fn create_shader_module_non_consecutive_bind_groups() {
         let source = indoc! {r#"
-            [[group(0), binding(0)]] var<uniform> a: vec4<f32>;
-            [[group(1), binding(0)]] var<uniform> b: vec4<f32>;
-            [[group(3), binding(0)]] var<uniform> c: vec4<f32>;
+            @group(0) @binding(0) var<uniform> a: vec4<f32>;
+            @group(1) @binding(0) var<uniform> b: vec4<f32>;
+            @group(3) @binding(0) var<uniform> c: vec4<f32>;
 
-            [[stage(fragment)]]
+            @fragment
             fn main() {}
         "#};
 
@@ -1137,12 +1137,12 @@ mod test {
     fn create_shader_module_repeated_bindings() {
         let source = indoc! {r#"
             struct A {
-                f: vec4<f32>;
+                f: vec4<f32>
             };
-            [[group(0), binding(2)]] var<uniform> a: A;
-            [[group(0), binding(2)]] var<uniform> b: A;
+            @group(0) @binding(2) var<uniform> a: A;
+            @group(0) @binding(2) var<uniform> b: A;
 
-            [[stage(fragment)]]
+            @fragment
             fn main() {}
         "#};
 
@@ -1158,14 +1158,13 @@ mod test {
         let source = indoc! {r#"
             struct Transforms {};
 
-            [[group(0), binding(0)]]
-            var color_texture: texture_2d<f32>;
-            [[group(1), binding(0)]] var<uniform> transforms: Transforms;
+            @group(0) @binding(0) var color_texture: texture_2d<f32>;
+            @group(1) @binding(0) var<uniform> transforms: Transforms;
 
-            [[stage(vertex)]]
+            @vertex
             fn vs_main() {}
 
-            [[stage(fragment)]]
+            @fragment
             fn fs_main() {}
         "#};
 
@@ -1195,11 +1194,11 @@ mod test {
         let source = indoc! {r#"
             struct Transforms {};
 
-            [[group(0), binding(0)]]
+            @group(0) @binding(0)
             var color_texture: texture_2d<f32>;
-            [[group(1), binding(0)]] var<uniform> transforms: Transforms;
+            @group(1) @binding(0) var<uniform> transforms: Transforms;
 
-            [[stage(compute)]]
+            @compute
             fn main() {}
         "#};
 
@@ -1228,7 +1227,7 @@ mod test {
     #[test]
     fn write_vertex_module_empty() {
         let source = indoc! {r#"
-            [[stage(vertex)]]
+            @vertex
             fn main() {}
         "#};
 
@@ -1242,12 +1241,12 @@ mod test {
     fn write_vertex_module_single_input() {
         let source = indoc! {r#"
             struct VertexInput0 {
-                [[location(0)]] position0: vec4<f32>;
-                [[location(1)]] normal0: vec4<f32>;
-                [[location(2)]] tangent0: vec4<f32>;
+                @location(0) position0: vec4<f32>,
+                @location(1) normal0: vec4<f32>,
+                @location(2) tangent0: vec4<f32>,
             };
 
-            [[stage(vertex)]]
+            @vertex
             fn main(in0: VertexInput0) {}
         "#};
 
