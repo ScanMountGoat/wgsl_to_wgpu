@@ -300,6 +300,7 @@ fn bind_group_layout(group_no: u32, group: &wgsl::GroupData) -> TokenStream {
                 naga::TypeInner::Struct { .. } => quote!(wgpu::BufferBinding<'a>),
                 naga::TypeInner::Image { .. } => quote!(&'a wgpu::TextureView),
                 naga::TypeInner::Sampler { .. } => quote!(&'a wgpu::Sampler),
+                naga::TypeInner::Array { .. } => quote!(wgpu::BufferBinding<'a>),
                 _ => panic!("Unsupported type for binding fields."),
             };
             quote!(pub #field_name: #field_type)
@@ -355,6 +356,15 @@ fn bind_group_layout_entry(
     // TODO: Support more types.
     let binding_type = match binding.binding_type.inner {
         naga::TypeInner::Struct { .. } => {
+            let buffer_binding_type = wgsl::buffer_binding_type(binding.address_space);
+
+            quote!(wgpu::BindingType::Buffer {
+                ty: #buffer_binding_type,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            })
+        }
+        naga::TypeInner::Array { .. } => {
             let buffer_binding_type = wgsl::buffer_binding_type(binding.address_space);
 
             quote!(wgpu::BindingType::Buffer {
@@ -423,6 +433,9 @@ fn bind_group(
             let binding_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
             let resource_type = match binding.binding_type.inner {
                 naga::TypeInner::Struct { .. } => {
+                    quote!(wgpu::BindingResource::Buffer(bindings.#binding_name))
+                }
+                naga::TypeInner::Array { .. } => {
                     quote!(wgpu::BindingResource::Buffer(bindings.#binding_name))
                 }
                 naga::TypeInner::Image { .. } => {
@@ -570,7 +583,7 @@ mod test {
             struct VertexWeights {};
             struct Transforms {};
 
-            @group(0) @binding(0)var<storage, read> src: Vertices;
+            @group(0) @binding(0) var<storage, read> src: array<vec4<f32>>;
             @group(0) @binding(1) var<storage, read> vertex_weights: VertexWeights;
             @group(0) @binding(2) var<storage, read_write> dst: Vertices;
 
