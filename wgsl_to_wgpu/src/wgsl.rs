@@ -32,6 +32,10 @@ pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
 fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> TokenStream {
     // TODO: Support other widths?
     match (kind, width) {
+        (naga::ScalarKind::Sint, 1) => quote!(i8),
+        (naga::ScalarKind::Uint, 1) => quote!(u8),
+        (naga::ScalarKind::Sint, 2) => quote!(i16),
+        (naga::ScalarKind::Uint, 2) => quote!(u16),
         (naga::ScalarKind::Sint, 4) => quote!(i32),
         (naga::ScalarKind::Uint, 4) => quote!(u32),
         (naga::ScalarKind::Float, 4) => quote!(f32),
@@ -114,20 +118,36 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
 pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
     // Not all wgsl types work as vertex attributes in wgpu.
     match &ty.inner {
-        naga::TypeInner::Scalar { kind: _, width: _ } => todo!(),
+        naga::TypeInner::Scalar { kind, width } => match (kind, width) {
+            (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32,
+            (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32,
+            (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32,
+            _ => todo!(),
+        },
         naga::TypeInner::Vector { size, kind, width } => match size {
             naga::VectorSize::Bi => match (kind, width) {
+                (naga::ScalarKind::Sint, 1) => wgpu::VertexFormat::Sint8x2,
+                (naga::ScalarKind::Uint, 1) => wgpu::VertexFormat::Uint8x2,
+                (naga::ScalarKind::Sint, 2) => wgpu::VertexFormat::Sint16x2,
+                (naga::ScalarKind::Uint, 2) => wgpu::VertexFormat::Uint16x2,
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x2,
+                (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x2,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x2,
                 _ => todo!(),
             },
             naga::VectorSize::Tri => match (kind, width) {
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x3,
+                (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x3,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x3,
                 _ => todo!(),
             },
             naga::VectorSize::Quad => match (kind, width) {
+                (naga::ScalarKind::Sint, 1) => wgpu::VertexFormat::Sint8x2,
+                (naga::ScalarKind::Uint, 1) => wgpu::VertexFormat::Uint8x2,
+                (naga::ScalarKind::Sint, 2) => wgpu::VertexFormat::Sint16x2,
+                (naga::ScalarKind::Uint, 2) => wgpu::VertexFormat::Uint16x2,
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x4,
+                (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x4,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x4,
                 _ => todo!(),
             },
