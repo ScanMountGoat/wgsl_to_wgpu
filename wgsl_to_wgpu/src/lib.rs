@@ -559,14 +559,14 @@ mod test {
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct MatricesF32 {
-                    pub a: glam::Mat4,
+                    pub a: [[f32; 4]; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct StaticArrays {
                     pub a: [u32; 5],
                     pub b: [f32; 3],
-                    pub c: [glam::Mat4; 512],
+                    pub c: [[[f32; 4]; 4]; 512],
                 }
                 "
             },

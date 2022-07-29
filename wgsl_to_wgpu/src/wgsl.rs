@@ -76,7 +76,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
             width,
         } => match (rows, columns, width) {
             // TODO: Don't force glam here?
-            (naga::VectorSize::Quad, naga::VectorSize::Quad, 4) => quote!(glam::Mat4),
+            (naga::VectorSize::Quad, naga::VectorSize::Quad, 4) => quote!([[f32; 4]; 4]),
             _ => todo!(),
         },
         naga::TypeInner::Image { .. } => todo!(),
