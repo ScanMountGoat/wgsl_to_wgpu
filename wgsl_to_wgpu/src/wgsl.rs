@@ -114,7 +114,10 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
 pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
     // Not all wgsl types work as vertex attributes in wgpu.
     match &ty.inner {
-        naga::TypeInner::Scalar { kind: _, width: _ } => todo!(),
+        naga::TypeInner::Scalar { kind, width } => match (kind, width) {
+            (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32,
+            _ => todo!()
+        },
         naga::TypeInner::Vector { size, kind, width } => match size {
             naga::VectorSize::Bi => match (kind, width) {
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x2,
