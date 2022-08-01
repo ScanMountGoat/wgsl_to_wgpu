@@ -559,14 +559,14 @@ mod test {
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct MatricesF32 {
-                    pub a: glam::Mat4,
+                    pub a: [[f32; 4]; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct StaticArrays {
                     pub a: [u32; 5],
                     pub b: [f32; 3],
-                    pub c: [glam::Mat4; 512],
+                    pub c: [[[f32; 4]; 4]; 512],
                 }
                 "
             },
@@ -1251,12 +1251,12 @@ mod test {
     }
 
     #[test]
-    fn write_vertex_module_single_input() {
+    fn write_vertex_module_single_input_float() {
         let source = indoc! {r#"
             struct VertexInput0 {
-                @location(0) position0: vec4<f32>,
-                @location(1) normal0: vec4<f32>,
-                @location(2) tangent0: vec4<f32>,
+                @location(0) a: vec2<f32>,
+                @location(1) b: vec3<f32>,
+                @location(2) c: vec4<f32>,
             };
 
             @vertex
@@ -1272,10 +1272,76 @@ mod test {
                 pub mod vertex {
                     impl super::VertexInput0 {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
-                            0 => Float32x4, 1 => Float32x4, 2 => Float32x4
+                            0 => Float32x2, 1 => Float32x3, 2 => Float32x4
                         ];
                         /// The total size in bytes of all fields without considering padding or alignment.
-                        pub const SIZE_IN_BYTES: u64 = 48;
+                        pub const SIZE_IN_BYTES: u64 = 36;
+                    }
+                }
+                "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_vertex_module_single_input_sint() {
+        let source = indoc! {r#"
+            struct VertexInput0 {
+                @location(0) a: i32,
+            };
+
+            @vertex
+            fn main(in0: VertexInput0) {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = pretty_print(vertex_module(&module));
+
+        assert_eq!(
+            indoc! {
+                r"
+                pub mod vertex {
+                    impl super::VertexInput0 {
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![
+                            0 => Sint32
+                        ];
+                        /// The total size in bytes of all fields without considering padding or alignment.
+                        pub const SIZE_IN_BYTES: u64 = 4;
+                    }
+                }
+                "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_vertex_module_single_input_uint() {
+        let source = indoc! {r#"
+            struct VertexInput0 {
+                @location(0) a: vec2<u32>,
+                @location(1) b: vec3<u32>,
+                @location(2) c: vec4<u32>,
+            };
+
+            @vertex
+            fn main(in0: VertexInput0) {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = pretty_print(vertex_module(&module));
+
+        assert_eq!(
+            indoc! {
+                r"
+                pub mod vertex {
+                    impl super::VertexInput0 {
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
+                            0 => Uint32x2, 1 => Uint32x3, 2 => Uint32x4
+                        ];
+                        /// The total size in bytes of all fields without considering padding or alignment.
+                        pub const SIZE_IN_BYTES: u64 = 36;
                     }
                 }
                 "
