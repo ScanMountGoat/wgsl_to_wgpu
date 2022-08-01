@@ -507,10 +507,20 @@ mod test {
     #[test]
     fn write_all_structs() {
         let source = indoc! {r#"
-            struct VectorsF32 {
-                a: vec2<f32>,
-                b: vec3<f32>,
-                c: vec4<f32>,
+            struct Scalars {
+                a: u32,
+                b: i32,
+                c: f32,
+            };
+
+            struct VectorsU8 {
+                a: vec2<u8>,
+                b: vec4<u8>,
+            };
+
+            struct VectorsU16 {
+                a: vec2<u16>,
+                b: vec4<u16>,
             };
 
             struct VectorsU32 {
@@ -519,10 +529,32 @@ mod test {
                 c: vec4<u32>,
             };
 
+            struct VectorsI8 {
+                a: vec2<i8>,
+                b: vec4<i8>,
+            };
+
+            struct VectorsI16 {
+                a: vec2<i16>,
+                b: vec4<i16>,
+            };
+
+            struct VectorsI32 {
+                a: vec2<i32>,
+                b: vec3<i32>,
+                c: vec4<i32>,
+            };
+
+            struct VectorsF32 {
+                a: vec2<f32>,
+                b: vec3<f32>,
+                c: vec4<f32>,
+            };
+
             struct MatricesF32 {
                 a: mat4x4<f32>
             };
-            
+
             struct StaticArrays {
                 a: array<u32, 5>,
                 b: array<f32, 3>,
@@ -544,10 +576,22 @@ mod test {
                 r"
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
-                pub struct VectorsF32 {
-                    pub a: [f32; 2],
-                    pub b: [f32; 3],
-                    pub c: [f32; 4],
+                pub struct Scalars {
+                    pub a: u32,
+                    pub b: i32,
+                    pub c: f32,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct VectorsU8 {
+                    pub a: [u8; 2],
+                    pub b: [u8; 4],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct VectorsU16 {
+                    pub a: [u16; 2],
+                    pub b: [u16; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -555,6 +599,32 @@ mod test {
                     pub a: [u32; 2],
                     pub b: [u32; 3],
                     pub c: [u32; 4],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct VectorsI8 {
+                    pub a: [i8; 2],
+                    pub b: [i8; 4],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct VectorsI16 {
+                    pub a: [i16; 2],
+                    pub b: [i16; 4],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct VectorsI32 {
+                    pub a: [i32; 2],
+                    pub b: [i32; 3],
+                    pub c: [i32; 4],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct VectorsF32 {
+                    pub a: [f32; 2],
+                    pub b: [f32; 3],
+                    pub c: [f32; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
