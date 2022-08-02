@@ -228,47 +228,45 @@ pub struct VertexInput {
 // TODO: Handle errors.
 // Collect the necessary data to generate an equivalent Rust struct.
 pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
-    let mut structs = Vec::new();
-
-    // TODO: Just map/collect?
-    if let Some(vertex_entry) = module
+    // TODO: Handle multiple entries?
+    module
         .entry_points
         .iter()
         .find(|e| e.stage == naga::ShaderStage::Vertex)
-    {
-        for argument in &vertex_entry.function.arguments {
-            // For entry points, arguments must have a binding unless they are a structure.
-            if let Some(_binding) = &argument.binding {
-                // TODO: How to create a structure for regular bindings?
-            } else {
-                let arg_type = &module.types[argument.ty];
-                match &arg_type.inner {
-                    naga::TypeInner::Struct { members, span: _ } => {
-                        let input = VertexInput {
-                            name: arg_type.name.as_ref().unwrap().clone(),
-                            fields: members
-                                .iter()
-                                .map(|member| {
-                                    let location = match member.binding.as_ref().unwrap() {
-                                        naga::Binding::BuiltIn(_) => todo!(), // TODO: is it possible to have builtins for inputs?
-                                        naga::Binding::Location { location, .. } => *location,
-                                    };
+        .map(|vertex_entry| {
+            vertex_entry
+                .function
+                .arguments
+                .iter()
+                .filter(|a| a.binding.is_none())
+                .filter_map(|argument| {
+                    let arg_type = &module.types[argument.ty];
+                    match &arg_type.inner {
+                        naga::TypeInner::Struct { members, span: _ } => {
+                            let input = VertexInput {
+                                name: arg_type.name.as_ref().unwrap().clone(),
+                                fields: members
+                                    .iter()
+                                    .map(|member| {
+                                        let location = match member.binding.as_ref().unwrap() {
+                                            naga::Binding::BuiltIn(_) => todo!(), // TODO: is it possible to have builtins for inputs?
+                                            naga::Binding::Location { location, .. } => *location,
+                                        };
 
-                                    (location, member.clone())
-                                })
-                                .collect(),
-                        };
+                                        (location, member.clone())
+                                    })
+                                    .collect(),
+                            };
 
-                        structs.push(input);
+                            Some(input)
+                        }
+                        // An argument has to have a binding unless it is a structure.
+                        _ => None,
                     }
-                    // This case should be prevented by the checks above.
-                    _ => unreachable!(),
-                }
-            }
-        }
-    }
-
-    structs
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -370,7 +368,9 @@ mod test {
             @vertex
             fn main(
                 in0: VertexInput0,
-                in1: VertexInput1
+                in1: VertexInput1,
+                @builtin(front_facing) in2: bool,
+                @location(7) in3: vec4<f32>,
             ) -> @builtin(position) vec4<f32> {
                 return vec4<f32>(0.0);
             }
@@ -379,6 +379,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
         let vertex_inputs = get_vertex_input_structs(&module);
+        // Only structures should be included.
         assert_eq!(2, vertex_inputs.len());
 
         assert_eq!("VertexInput0", vertex_inputs[0].name);
