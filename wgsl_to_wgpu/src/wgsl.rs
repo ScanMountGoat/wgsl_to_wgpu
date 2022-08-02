@@ -39,6 +39,7 @@ fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> TokenStream {
         (naga::ScalarKind::Sint, 4) => quote!(i32),
         (naga::ScalarKind::Uint, 4) => quote!(u32),
         (naga::ScalarKind::Float, 4) => quote!(f32),
+        (naga::ScalarKind::Float, 8) => quote!(f64),
         // TODO: Do booleans have a width?
         (naga::ScalarKind::Bool, _) => quote!(bool),
         _ => todo!(),
@@ -133,12 +134,14 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x2,
                 (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x2,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x2,
+                (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x2,
                 _ => todo!(),
             },
             naga::VectorSize::Tri => match (kind, width) {
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x3,
                 (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x3,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x3,
+                (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x3,
                 _ => todo!(),
             },
             naga::VectorSize::Quad => match (kind, width) {
@@ -149,6 +152,7 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x4,
                 (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x4,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x4,
+                (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x4,
                 _ => todo!(),
             },
         },
