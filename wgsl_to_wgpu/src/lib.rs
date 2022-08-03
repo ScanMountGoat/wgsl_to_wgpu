@@ -610,6 +610,11 @@ mod test {
                 c: array<mat4x4<f32>, 512>,
             };
 
+            struct Nested {
+                a: MatricesF32,
+                b: MatricesF64
+            }
+
             @fragment
             fn main() {}
         "#};
@@ -714,6 +719,12 @@ mod test {
                     pub a: [u32; 5],
                     pub b: [f32; 3],
                     pub c: [[[f32; 4]; 4]; 512],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct Nested {
+                    pub a: MatricesF32,
+                    pub b: MatricesF64,
                 }
                 "
             },
