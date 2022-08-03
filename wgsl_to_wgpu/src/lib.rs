@@ -23,19 +23,41 @@ use thiserror::Error;
 
 mod wgsl;
 
-// TODO: Simplify these templates and indentation?
-// TODO: Structure the code to make it easier to imagine what the output will look like.
 /// Errors while generating Rust source for a WGSl shader module.
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum CreateModuleError {
     /// Bind group sets must be consecutive and start from 0.
-    /// See `bind_group_layouts` for [wgpu::PipelineLayoutDescriptor].
+    /// See `bind_group_layouts` for
+    /// [PipelineLayoutDescriptor](https://docs.rs/wgpu/latest/wgpu/struct.PipelineLayoutDescriptor.html#).
     #[error("bind groups are non-consecutive or do not start from 0")]
     NonConsecutiveBindGroups,
 
     /// Each binding resource must be associated with exactly one binding index.
     #[error("duplicate binding found with index `{binding}`")]
     DuplicateBinding { binding: u32 },
+}
+
+/// Options for configuring the generated bindings to work with additional dependencies.
+/// Use [WriteOptions::default] for only requiring WGPU itself.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct WriteOptions {
+    /// Derive [encase::ShaderType](https://docs.rs/encase/latest/encase/trait.ShaderType.html#)
+    /// for user defined WGSL structs when `true`.
+    pub derive_encase: bool,
+
+    /// Derive [bytemuck::Pod](https://docs.rs/bytemuck/latest/bytemuck/trait.Pod.html#)
+    /// and [bytemuck::Zeroable](https://docs.rs/bytemuck/latest/bytemuck/trait.Zeroable.html#)
+    /// for user defined WGSL structs when `true`.
+    pub derive_bytemuck: bool,
+}
+
+impl Default for WriteOptions {
+    fn default() -> Self {
+        Self {
+            derive_encase: false,
+            derive_bytemuck: false,
+        }
+    }
 }
 
 /// Parses the WGSL shader from `wgsl_source` and returns the generated Rust module's source code.
@@ -48,8 +70,12 @@ pub enum CreateModuleError {
 ```rust no_run
 // build.rs
 fn main() {
+    // Read the shader source file.
     let wgsl_source = std::fs::read_to_string("src/shader.wgsl").unwrap();
-    let text = wgsl_to_wgpu::create_shader_module(&wgsl_source, "shader.wgsl").unwrap();
+    // Configure the output based on the dependencies for the project.
+    let options = wgsl_to_wgpu::WriteOptions::default();
+    // Generate the bindings.
+    let text = wgsl_to_wgpu::create_shader_module(&wgsl_source, "shader.wgsl", options).unwrap();
     std::fs::write("src/shader.rs", text.as_bytes()).unwrap();
 }
 ```
@@ -57,6 +83,7 @@ fn main() {
 pub fn create_shader_module(
     wgsl_source: &str,
     wgsl_include_path: &str,
+    options: WriteOptions,
 ) -> Result<String, CreateModuleError> {
     let module = naga::front::wgsl::parse_str(wgsl_source).unwrap();
 
@@ -64,7 +91,7 @@ pub fn create_shader_module(
     let shader_stages = wgsl::shader_stages(&module);
 
     // Write all the structs, including uniforms and entry function inputs.
-    let structs = structs(&module);
+    let structs = structs(&module, options);
     let bind_groups_module = bind_groups_module(&bind_group_data, shader_stages);
     let vertex_module = vertex_module(&module);
 
@@ -236,27 +263,32 @@ fn set_bind_groups(
     }
 }
 
-fn structs(module: &naga::Module) -> Vec<TokenStream> {
+fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream> {
     // Create matching Rust structs for WGSL structs.
-    // The goal is to eventually have safe ways to initialize uniform buffers.
-
-    // TODO: How to provide a convenient way to work with these types.
-    // Users will want to either a) create a new buffer each type or b) reuse an existing buffer.
-    // It might not make sense from a performance perspective to constantly create new resources.
-    // This requires the user to keep track of the buffer separately from the BindGroup itself.
-
-    // This is a UniqueArena, so types will only be defined once.
+    // This is a UniqueArena, so each struct will only be generated once.
     module
         .types
         .iter()
         .filter_map(|(_, t)| {
             if let naga::TypeInner::Struct { members, .. } = &t.inner {
                 let name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
-                // TODO: Enforce std140 with crevice for uniform buffers to be safe?
                 let members = struct_members(members, module);
+                let mut derives = vec![
+                    quote!(Debug),
+                    quote!(Copy),
+                    quote!(Clone),
+                    quote!(PartialEq),
+                ];
+                if options.derive_bytemuck {
+                    derives.push(quote!(bytemuck::Pod));
+                    derives.push(quote!(bytemuck::Zeroable));
+                }
+                if options.derive_encase {
+                    derives.push(quote!(encase::ShaderType));
+                }
                 Some(quote! {
                     #[repr(C)]
-                    #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                    #[derive(#(#derives),*)]
                     pub struct #name {
                         #(#members),*
                     }
@@ -287,8 +319,6 @@ fn bind_group_layout(group_no: u32, group: &wgsl::GroupData) -> TokenStream {
             let field_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
             // TODO: Support more types.
             let field_type = match binding.binding_type.inner {
-                // TODO: Is it possible to make structs strongly typed and handle buffer creation automatically?
-                // This could be its own module and associated tests.
                 naga::TypeInner::Struct { .. } => quote!(wgpu::BufferBinding<'a>),
                 naga::TypeInner::Image { .. } => quote!(&'a wgpu::TextureView),
                 naga::TypeInner::Sampler { .. } => quote!(&'a wgpu::Sampler),
@@ -565,7 +595,7 @@ mod test {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let structs = structs(&module);
+        let structs = structs(&module, WriteOptions::default());
         let file = syn::parse_file(&quote!(#(#structs)*).to_string()).unwrap();
         let actual = prettyplease::unparse(&file);
 
@@ -573,75 +603,124 @@ mod test {
             indoc! {
                 r"
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct Scalars {
                     pub a: u32,
                     pub b: i32,
                     pub c: f32,
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsU8 {
                     pub a: [u8; 2],
                     pub b: [u8; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsU16 {
                     pub a: [u16; 2],
                     pub b: [u16; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsU32 {
                     pub a: [u32; 2],
                     pub b: [u32; 3],
                     pub c: [u32; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsI8 {
                     pub a: [i8; 2],
                     pub b: [i8; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsI16 {
                     pub a: [i16; 2],
                     pub b: [i16; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsI32 {
                     pub a: [i32; 2],
                     pub b: [i32; 3],
                     pub c: [i32; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsF32 {
                     pub a: [f32; 2],
                     pub b: [f32; 3],
                     pub c: [f32; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsF64 {
                     pub a: [f64; 2],
                     pub b: [f64; 3],
                     pub c: [f64; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct MatricesF32 {
                     pub a: [[f32; 4]; 4],
                 }
                 #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct StaticArrays {
                     pub a: [u32; 5],
                     pub b: [f32; 3],
                     pub c: [[[f32; 4]; 4]; 512],
+                }
+                "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_all_structs_encase_bytemuck() {
+        let source = indoc! {r#"
+            struct Input0 {
+                a: u32,
+                b: i32,
+                c: f32,
+            };
+
+            @fragment
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let structs = structs(
+            &module,
+            WriteOptions {
+                derive_encase: true,
+                derive_bytemuck: true,
+            },
+        );
+        let file = syn::parse_file(&quote!(#(#structs)*).to_string()).unwrap();
+        let actual = prettyplease::unparse(&file);
+
+        assert_eq!(
+            indoc! {
+                r"
+                #[repr(C)]
+                #[derive(
+                    Debug,
+                    Copy,
+                    Clone,
+                    PartialEq,
+                    bytemuck::Pod,
+                    bytemuck::Zeroable,
+                    encase::ShaderType
+                )]
+                pub struct Input0 {
+                    pub a: u32,
+                    pub b: i32,
+                    pub c: f32,
                 }
                 "
             },
@@ -1200,7 +1279,7 @@ mod test {
             fn fs_main() {}
         "#};
 
-        create_shader_module(source, "shader.wgsl").unwrap();
+        create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
     }
 
     #[test]
@@ -1214,7 +1293,7 @@ mod test {
             fn main() {}
         "#};
 
-        let result = create_shader_module(source, "shader.wgsl");
+        let result = create_shader_module(source, "shader.wgsl", WriteOptions::default());
         assert!(matches!(
             result,
             Err(CreateModuleError::NonConsecutiveBindGroups)
@@ -1234,7 +1313,7 @@ mod test {
             fn main() {}
         "#};
 
-        let result = create_shader_module(source, "shader.wgsl");
+        let result = create_shader_module(source, "shader.wgsl", WriteOptions::default());
         assert!(matches!(
             result,
             Err(CreateModuleError::DuplicateBinding { binding: 2 })

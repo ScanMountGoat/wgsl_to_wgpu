@@ -80,7 +80,6 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
             rows,
             width,
         } => match (rows, columns, width) {
-            // TODO: Don't force glam here?
             (naga::VectorSize::Quad, naga::VectorSize::Quad, 4) => quote!([[f32; 4]; 4]),
             _ => todo!(),
         },
