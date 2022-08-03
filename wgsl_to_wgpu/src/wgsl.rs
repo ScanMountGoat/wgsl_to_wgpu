@@ -122,6 +122,7 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
             (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32,
             (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32,
             (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32,
+            (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64,
             _ => todo!(),
         },
         naga::TypeInner::Vector { size, kind, width } => match size {
