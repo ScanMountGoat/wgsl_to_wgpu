@@ -11,9 +11,9 @@ The amount of boilerplate code needed to initialize data in WGSL shaders is grea
 See the example crate for how to use the generated code. Run the example with `cargo run`.
 
 ## Limitations
-This project currently supports a small subset of WGSL types and doesn't enforce certain key properties such as field alignment.
+This project supports most WGSL types but doesn't enforce certain key properties such as field alignment.
 It may be necessary to disable running this function for shaders with unsupported types or features. The current implementation assumes all shader stages are part of a single WGSL source file. Vertex attributes using floating point types in WGSL like `vec2<f32>` are assumed to use float inputs
-instead of normalized attributes like unorm or snorm integers.
+instead of normalized attributes like unorm or snorm integers. Insufficient or innaccurate generated code should be replaced by handwritten implementations as needed.
 
 ## Credits
 - [naga](https://github.com/gfx-rs/naga) - WGSL parser and syntax
