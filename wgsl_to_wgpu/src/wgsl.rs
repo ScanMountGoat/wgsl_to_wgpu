@@ -79,10 +79,25 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
             columns,
             rows,
             width,
-        } => match (rows, columns, width) {
-            (naga::VectorSize::Quad, naga::VectorSize::Quad, 4) => quote!([[f32; 4]; 4]),
-            _ => todo!(),
-        },
+        } => {
+            // Use Index to generate "4" instead of "4usize".
+            let c = match columns {
+                naga::VectorSize::Bi => Index::from(2),
+                naga::VectorSize::Tri => Index::from(3),
+                naga::VectorSize::Quad => Index::from(4),
+            };
+            let r = match rows {
+                naga::VectorSize::Bi => Index::from(2),
+                naga::VectorSize::Tri => Index::from(3),
+                naga::VectorSize::Quad => Index::from(4),
+            };
+
+            match width {
+                4 => quote!([[f32; #c]; #r]),
+                8 => quote!([[f64; #c]; #r]),
+                _ => todo!(),
+            }
+        }
         naga::TypeInner::Image { .. } => todo!(),
         naga::TypeInner::Sampler { .. } => todo!(),
         naga::TypeInner::Atomic { kind: _, width: _ } => todo!(),

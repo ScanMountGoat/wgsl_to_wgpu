@@ -162,6 +162,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
     vertex_inputs.iter().map(|input|  {
         let name = Ident::new(&input.name, Span::call_site());
 
+        // Use index to avoid adding prefix to literals.
         let count = Index::from(input.fields.len());
         let attributes: Vec<_> = input
             .fields
@@ -580,7 +581,27 @@ mod test {
             };
 
             struct MatricesF32 {
-                a: mat4x4<f32>
+                a: mat4x4<f32>,
+                b: mat4x3<f32>,
+                c: mat4x2<f32>,
+                d: mat3x4<f32>,
+                e: mat3x3<f32>,
+                f: mat3x2<f32>,
+                g: mat2x4<f32>,
+                h: mat2x3<f32>,
+                i: mat2x2<f32>,
+            };
+
+            struct MatricesF64 {
+                a: mat4x4<f64>,
+                b: mat4x3<f64>,
+                c: mat4x2<f64>,
+                d: mat3x4<f64>,
+                e: mat3x3<f64>,
+                f: mat3x2<f64>,
+                g: mat2x4<f64>,
+                h: mat2x3<f64>,
+                i: mat2x2<f64>,
             };
 
             struct StaticArrays {
@@ -665,6 +686,27 @@ mod test {
                 #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct MatricesF32 {
                     pub a: [[f32; 4]; 4],
+                    pub b: [[f32; 4]; 3],
+                    pub c: [[f32; 4]; 2],
+                    pub d: [[f32; 3]; 4],
+                    pub e: [[f32; 3]; 3],
+                    pub f: [[f32; 3]; 2],
+                    pub g: [[f32; 2]; 4],
+                    pub h: [[f32; 2]; 3],
+                    pub i: [[f32; 2]; 2],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct MatricesF64 {
+                    pub a: [[f64; 4]; 4],
+                    pub b: [[f64; 4]; 3],
+                    pub c: [[f64; 4]; 2],
+                    pub d: [[f64; 3]; 4],
+                    pub e: [[f64; 3]; 3],
+                    pub f: [[f64; 3]; 2],
+                    pub g: [[f64; 2]; 4],
+                    pub h: [[f64; 2]; 3],
+                    pub i: [[f64; 2]; 2],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
