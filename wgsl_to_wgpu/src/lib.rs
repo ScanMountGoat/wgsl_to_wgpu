@@ -148,21 +148,11 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
             })
             .collect();
 
-        // TODO: Account for alignment/padding?
-        let size_in_bytes: u64 = input
-            .fields
-            .iter()
-            .map(|(_, m)| wgsl::vertex_format(&module.types[m.ty]).size())
-            .sum();
-        let size_in_bytes = Index::from(size_in_bytes as usize);
-
         // The vertex input structs should already be written at this point.
         // TODO: Support vertex inputs that aren't in a struct.
         quote! {
             impl super::#name {
                 pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; #count] = wgpu::vertex_attr_array![#(#attributes),*];
-                /// The total size in bytes of all fields without considering padding or alignment.
-                pub const SIZE_IN_BYTES: u64 = #size_in_bytes;
             }
         }
     }).collect()
@@ -1359,8 +1349,6 @@ mod test {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
                             0 => Float32x2, 1 => Float32x3, 2 => Float32x4
                         ];
-                        /// The total size in bytes of all fields without considering padding or alignment.
-                        pub const SIZE_IN_BYTES: u64 = 36;
                     }
                 }
                 "
@@ -1393,8 +1381,6 @@ mod test {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
                             0 => Float64x2, 1 => Float64x3, 2 => Float64x4
                         ];
-                        /// The total size in bytes of all fields without considering padding or alignment.
-                        pub const SIZE_IN_BYTES: u64 = 72;
                     }
                 }
                 "
@@ -1425,8 +1411,6 @@ mod test {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![
                             0 => Sint32
                         ];
-                        /// The total size in bytes of all fields without considering padding or alignment.
-                        pub const SIZE_IN_BYTES: u64 = 4;
                     }
                 }
                 "
@@ -1459,8 +1443,6 @@ mod test {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
                             0 => Uint32x2, 1 => Uint32x3, 2 => Uint32x4
                         ];
-                        /// The total size in bytes of all fields without considering padding or alignment.
-                        pub const SIZE_IN_BYTES: u64 = 36;
                     }
                 }
                 "
