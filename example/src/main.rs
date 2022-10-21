@@ -54,6 +54,7 @@ impl State {
             width: size.width as u32,
             height: size.height as u32,
             present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto
         };
         surface.configure(&device, &config);
 
