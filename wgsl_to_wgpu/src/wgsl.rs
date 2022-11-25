@@ -227,8 +227,7 @@ pub fn get_bind_group_data(
     }
 
     // wgpu expects bind groups to be consecutive starting from 0.
-    // TODO: Use a result instead?
-    if groups.iter().map(|(i, _)| *i as usize).eq(0..groups.len()) {
+    if groups.keys().map(|i| *i as usize).eq(0..groups.len()) {
         Ok(groups)
     } else {
         Err(CreateModuleError::NonConsecutiveBindGroups)
