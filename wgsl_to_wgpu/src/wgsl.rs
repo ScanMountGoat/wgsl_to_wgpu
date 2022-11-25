@@ -1,4 +1,4 @@
-use crate::CreateModuleError;
+use crate::{CreateModuleError, MatrixVectorTypes};
 use naga::StructMember;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
@@ -64,40 +64,21 @@ pub fn buffer_binding_type(storage: naga::AddressSpace) -> TokenStream {
     }
 }
 
-pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
+pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTypes) -> TokenStream {
     match &ty.inner {
         naga::TypeInner::Scalar { kind, width } => rust_scalar_type(*kind, *width),
-        naga::TypeInner::Vector { size, kind, width } => {
-            let inner_type = rust_scalar_type(*kind, *width);
-            match size {
-                naga::VectorSize::Bi => quote!([#inner_type; 2]),
-                naga::VectorSize::Tri => quote!([#inner_type; 3]),
-                naga::VectorSize::Quad => quote!([#inner_type; 4]),
-            }
-        }
+        naga::TypeInner::Vector { size, kind, width } => match format {
+            MatrixVectorTypes::Rust => rust_vector_type(*size, *kind, *width),
+            MatrixVectorTypes::Glam => glam_vector_type(*size, *kind, *width),
+        },
         naga::TypeInner::Matrix {
             columns,
             rows,
             width,
-        } => {
-            // Use Index to generate "4" instead of "4usize".
-            let c = match columns {
-                naga::VectorSize::Bi => Index::from(2),
-                naga::VectorSize::Tri => Index::from(3),
-                naga::VectorSize::Quad => Index::from(4),
-            };
-            let r = match rows {
-                naga::VectorSize::Bi => Index::from(2),
-                naga::VectorSize::Tri => Index::from(3),
-                naga::VectorSize::Quad => Index::from(4),
-            };
-
-            match width {
-                4 => quote!([[f32; #c]; #r]),
-                8 => quote!([[f64; #c]; #r]),
-                _ => todo!(),
-            }
-        }
+        } => match format {
+            MatrixVectorTypes::Rust => rust_matrix_type(rows, columns, width),
+            MatrixVectorTypes::Glam => glam_matrix_type(rows, columns, width),
+        },
         naga::TypeInner::Image { .. } => todo!(),
         naga::TypeInner::Sampler { .. } => todo!(),
         naga::TypeInner::Atomic { kind: _, width: _ } => todo!(),
@@ -114,7 +95,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
             stride: _,
         } => {
             // TODO: Support arrays other than arrays with a static size?
-            let element_type = rust_type(module, &module.types[*base]);
+            let element_type = rust_type(module, &module.types[*base], format);
             let count = Index::from(array_length(size, module));
             quote!([#element_type; #count])
         }
@@ -127,6 +108,75 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type) -> TokenStream {
             quote!(#name)
         }
         naga::TypeInner::BindingArray { base: _, size: _ } => todo!(),
+    }
+}
+
+fn rust_matrix_type(
+    rows: &naga::VectorSize,
+    columns: &naga::VectorSize,
+    width: &u8,
+) -> TokenStream {
+    // Use Index to generate "4" instead of "4usize".
+    let c = match columns {
+        naga::VectorSize::Bi => Index::from(2),
+        naga::VectorSize::Tri => Index::from(3),
+        naga::VectorSize::Quad => Index::from(4),
+    };
+    let r = match rows {
+        naga::VectorSize::Bi => Index::from(2),
+        naga::VectorSize::Tri => Index::from(3),
+        naga::VectorSize::Quad => Index::from(4),
+    };
+    match width {
+        4 => quote!([[f32; #c]; #r]),
+        8 => quote!([[f64; #c]; #r]),
+        _ => todo!(),
+    }
+}
+
+fn glam_matrix_type(
+    rows: &naga::VectorSize,
+    columns: &naga::VectorSize,
+    width: &u8,
+) -> TokenStream {
+    // glam only supports square matrices for some types.
+    // Use Rust types for unsupported matrices.
+    match (rows, columns, width) {
+        (naga::VectorSize::Bi, naga::VectorSize::Bi, 4) => quote!(glam::Mat2),
+        (naga::VectorSize::Tri, naga::VectorSize::Tri, 4) => quote!(glam::Mat3),
+        (naga::VectorSize::Quad, naga::VectorSize::Quad, 4) => quote!(glam::Mat4),
+        (naga::VectorSize::Bi, naga::VectorSize::Bi, 8) => quote!(glam::DMat2),
+        (naga::VectorSize::Tri, naga::VectorSize::Tri, 8) => quote!(glam::DMat3),
+        (naga::VectorSize::Quad, naga::VectorSize::Quad, 8) => quote!(glam::DMat4),
+        _ => rust_matrix_type(rows, columns, width),
+    }
+}
+
+fn rust_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -> TokenStream {
+    let inner_type = rust_scalar_type(kind, width);
+    match size {
+        naga::VectorSize::Bi => quote!([#inner_type; 2]),
+        naga::VectorSize::Tri => quote!([#inner_type; 3]),
+        naga::VectorSize::Quad => quote!([#inner_type; 4]),
+    }
+}
+
+fn glam_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -> TokenStream {
+    // Use Rust types for unsupported types.
+    match (size, kind, width) {
+        (naga::VectorSize::Bi, naga::ScalarKind::Float, 4) => quote!(glam::Vec2),
+        (naga::VectorSize::Tri, naga::ScalarKind::Float, 4) => quote!(glam::Vec3),
+        (naga::VectorSize::Quad, naga::ScalarKind::Float, 4) => quote!(glam::Vec4),
+        (naga::VectorSize::Bi, naga::ScalarKind::Float, 8) => quote!(glam::DVec2),
+        (naga::VectorSize::Tri, naga::ScalarKind::Float, 8) => quote!(glam::DVec3),
+        (naga::VectorSize::Quad, naga::ScalarKind::Float, 8) => quote!(glam::DVec4),
+        (naga::VectorSize::Bi, naga::ScalarKind::Uint, 4) => quote!(glam::UVec2),
+        (naga::VectorSize::Tri, naga::ScalarKind::Uint, 4) => quote!(glam::UVec3),
+        (naga::VectorSize::Quad, naga::ScalarKind::Uint, 4) => quote!(glam::UVec4),
+        (naga::VectorSize::Bi, naga::ScalarKind::Sint, 4) => quote!(glam::IVec2),
+        (naga::VectorSize::Tri, naga::ScalarKind::Sint, 4) => quote!(glam::IVec3),
+        (naga::VectorSize::Quad, naga::ScalarKind::Sint, 4) => quote!(glam::IVec4),
+        _ => rust_vector_type(size, kind, width),
     }
 }
 

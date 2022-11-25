@@ -40,7 +40,7 @@ pub enum CreateModuleError {
 
 /// Options for configuring the generated bindings to work with additional dependencies.
 /// Use [WriteOptions::default] for only requiring WGPU itself.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct WriteOptions {
     /// Derive [encase::ShaderType](https://docs.rs/encase/latest/encase/trait.ShaderType.html#)
     /// for user defined WGSL structs when `true`.
@@ -50,14 +50,24 @@ pub struct WriteOptions {
     /// and [bytemuck::Zeroable](https://docs.rs/bytemuck/latest/bytemuck/trait.Zeroable.html#)
     /// for user defined WGSL structs when `true`.
     pub derive_bytemuck: bool,
+
+    /// The format to use for matrix and vector types.
+    pub matrix_vector_types: MatrixVectorTypes,
 }
 
-impl Default for WriteOptions {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatrixVectorTypes {
+    /// Rust types like `[f32; 4]` or `[[f32; 4]; 4]`.
+    Rust,
+
+    /// `glam` types like `glam::Vec4` or `glam::Mat4`.
+    /// Types not representable by `glam` will use the output from [MatrixVectorTypes::Rust].
+    Glam,
+}
+
+impl Default for MatrixVectorTypes {
     fn default() -> Self {
-        Self {
-            derive_encase: false,
-            derive_bytemuck: false,
-        }
+        Self::Rust
     }
 }
 
@@ -274,7 +284,7 @@ fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream> {
         .filter_map(|(_, t)| {
             if let naga::TypeInner::Struct { members, .. } = &t.inner {
                 let name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
-                let members = struct_members(members, module);
+                let members = struct_members(members, module, options.matrix_vector_types);
                 let mut derives = vec![
                     quote!(Debug),
                     quote!(Copy),
@@ -302,12 +312,16 @@ fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream> {
         .collect()
 }
 
-fn struct_members(members: &[naga::StructMember], module: &naga::Module) -> Vec<TokenStream> {
+fn struct_members(
+    members: &[naga::StructMember],
+    module: &naga::Module,
+    format: MatrixVectorTypes,
+) -> Vec<TokenStream> {
     members
         .iter()
         .map(|member| {
             let member_name = Ident::new(member.name.as_ref().unwrap(), Span::call_site());
-            let member_type = wgsl::rust_type(module, &module.types[member.ty]);
+            let member_type = wgsl::rust_type(module, &module.types[member.ty], format);
             quote!(pub #member_name: #member_type)
         })
         .collect()
@@ -529,7 +543,7 @@ mod test {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn write_all_structs() {
+    fn write_all_structs_rust() {
         let source = indoc! {r#"
             struct Scalars {
                 a: u32,
@@ -539,12 +553,14 @@ mod test {
 
             struct VectorsU8 {
                 a: vec2<u8>,
-                b: vec4<u8>,
+                b: vec3<u8>,
+                c: vec4<u8>,
             };
 
             struct VectorsU16 {
                 a: vec2<u16>,
-                b: vec4<u16>,
+                b: vec3<u16>,
+                c: vec4<u16>,
             };
 
             struct VectorsU32 {
@@ -555,12 +571,14 @@ mod test {
 
             struct VectorsI8 {
                 a: vec2<i8>,
-                b: vec4<i8>,
+                b: vec3<i8>,
+                c: vec4<i8>,
             };
 
             struct VectorsI16 {
                 a: vec2<i16>,
-                b: vec4<i16>,
+                b: vec3<i16>,
+                c: vec4<i16>,
             };
 
             struct VectorsI32 {
@@ -623,8 +641,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
         let structs = structs(&module, WriteOptions::default());
-        let file = syn::parse_file(&quote!(#(#structs)*).to_string()).unwrap();
-        let actual = prettyplease::unparse(&file);
+        let actual = pretty_print(quote!(#(#structs)*));
 
         assert_eq!(
             indoc! {
@@ -640,13 +657,15 @@ mod test {
                 #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsU8 {
                     pub a: [u8; 2],
-                    pub b: [u8; 4],
+                    pub b: [u8; 3],
+                    pub c: [u8; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsU16 {
                     pub a: [u16; 2],
-                    pub b: [u16; 4],
+                    pub b: [u16; 3],
+                    pub c: [u16; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -659,13 +678,15 @@ mod test {
                 #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsI8 {
                     pub a: [i8; 2],
-                    pub b: [i8; 4],
+                    pub b: [i8; 3],
+                    pub c: [i8; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsI16 {
                     pub a: [i16; 2],
-                    pub b: [i16; 4],
+                    pub b: [i16; 3],
+                    pub c: [i16; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -734,6 +755,224 @@ mod test {
     }
 
     #[test]
+    fn write_all_structs_glam() {
+        let source = indoc! {r#"
+            struct Scalars {
+                a: u32,
+                b: i32,
+                c: f32,
+            };
+
+            struct VectorsU8 {
+                a: vec2<u8>,
+                b: vec3<u8>,
+                c: vec4<u8>,
+            };
+
+            struct VectorsU16 {
+                a: vec2<u16>,
+                b: vec3<u16>,
+                c: vec4<u16>,
+            };
+
+            struct VectorsU32 {
+                a: vec2<u32>,
+                b: vec3<u32>,
+                c: vec4<u32>,
+            };
+
+            struct VectorsI8 {
+                a: vec2<i8>,
+                b: vec3<i8>,
+                c: vec4<i8>,
+            };
+
+            struct VectorsI16 {
+                a: vec2<i16>,
+                b: vec3<i16>,
+                c: vec4<i16>,
+            };
+
+            struct VectorsI32 {
+                a: vec2<i32>,
+                b: vec3<i32>,
+                c: vec4<i32>,
+            };
+
+            struct VectorsF32 {
+                a: vec2<f32>,
+                b: vec3<f32>,
+                c: vec4<f32>,
+            };
+
+            struct VectorsF64 {
+                a: vec2<f64>,
+                b: vec3<f64>,
+                c: vec4<f64>,
+            };
+
+            struct MatricesF32 {
+                a: mat4x4<f32>,
+                b: mat4x3<f32>,
+                c: mat4x2<f32>,
+                d: mat3x4<f32>,
+                e: mat3x3<f32>,
+                f: mat3x2<f32>,
+                g: mat2x4<f32>,
+                h: mat2x3<f32>,
+                i: mat2x2<f32>,
+            };
+
+            struct MatricesF64 {
+                a: mat4x4<f64>,
+                b: mat4x3<f64>,
+                c: mat4x2<f64>,
+                d: mat3x4<f64>,
+                e: mat3x3<f64>,
+                f: mat3x2<f64>,
+                g: mat2x4<f64>,
+                h: mat2x3<f64>,
+                i: mat2x2<f64>,
+            };
+
+            struct StaticArrays {
+                a: array<u32, 5>,
+                b: array<f32, 3>,
+                c: array<mat4x4<f32>, 512>,
+            };
+
+            struct Nested {
+                a: MatricesF32,
+                b: MatricesF64
+            }
+
+            @fragment
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let structs = structs(
+            &module,
+            WriteOptions {
+                matrix_vector_types: MatrixVectorTypes::Glam,
+                ..Default::default()
+            },
+        );
+        let actual = pretty_print(quote!(#(#structs)*));
+
+        assert_eq!(
+            indoc! {
+                r"
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct Scalars {
+                    pub a: u32,
+                    pub b: i32,
+                    pub c: f32,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsU8 {
+                    pub a: [u8; 2],
+                    pub b: [u8; 3],
+                    pub c: [u8; 4],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsU16 {
+                    pub a: [u16; 2],
+                    pub b: [u16; 3],
+                    pub c: [u16; 4],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsU32 {
+                    pub a: glam::UVec2,
+                    pub b: glam::UVec3,
+                    pub c: glam::UVec4,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsI8 {
+                    pub a: [i8; 2],
+                    pub b: [i8; 3],
+                    pub c: [i8; 4],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsI16 {
+                    pub a: [i16; 2],
+                    pub b: [i16; 3],
+                    pub c: [i16; 4],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsI32 {
+                    pub a: glam::IVec2,
+                    pub b: glam::IVec3,
+                    pub c: glam::IVec4,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsF32 {
+                    pub a: glam::Vec2,
+                    pub b: glam::Vec3,
+                    pub c: glam::Vec4,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsF64 {
+                    pub a: glam::DVec2,
+                    pub b: glam::DVec3,
+                    pub c: glam::DVec4,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct MatricesF32 {
+                    pub a: glam::Mat4,
+                    pub b: [[f32; 4]; 3],
+                    pub c: [[f32; 4]; 2],
+                    pub d: [[f32; 3]; 4],
+                    pub e: glam::Mat3,
+                    pub f: [[f32; 3]; 2],
+                    pub g: [[f32; 2]; 4],
+                    pub h: [[f32; 2]; 3],
+                    pub i: glam::Mat2,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct MatricesF64 {
+                    pub a: glam::DMat4,
+                    pub b: [[f64; 4]; 3],
+                    pub c: [[f64; 4]; 2],
+                    pub d: [[f64; 3]; 4],
+                    pub e: glam::DMat3,
+                    pub f: [[f64; 3]; 2],
+                    pub g: [[f64; 2]; 4],
+                    pub h: [[f64; 2]; 3],
+                    pub i: glam::DMat2,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct StaticArrays {
+                    pub a: [u32; 5],
+                    pub b: [f32; 3],
+                    pub c: [glam::Mat4; 512],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct Nested {
+                    pub a: MatricesF32,
+                    pub b: MatricesF64,
+                }
+                "
+            },
+            actual
+        );
+    }
+
+    #[test]
     fn write_all_structs_encase_bytemuck() {
         let source = indoc! {r#"
             struct Input0 {
@@ -753,10 +992,10 @@ mod test {
             WriteOptions {
                 derive_encase: true,
                 derive_bytemuck: true,
+                matrix_vector_types: MatrixVectorTypes::Rust,
             },
         );
-        let file = syn::parse_file(&quote!(#(#structs)*).to_string()).unwrap();
-        let actual = prettyplease::unparse(&file);
+        let actual = pretty_print(quote!(#(#structs)*));
 
         assert_eq!(
             indoc! {
