@@ -169,7 +169,10 @@ fn compute_module(module: &naga::Module) -> TokenStream {
         .filter_map(|e| {
             if e.stage == naga::ShaderStage::Compute {
                 // Use Index to avoid specifying the type on literals.
-                let name = Ident::new(&format!("{}_workgroup_size", e.name), Span::call_site());
+                let name = Ident::new(
+                    &format!("{}_WORKGROUP_SIZE", e.name.to_uppercase()),
+                    Span::call_site(),
+                );
                 let [x, y, z] = e.workgroup_size.map(|s| Index::from(s as usize));
                 Some(quote!(pub const #name: [u32; 3] = [#x, #y, #z];))
             } else {
@@ -2031,8 +2034,8 @@ mod test {
             indoc! {
             r"
             pub mod compute {
-                pub const main1_workgroup_size: [u32; 3] = [1, 2, 3];
-                pub const main2_workgroup_size: [u32; 3] = [256, 1, 1];
+                pub const MAIN1_WORKGROUP_SIZE: [u32; 3] = [1, 2, 3];
+                pub const MAIN2_WORKGROUP_SIZE: [u32; 3] = [256, 1, 1];
             }
             "
             },
