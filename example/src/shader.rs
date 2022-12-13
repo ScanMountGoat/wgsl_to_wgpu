@@ -78,7 +78,6 @@ pub mod bind_groups {
         bind_groups.bind_group0.set(pass);
     }
 }
-pub mod vertex {}
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
     let source = std::borrow::Cow::Borrowed(include_str!("shader.wgsl"));
     device

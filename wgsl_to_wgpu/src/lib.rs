@@ -161,9 +161,14 @@ fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
 
 fn vertex_module(module: &naga::Module) -> TokenStream {
     let structs = vertex_input_structs(module);
-    quote! {
-        pub mod vertex {
-            #(#structs)*
+    if structs.is_empty() {
+        // Don't include empty modules.
+        quote!()
+    } else {
+        quote! {
+            pub mod vertex {
+                #(#structs)*
+            }
         }
     }
 }
@@ -233,15 +238,20 @@ fn bind_groups_module(
     let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
     let set_bind_groups = set_bind_groups(bind_group_data, is_compute);
 
-    quote! {
-        pub mod bind_groups {
-            #(#bind_groups)*
+    if bind_groups.is_empty() {
+        // Don't include empty modules.
+        quote!()
+    } else {
+        quote! {
+            pub mod bind_groups {
+                #(#bind_groups)*
 
-            pub struct BindGroups<'a> {
-                #(#bind_group_fields),*
+                pub struct BindGroups<'a> {
+                    #(#bind_group_fields),*
+                }
+
+                #set_bind_groups
             }
-
-            #set_bind_groups
         }
     }
 }
@@ -1694,7 +1704,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let actual = pretty_print(vertex_module(&module));
 
-        assert_eq!("pub mod vertex {}\n", actual);
+        assert_eq!("", actual);
     }
 
     #[test]
