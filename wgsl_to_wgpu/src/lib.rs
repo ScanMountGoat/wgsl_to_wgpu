@@ -105,6 +105,7 @@ pub fn create_shader_module(
     let structs = structs(&module, options);
     let bind_groups_module = bind_groups_module(&bind_group_data, shader_stages);
     let vertex_module = vertex_module(&module);
+    let compute_module = compute_module(&module);
 
     let create_shader_module = quote! {
         pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
@@ -143,6 +144,8 @@ pub fn create_shader_module(
 
         #vertex_module
 
+        #compute_module
+
         #create_shader_module
 
         #create_pipeline_layout
@@ -157,6 +160,34 @@ fn pretty_print(tokens: TokenStream) -> String {
 
 fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
     Ident::new(&format!("{}{}", name, index), Span::call_site())
+}
+
+fn compute_module(module: &naga::Module) -> TokenStream {
+    let workgroup_sizes: Vec<_> = module
+        .entry_points
+        .iter()
+        .filter_map(|e| {
+            if e.stage == naga::ShaderStage::Compute {
+                // Use Index to avoid specifying the type on literals.
+                let name = Ident::new(&format!("{}_workgroup_size", e.name), Span::call_site());
+                let [x, y, z] = e.workgroup_size.map(|s| Index::from(s as usize));
+                Some(quote!(pub const #name: [u32; 3] = [#x, #y, #z];))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if workgroup_sizes.is_empty() {
+        // Don't include empty modules.
+        quote!()
+    } else {
+        quote! {
+            pub mod compute {
+                #(#workgroup_sizes)*
+            }
+        }
+    }
 }
 
 fn vertex_module(module: &naga::Module) -> TokenStream {
@@ -1963,6 +1994,47 @@ mod test {
                     }
                 }
                 "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_compute_module_empty() {
+        let source = indoc! {r#"
+            @vertex
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = pretty_print(compute_module(&module));
+
+        assert_eq!("", actual);
+    }
+
+    #[test]
+    fn write_compute_module_multiple_entries() {
+        let source = indoc! {r#"
+            @compute
+            @workgroup_size(1,2,3)
+            fn main1() {}
+
+            @compute
+            @workgroup_size(256)
+            fn main2() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = pretty_print(compute_module(&module));
+
+        assert_eq!(
+            indoc! {
+            r"
+            pub mod compute {
+                pub const main1_workgroup_size: [u32; 3] = [1, 2, 3];
+                pub const main2_workgroup_size: [u32; 3] = [256, 1, 1];
+            }
+            "
             },
             actual
         );
