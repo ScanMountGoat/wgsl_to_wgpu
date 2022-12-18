@@ -55,13 +55,15 @@ pub struct WriteOptions {
     pub matrix_vector_types: MatrixVectorTypes,
 }
 
+/// The format to use for matrix and vector types.
+/// Note that the generated types for the same WGSL type may differ in size or alignment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatrixVectorTypes {
     /// Rust types like `[f32; 4]` or `[[f32; 4]; 4]`.
     Rust,
 
     /// `glam` types like `glam::Vec4` or `glam::Mat4`.
-    /// Types not representable by `glam` will use the output from [MatrixVectorTypes::Rust].
+    /// Types not representable by `glam` like `mat2x3<f32>` will use the output from [MatrixVectorTypes::Rust].
     Glam,
 }
 
