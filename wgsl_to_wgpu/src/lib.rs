@@ -327,6 +327,15 @@ fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream> {
     module
         .types
         .iter()
+        .filter(|(h, _)| {
+            // Shader stage outputs don't need to be instantiated by the user.
+            // Many builtin outputs also don't satisfy alignment requirements.
+            // Skipping these structs avoids issues deriving encase or bytemuck.
+            !module
+                .entry_points
+                .iter()
+                .any(|e| e.function.result.as_ref().map(|r| r.ty) == Some(*h))
+        })
         .filter_map(|(_, t)| {
             if let naga::TypeInner::Struct { members, .. } = &t.inner {
                 let name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
@@ -1056,6 +1065,54 @@ mod test {
                     bytemuck::Zeroable,
                     encase::ShaderType
                 )]
+                pub struct Input0 {
+                    pub a: u32,
+                    pub b: i32,
+                    pub c: f32,
+                }
+                "
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_all_structs_skip_stage_outputs() {
+        let source = indoc! {r#"
+            struct Input0 {
+                a: u32,
+                b: i32,
+                c: f32,
+            };
+
+            struct Output0 {
+                a: f32
+            }
+
+            @fragment
+            fn main() -> Output0 {
+                var out: Output0;
+                return out;
+            }
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let structs = structs(
+            &module,
+            WriteOptions {
+                derive_encase: false,
+                derive_bytemuck: false,
+                matrix_vector_types: MatrixVectorTypes::Rust,
+            },
+        );
+        let actual = pretty_print(quote!(#(#structs)*));
+
+        assert_eq!(
+            indoc! {
+                r"
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct Input0 {
                     pub a: u32,
                     pub b: i32,
