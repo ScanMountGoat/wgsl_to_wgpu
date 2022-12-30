@@ -221,19 +221,44 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
             .fields
             .iter()
             .map(|(location, m)| {
+                let field_name: TokenStream = m.name.as_ref().unwrap().parse().unwrap();
                 let location = Index::from(*location as usize);
                 let format = wgsl::vertex_format(&module.types[m.ty]);
                 // TODO: Will the debug implementation always work with the macro?
                 let format = syn::Ident::new(&format!("{:?}", format), Span::call_site());
-                quote!(#location => #format)
+
+                quote! {
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::#format,
+                        offset: memoffset::offset_of!(super::#name, #field_name) as u64,
+                        shader_location: #location,
+                    }
+                }
             })
             .collect();
 
-        // The vertex input structs should already be written at this point.
+
+        // The vertex_attr_array! macro doesn't account for field alignment.
+        // Structs with glam::Vec4 and glam::Vec3 fields will not be tightly packed.
+        // Manually calculate the Rust field offsets to support using bytemuck for vertices.
+        // This works since we explicitly mark all generated structs as repr(C).
+        // Assume elements are in Rust arrays or slices, so use size_of for stride.
+        // TODO: Should this enforce WebGPU alignment requirements for compatibility?
+        // https://gpuweb.github.io/gpuweb/#abstract-opdef-validating-gpuvertexbufferlayout
+
         // TODO: Support vertex inputs that aren't in a struct.
+        // TODO: Just add this to the struct directly?
         quote! {
             impl super::#name {
-                pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; #count] = wgpu::vertex_attr_array![#(#attributes),*];
+                pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; #count] = [#(#attributes),*];
+
+                pub fn vertex_buffer_layout(step_mode: wgpu::VertexStepMode) -> wgpu::VertexBufferLayout<'static> {
+                    wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<super::#name>() as u64,
+                        step_mode,
+                        attributes: &super::#name::VERTEX_ATTRIBUTES
+                    }
+                }
             }
         }
     }).collect()
@@ -925,9 +950,37 @@ mod test {
                 r"
                 pub mod vertex {
                     impl super::VertexInput0 {
-                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
-                            0 => Float32, 1 => Float32x2, 2 => Float32x3, 3 => Float32x4
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 0,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x2,
+                                offset: memoffset::offset_of!(super::VertexInput0, b) as u64,
+                                shader_location: 1,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x3,
+                                offset: memoffset::offset_of!(super::VertexInput0, c) as u64,
+                                shader_location: 2,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x4,
+                                offset: memoffset::offset_of!(super::VertexInput0, d) as u64,
+                                shader_location: 3,
+                            },
                         ];
+                        pub fn vertex_buffer_layout(
+                            step_mode: wgpu::VertexStepMode,
+                        ) -> wgpu::VertexBufferLayout<'static> {
+                            wgpu::VertexBufferLayout {
+                                array_stride: std::mem::size_of::<super::VertexInput0>() as u64,
+                                step_mode,
+                                attributes: &super::VertexInput0::VERTEX_ATTRIBUTES,
+                            }
+                        }
                     }
                 }
                 "
@@ -958,9 +1011,37 @@ mod test {
                 r"
                 pub mod vertex {
                     impl super::VertexInput0 {
-                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
-                            0 => Float64, 1 => Float64x2, 2 => Float64x3, 3 => Float64x4
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float64,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 0,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float64x2,
+                                offset: memoffset::offset_of!(super::VertexInput0, b) as u64,
+                                shader_location: 1,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float64x3,
+                                offset: memoffset::offset_of!(super::VertexInput0, c) as u64,
+                                shader_location: 2,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float64x4,
+                                offset: memoffset::offset_of!(super::VertexInput0, d) as u64,
+                                shader_location: 3,
+                            },
                         ];
+                        pub fn vertex_buffer_layout(
+                            step_mode: wgpu::VertexStepMode,
+                        ) -> wgpu::VertexBufferLayout<'static> {
+                            wgpu::VertexBufferLayout {
+                                array_stride: std::mem::size_of::<super::VertexInput0>() as u64,
+                                step_mode,
+                                attributes: &super::VertexInput0::VERTEX_ATTRIBUTES,
+                            }
+                        }
                     }
                 }
                 "
@@ -990,9 +1071,27 @@ mod test {
                 r"
                 pub mod vertex {
                     impl super::VertexInput0 {
-                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
-                            0 => Sint8x2, 1 => Sint8x4
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Sint8x2,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 0,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Sint8x4,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 1,
+                            },
                         ];
+                        pub fn vertex_buffer_layout(
+                            step_mode: wgpu::VertexStepMode,
+                        ) -> wgpu::VertexBufferLayout<'static> {
+                            wgpu::VertexBufferLayout {
+                                array_stride: std::mem::size_of::<super::VertexInput0>() as u64,
+                                step_mode,
+                                attributes: &super::VertexInput0::VERTEX_ATTRIBUTES,
+                            }
+                        }
                     }
                 }
                 "
@@ -1022,9 +1121,27 @@ mod test {
                 r"
                 pub mod vertex {
                     impl super::VertexInput0 {
-                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
-                            0 => Sint16x2, 1 => Sint16x4
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Sint16x2,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 0,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Sint16x4,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 1,
+                            },
                         ];
+                        pub fn vertex_buffer_layout(
+                            step_mode: wgpu::VertexStepMode,
+                        ) -> wgpu::VertexBufferLayout<'static> {
+                            wgpu::VertexBufferLayout {
+                                array_stride: std::mem::size_of::<super::VertexInput0>() as u64,
+                                step_mode,
+                                attributes: &super::VertexInput0::VERTEX_ATTRIBUTES,
+                            }
+                        }
                     }
                 }
                 "
@@ -1056,9 +1173,37 @@ mod test {
                 r"
                 pub mod vertex {
                     impl super::VertexInput0 {
-                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
-                            0 => Sint32, 1 => Sint32x2, 2 => Sint32x3, 3 => Sint32x4
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Sint32,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 0,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Sint32x2,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 1,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Sint32x3,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 2,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Sint32x4,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 3,
+                            },
                         ];
+                        pub fn vertex_buffer_layout(
+                            step_mode: wgpu::VertexStepMode,
+                        ) -> wgpu::VertexBufferLayout<'static> {
+                            wgpu::VertexBufferLayout {
+                                array_stride: std::mem::size_of::<super::VertexInput0>() as u64,
+                                step_mode,
+                                attributes: &super::VertexInput0::VERTEX_ATTRIBUTES,
+                            }
+                        }
                     }
                 }
                 "
@@ -1088,9 +1233,27 @@ mod test {
                 r"
                 pub mod vertex {
                     impl super::VertexInput0 {
-                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
-                            0 => Uint8x2, 1 => Uint8x4
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Uint8x2,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 0,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Uint8x4,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 1,
+                            },
                         ];
+                        pub fn vertex_buffer_layout(
+                            step_mode: wgpu::VertexStepMode,
+                        ) -> wgpu::VertexBufferLayout<'static> {
+                            wgpu::VertexBufferLayout {
+                                array_stride: std::mem::size_of::<super::VertexInput0>() as u64,
+                                step_mode,
+                                attributes: &super::VertexInput0::VERTEX_ATTRIBUTES,
+                            }
+                        }
                     }
                 }
                 "
@@ -1120,9 +1283,27 @@ mod test {
                 r"
                 pub mod vertex {
                     impl super::VertexInput0 {
-                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
-                            0 => Uint16x2, 1 => Uint16x4
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Uint16x2,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 0,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Uint16x4,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 1,
+                            },
                         ];
+                        pub fn vertex_buffer_layout(
+                            step_mode: wgpu::VertexStepMode,
+                        ) -> wgpu::VertexBufferLayout<'static> {
+                            wgpu::VertexBufferLayout {
+                                array_stride: std::mem::size_of::<super::VertexInput0>() as u64,
+                                step_mode,
+                                attributes: &super::VertexInput0::VERTEX_ATTRIBUTES,
+                            }
+                        }
                     }
                 }
                 "
@@ -1153,9 +1334,37 @@ mod test {
                 r"
                 pub mod vertex {
                     impl super::VertexInput0 {
-                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
-                            0 => Uint32, 1 => Uint32x2, 2 => Uint32x3, 3 => Uint32x4
+                        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Uint32,
+                                offset: memoffset::offset_of!(super::VertexInput0, a) as u64,
+                                shader_location: 0,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Uint32x2,
+                                offset: memoffset::offset_of!(super::VertexInput0, b) as u64,
+                                shader_location: 1,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Uint32x3,
+                                offset: memoffset::offset_of!(super::VertexInput0, c) as u64,
+                                shader_location: 2,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Uint32x4,
+                                offset: memoffset::offset_of!(super::VertexInput0, d) as u64,
+                                shader_location: 3,
+                            },
                         ];
+                        pub fn vertex_buffer_layout(
+                            step_mode: wgpu::VertexStepMode,
+                        ) -> wgpu::VertexBufferLayout<'static> {
+                            wgpu::VertexBufferLayout {
+                                array_stride: std::mem::size_of::<super::VertexInput0>() as u64,
+                                step_mode,
+                                attributes: &super::VertexInput0::VERTEX_ATTRIBUTES,
+                            }
+                        }
                     }
                 }
                 "
