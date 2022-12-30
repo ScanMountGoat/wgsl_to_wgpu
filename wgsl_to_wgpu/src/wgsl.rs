@@ -1,20 +1,8 @@
-use crate::{CreateModuleError, MatrixVectorTypes};
+use crate::MatrixVectorTypes;
 use naga::StructMember;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use std::collections::BTreeMap;
 use syn::{Ident, Index};
-
-pub struct GroupData<'a> {
-    pub bindings: Vec<GroupBinding<'a>>,
-}
-
-pub struct GroupBinding<'a> {
-    pub name: Option<String>,
-    pub binding_index: u32,
-    pub binding_type: &'a naga::Type,
-    pub address_space: naga::AddressSpace,
-}
 
 // TODO: Improve error handling/error reporting.
 pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
@@ -240,50 +228,6 @@ fn array_length(size: &naga::ArraySize, module: &naga::Module) -> usize {
     }
 }
 
-pub fn get_bind_group_data(
-    module: &naga::Module,
-) -> Result<BTreeMap<u32, GroupData>, CreateModuleError> {
-    // Use a BTree to sort type and field names by group index.
-    // This isn't strictly necessary but makes the generated code cleaner.
-    let mut groups = BTreeMap::new();
-
-    for global_handle in module.global_variables.iter() {
-        let global = &module.global_variables[global_handle.0];
-        if let Some(binding) = &global.binding {
-            let group = groups.entry(binding.group).or_insert(GroupData {
-                bindings: Vec::new(),
-            });
-            let binding_type = &module.types[module.global_variables[global_handle.0].ty];
-
-            let group_binding = GroupBinding {
-                name: global.name.clone(),
-                binding_index: binding.binding,
-                binding_type,
-                address_space: global.space,
-            };
-            // Repeated bindings will probably cause a compile error.
-            // We'll still check for it here just in case.
-            if group
-                .bindings
-                .iter()
-                .any(|g| g.binding_index == binding.binding)
-            {
-                return Err(CreateModuleError::DuplicateBinding {
-                    binding: binding.binding,
-                });
-            }
-            group.bindings.push(group_binding);
-        }
-    }
-
-    // wgpu expects bind groups to be consecutive starting from 0.
-    if groups.keys().map(|i| *i as usize).eq(0..groups.len()) {
-        Ok(groups)
-    } else {
-        Err(CreateModuleError::NonConsecutiveBindGroups)
-    }
-}
-
 pub struct VertexInput {
     pub name: String,
     pub fields: Vec<(u32, StructMember)>,
@@ -334,7 +278,7 @@ pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -455,54 +399,5 @@ mod test {
         assert_eq!(4, vertex_inputs[1].fields.len());
         assert_eq!("in5", vertex_inputs[1].fields[2].1.name.as_ref().unwrap());
         assert_eq!(5, vertex_inputs[1].fields[2].0);
-    }
-
-    #[test]
-    fn bind_group_data_consecutive_bind_groups() {
-        let source = indoc! {r#"
-            @group(0) @binding(0) var<uniform> a: vec4<f32>;
-            @group(1) @binding(0) var<uniform> b: vec4<f32>;
-            @group(2) @binding(0) var<uniform> c: vec4<f32>;
-
-            @fragment
-            fn main() {}
-        "#};
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(3, get_bind_group_data(&module).unwrap().len());
-    }
-
-    #[test]
-    fn bind_group_data_first_group_not_zero() {
-        let source = indoc! {r#"
-            @group(1) @binding(0) var<uniform> a: vec4<f32>;
-
-            @fragment
-            fn main() {}
-        "#};
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert!(matches!(
-            get_bind_group_data(&module),
-            Err(CreateModuleError::NonConsecutiveBindGroups)
-        ));
-    }
-
-    #[test]
-    fn bind_group_data_non_consecutive_bind_groups() {
-        let source = indoc! {r#"
-            @group(0) @binding(0) var<uniform> a: vec4<f32>;
-            @group(1) @binding(0) var<uniform> b: vec4<f32>;
-            @group(3) @binding(0) var<uniform> c: vec4<f32>;
-
-            @fragment
-            fn main() {}
-        "#};
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert!(matches!(
-            get_bind_group_data(&module),
-            Err(CreateModuleError::NonConsecutiveBindGroups)
-        ));
     }
 }
