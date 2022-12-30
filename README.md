@@ -6,7 +6,7 @@ An experimental library for generating typesafe Rust bindings from WGSL shaders 
 The WGSL shaders are parsed using [naga](https://github.com/gfx-rs/naga) to generate corresponding types in Rust.
 The provided functions can be incorporated into the compilation process using a build script.
 This enables catching many instances of invalid API usage at compile time such as incorrectly configuring group and binding indices.
-The amount of boilerplate code needed to initialize data in WGSL shaders is greatly reduced since binding layouts and descriptor code is generated automatically.
+The amount of boilerplate code needed to initialize data in WGSL shaders is greatly reduced since binding layouts and descriptor code is generated automatically. The generated code currently relies on [memoffset](https://crates.io/crates/memoffset) for calculating field offsets for vertex input structs.
 
 See the example crate for how to use the generated code. Run the example with `cargo run`.
 
