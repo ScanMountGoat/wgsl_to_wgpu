@@ -325,11 +325,21 @@ fn struct_members(
         .collect()
 }
 
+// Tokenstreams can't be compared directly using PartialEq.
+// Use pretty_print to normalize the formatting and compare strings.
+// Use a colored diff output to make differences easier to see.
+#[cfg(test)]
+#[macro_export]
+macro_rules! assert_tokens_eq {
+    ($a:expr, $b:expr) => {
+        pretty_assertions::assert_eq!(crate::pretty_print($a), crate::pretty_print($b));
+    };
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use indoc::indoc;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn write_all_structs_rust() {
@@ -430,11 +440,10 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
         let structs = structs(&module, WriteOptions::default());
-        let actual = pretty_print(quote!(#(#structs)*));
+        let actual = quote!(#(#structs)*);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct Scalars {
@@ -537,7 +546,6 @@ mod test {
                     pub a: MatricesF32,
                     pub b: MatricesF64,
                 }
-                "
             },
             actual
         );
@@ -648,11 +656,10 @@ mod test {
                 ..Default::default()
             },
         );
-        let actual = pretty_print(quote!(#(#structs)*));
+        let actual = quote!(#(#structs)*);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct Scalars {
@@ -755,7 +762,6 @@ mod test {
                     pub a: MatricesF32,
                     pub b: MatricesF64,
                 }
-                "
             },
             actual
         );
@@ -784,11 +790,10 @@ mod test {
                 matrix_vector_types: MatrixVectorTypes::Rust,
             },
         );
-        let actual = pretty_print(quote!(#(#structs)*));
+        let actual = quote!(#(#structs)*);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 #[repr(C)]
                 #[derive(
                     Debug,
@@ -804,7 +809,6 @@ mod test {
                     pub b: i32,
                     pub c: f32,
                 }
-                "
             },
             actual
         );
@@ -840,11 +844,10 @@ mod test {
                 matrix_vector_types: MatrixVectorTypes::Rust,
             },
         );
-        let actual = pretty_print(quote!(#(#structs)*));
+        let actual = quote!(#(#structs)*);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct Input0 {
@@ -852,7 +855,6 @@ mod test {
                     pub b: i32,
                     pub c: f32,
                 }
-                "
             },
             actual
         );
@@ -923,9 +925,9 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(vertex_module(&module));
+        let actual = vertex_module(&module);
 
-        assert_eq!("", actual);
+        assert_tokens_eq!(quote!(), actual);
     }
 
     #[test]
@@ -943,11 +945,10 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(vertex_module(&module));
+        let actual = vertex_module(&module);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 pub mod vertex {
                     impl super::VertexInput0 {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
@@ -983,7 +984,6 @@ mod test {
                         }
                     }
                 }
-                "
             },
             actual
         );
@@ -1004,11 +1004,10 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(vertex_module(&module));
+        let actual = vertex_module(&module);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 pub mod vertex {
                     impl super::VertexInput0 {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
@@ -1044,7 +1043,6 @@ mod test {
                         }
                     }
                 }
-                "
             },
             actual
         );
@@ -1064,11 +1062,10 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(vertex_module(&module));
+        let actual = vertex_module(&module);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 pub mod vertex {
                     impl super::VertexInput0 {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
@@ -1094,7 +1091,6 @@ mod test {
                         }
                     }
                 }
-                "
             },
             actual
         );
@@ -1114,11 +1110,10 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(vertex_module(&module));
+        let actual = vertex_module(&module);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 pub mod vertex {
                     impl super::VertexInput0 {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
@@ -1144,7 +1139,6 @@ mod test {
                         }
                     }
                 }
-                "
             },
             actual
         );
@@ -1166,11 +1160,10 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(vertex_module(&module));
+        let actual = vertex_module(&module);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 pub mod vertex {
                     impl super::VertexInput0 {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
@@ -1206,7 +1199,6 @@ mod test {
                         }
                     }
                 }
-                "
             },
             actual
         );
@@ -1226,11 +1218,10 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(vertex_module(&module));
+        let actual = vertex_module(&module);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 pub mod vertex {
                     impl super::VertexInput0 {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
@@ -1256,7 +1247,6 @@ mod test {
                         }
                     }
                 }
-                "
             },
             actual
         );
@@ -1276,11 +1266,10 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(vertex_module(&module));
+        let actual = vertex_module(&module);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 pub mod vertex {
                     impl super::VertexInput0 {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
@@ -1306,7 +1295,6 @@ mod test {
                         }
                     }
                 }
-                "
             },
             actual
         );
@@ -1327,11 +1315,10 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(vertex_module(&module));
+        let actual = vertex_module(&module);
 
-        assert_eq!(
-            indoc! {
-                r"
+        assert_tokens_eq!(
+            quote! {
                 pub mod vertex {
                     impl super::VertexInput0 {
                         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
@@ -1367,7 +1354,6 @@ mod test {
                         }
                     }
                 }
-                "
             },
             actual
         );
@@ -1381,9 +1367,9 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(compute_module(&module));
+        let actual = compute_module(&module);
 
-        assert_eq!("", actual);
+        assert_tokens_eq!(quote!(), actual);
     }
 
     #[test]
@@ -1396,19 +1382,18 @@ mod test {
             @compute
             @workgroup_size(256)
             fn main2() {}
-        "#};
+        "#
+        };
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pretty_print(compute_module(&module));
+        let actual = compute_module(&module);
 
-        assert_eq!(
-            indoc! {
-            r"
-            pub mod compute {
-                pub const MAIN1_WORKGROUP_SIZE: [u32; 3] = [1, 2, 3];
-                pub const MAIN2_WORKGROUP_SIZE: [u32; 3] = [256, 1, 1];
-            }
-            "
+        assert_tokens_eq!(
+            quote! {
+                pub mod compute {
+                    pub const MAIN1_WORKGROUP_SIZE: [u32; 3] = [1, 2, 3];
+                    pub const MAIN2_WORKGROUP_SIZE: [u32; 3] = [256, 1, 1];
+                }
             },
             actual
         );

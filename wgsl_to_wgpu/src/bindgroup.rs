@@ -346,11 +346,9 @@ pub fn get_bind_group_data(
 
 #[cfg(test)]
 mod tests {
-    use crate::pretty_print;
-
     use super::*;
+    use crate::assert_tokens_eq;
     use indoc::indoc;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn bind_group_data_consecutive_bind_groups() {
@@ -423,14 +421,10 @@ mod tests {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = get_bind_group_data(&module).unwrap();
 
-        let actual = pretty_print(bind_groups_module(
-            &bind_group_data,
-            wgpu::ShaderStages::COMPUTE,
-        ));
+        let actual = bind_groups_module(&bind_group_data, wgpu::ShaderStages::COMPUTE);
 
-        assert_eq!(
-            indoc! {
-                r#"
+        assert_tokens_eq!(
+            quote! {
                 pub mod bind_groups {
                     pub struct BindGroup0(wgpu::BindGroup);
                     pub struct BindGroupLayout0<'a> {
@@ -570,7 +564,6 @@ mod tests {
                         bind_groups.bind_group1.set(pass);
                     }
                 }
-                "#
             },
             actual
         );
@@ -603,15 +596,11 @@ mod tests {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = get_bind_group_data(&module).unwrap();
 
-        let actual = pretty_print(bind_groups_module(
-            &bind_group_data,
-            wgpu::ShaderStages::VERTEX_FRAGMENT,
-        ));
+        let actual = bind_groups_module(&bind_group_data, wgpu::ShaderStages::VERTEX_FRAGMENT);
 
         // TODO: Are storage buffers valid for vertex/fragment?
-        assert_eq!(
-            indoc! {
-                r#"
+        assert_tokens_eq!(
+            quote! {
                 pub mod bind_groups {
                     pub struct BindGroup0(wgpu::BindGroup);
                     pub struct BindGroupLayout0<'a> {
@@ -760,7 +749,6 @@ mod tests {
                         bind_groups.bind_group1.set(pass);
                     }
                 }
-                "#
             },
             actual
         );
@@ -782,14 +770,10 @@ mod tests {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = get_bind_group_data(&module).unwrap();
 
-        let actual = pretty_print(bind_groups_module(
-            &bind_group_data,
-            wgpu::ShaderStages::VERTEX,
-        ));
+        let actual = bind_groups_module(&bind_group_data, wgpu::ShaderStages::VERTEX);
 
-        assert_eq!(
-            indoc! {
-                r#"
+        assert_tokens_eq!(
+            quote! {
                 pub mod bind_groups {
                     pub struct BindGroup0(wgpu::BindGroup);
                     pub struct BindGroupLayout0<'a> {
@@ -845,7 +829,6 @@ mod tests {
                         bind_groups.bind_group0.set(pass);
                     }
                 }
-                "#
             },
             actual
         );
@@ -867,14 +850,10 @@ mod tests {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = get_bind_group_data(&module).unwrap();
 
-        let actual = pretty_print(bind_groups_module(
-            &bind_group_data,
-            wgpu::ShaderStages::FRAGMENT,
-        ));
+        let actual = bind_groups_module(&bind_group_data, wgpu::ShaderStages::FRAGMENT);
 
-        assert_eq!(
-            indoc! {
-                r#"
+        assert_tokens_eq!(
+            quote! {
                 pub mod bind_groups {
                     pub struct BindGroup0(wgpu::BindGroup);
                     pub struct BindGroupLayout0<'a> {
@@ -930,7 +909,6 @@ mod tests {
                         bind_groups.bind_group0.set(pass);
                     }
                 }
-                "#
             },
             actual
         );
@@ -954,19 +932,17 @@ mod tests {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = get_bind_group_data(&module).unwrap();
 
-        let actual = pretty_print(set_bind_groups(&bind_group_data, false));
+        let actual = set_bind_groups(&bind_group_data, false);
 
-        assert_eq!(
-            indoc! {
-                r"
-            pub fn set_bind_groups<'a>(
-                pass: &mut wgpu::RenderPass<'a>,
-                bind_groups: BindGroups<'a>,
-            ) {
-                bind_groups.bind_group0.set(pass);
-                bind_groups.bind_group1.set(pass);
-            }
-            "
+        assert_tokens_eq!(
+            quote! {
+                pub fn set_bind_groups<'a>(
+                    pass: &mut wgpu::RenderPass<'a>,
+                    bind_groups: BindGroups<'a>,
+                ) {
+                    bind_groups.bind_group0.set(pass);
+                    bind_groups.bind_group1.set(pass);
+                }
             },
             actual
         );
@@ -988,20 +964,18 @@ mod tests {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let bind_group_data = get_bind_group_data(&module).unwrap();
 
-        let actual = pretty_print(set_bind_groups(&bind_group_data, true));
+        let actual = set_bind_groups(&bind_group_data, true);
 
         // The only change is that the function takes a ComputePass instead.
-        assert_eq!(
-            indoc! {
-                r"
-            pub fn set_bind_groups<'a>(
-                pass: &mut wgpu::ComputePass<'a>,
-                bind_groups: BindGroups<'a>,
-            ) {
-                bind_groups.bind_group0.set(pass);
-                bind_groups.bind_group1.set(pass);
-            }
-            "
+        assert_tokens_eq!(
+            quote! {
+                pub fn set_bind_groups<'a>(
+                    pass: &mut wgpu::ComputePass<'a>,
+                    bind_groups: BindGroups<'a>,
+                ) {
+                    bind_groups.bind_group0.set(pass);
+                    bind_groups.bind_group1.set(pass);
+                }
             },
             actual
         );
