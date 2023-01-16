@@ -58,6 +58,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
         naga::TypeInner::Vector { size, kind, width } => match format {
             MatrixVectorTypes::Rust => rust_vector_type(*size, *kind, *width),
             MatrixVectorTypes::Glam => glam_vector_type(*size, *kind, *width),
+            MatrixVectorTypes::Nalgebra => nalgebra_vector_type(*size, *kind, *width),
         },
         naga::TypeInner::Matrix {
             columns,
@@ -66,6 +67,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
         } => match format {
             MatrixVectorTypes::Rust => rust_matrix_type(rows, columns, width),
             MatrixVectorTypes::Glam => glam_matrix_type(rows, columns, width),
+            MatrixVectorTypes::Nalgebra => nalgebra_matrix_type(rows, columns, width),
         },
         naga::TypeInner::Image { .. } => todo!(),
         naga::TypeInner::Sampler { .. } => todo!(),
@@ -140,6 +142,17 @@ fn glam_matrix_type(
     }
 }
 
+fn nalgebra_matrix_type(
+    rows: &naga::VectorSize,
+    columns: &naga::VectorSize,
+    width: &u8,
+) -> TokenStream {
+    let inner_type = rust_scalar_type(naga::ScalarKind::Float, *width);
+    let rows = Index::from(*rows as usize);
+    let columns = Index::from(*columns as usize);
+    quote!(nalgebra::SMatrix<#inner_type, #rows, #columns>)
+}
+
 fn rust_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -> TokenStream {
     let inner_type = rust_scalar_type(kind, width);
     match size {
@@ -166,6 +179,12 @@ fn glam_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -
         (naga::VectorSize::Quad, naga::ScalarKind::Sint, 4) => quote!(glam::IVec4),
         _ => rust_vector_type(size, kind, width),
     }
+}
+
+fn nalgebra_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -> TokenStream {
+    let inner_type = rust_scalar_type(kind, width);
+    let size = Index::from(size as usize);
+    quote!(nalgebra::SVector<#inner_type, #size>)
 }
 
 pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
