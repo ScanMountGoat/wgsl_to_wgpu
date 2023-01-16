@@ -65,9 +65,9 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             rows,
             width,
         } => match format {
-            MatrixVectorTypes::Rust => rust_matrix_type(rows, columns, width),
-            MatrixVectorTypes::Glam => glam_matrix_type(rows, columns, width),
-            MatrixVectorTypes::Nalgebra => nalgebra_matrix_type(rows, columns, width),
+            MatrixVectorTypes::Rust => rust_matrix_type(*rows, *columns, *width),
+            MatrixVectorTypes::Glam => glam_matrix_type(*rows, *columns, *width),
+            MatrixVectorTypes::Nalgebra => nalgebra_matrix_type(*rows, *columns, *width),
         },
         naga::TypeInner::Image { .. } => todo!(),
         naga::TypeInner::Sampler { .. } => todo!(),
@@ -101,11 +101,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
     }
 }
 
-fn rust_matrix_type(
-    rows: &naga::VectorSize,
-    columns: &naga::VectorSize,
-    width: &u8,
-) -> TokenStream {
+fn rust_matrix_type(rows: naga::VectorSize, columns: naga::VectorSize, width: u8) -> TokenStream {
     // Use Index to generate "4" instead of "4usize".
     let c = match columns {
         naga::VectorSize::Bi => Index::from(2),
@@ -124,11 +120,7 @@ fn rust_matrix_type(
     }
 }
 
-fn glam_matrix_type(
-    rows: &naga::VectorSize,
-    columns: &naga::VectorSize,
-    width: &u8,
-) -> TokenStream {
+fn glam_matrix_type(rows: naga::VectorSize, columns: naga::VectorSize, width: u8) -> TokenStream {
     // glam only supports square matrices for some types.
     // Use Rust types for unsupported matrices.
     match (rows, columns, width) {
@@ -143,13 +135,13 @@ fn glam_matrix_type(
 }
 
 fn nalgebra_matrix_type(
-    rows: &naga::VectorSize,
-    columns: &naga::VectorSize,
-    width: &u8,
+    rows: naga::VectorSize,
+    columns: naga::VectorSize,
+    width: u8,
 ) -> TokenStream {
-    let inner_type = rust_scalar_type(naga::ScalarKind::Float, *width);
-    let rows = Index::from(*rows as usize);
-    let columns = Index::from(*columns as usize);
+    let inner_type = rust_scalar_type(naga::ScalarKind::Float, width);
+    let rows = Index::from(rows as usize);
+    let columns = Index::from(columns as usize);
     quote!(nalgebra::SMatrix<#inner_type, #rows, #columns>)
 }
 
