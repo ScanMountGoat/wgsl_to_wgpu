@@ -66,6 +66,9 @@ pub enum MatrixVectorTypes {
     /// `glam` types like `glam::Vec4` or `glam::Mat4`.
     /// Types not representable by `glam` like `mat2x3<f32>` will use the output from [MatrixVectorTypes::Rust].
     Glam,
+
+    /// `nalgebra` types like `nalgebra::SVector<f64, 4>` or `nalgebra::SMatrix<f32, 2, 3>`.
+    Nalgebra,
 }
 
 impl Default for MatrixVectorTypes {
@@ -755,6 +758,222 @@ mod test {
                     pub a: [u32; 5],
                     pub b: [f32; 3],
                     pub c: [glam::Mat4; 512],
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct Nested {
+                    pub a: MatricesF32,
+                    pub b: MatricesF64,
+                }
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_all_structs_nalgebra() {
+        let source = indoc! {r#"
+            struct Scalars {
+                a: u32,
+                b: i32,
+                c: f32,
+            };
+
+            struct VectorsU8 {
+                a: vec2<u8>,
+                b: vec3<u8>,
+                c: vec4<u8>,
+            };
+
+            struct VectorsU16 {
+                a: vec2<u16>,
+                b: vec3<u16>,
+                c: vec4<u16>,
+            };
+
+            struct VectorsU32 {
+                a: vec2<u32>,
+                b: vec3<u32>,
+                c: vec4<u32>,
+            };
+
+            struct VectorsI8 {
+                a: vec2<i8>,
+                b: vec3<i8>,
+                c: vec4<i8>,
+            };
+
+            struct VectorsI16 {
+                a: vec2<i16>,
+                b: vec3<i16>,
+                c: vec4<i16>,
+            };
+
+            struct VectorsI32 {
+                a: vec2<i32>,
+                b: vec3<i32>,
+                c: vec4<i32>,
+            };
+
+            struct VectorsF32 {
+                a: vec2<f32>,
+                b: vec3<f32>,
+                c: vec4<f32>,
+            };
+
+            struct VectorsF64 {
+                a: vec2<f64>,
+                b: vec3<f64>,
+                c: vec4<f64>,
+            };
+
+            struct MatricesF32 {
+                a: mat4x4<f32>,
+                b: mat4x3<f32>,
+                c: mat4x2<f32>,
+                d: mat3x4<f32>,
+                e: mat3x3<f32>,
+                f: mat3x2<f32>,
+                g: mat2x4<f32>,
+                h: mat2x3<f32>,
+                i: mat2x2<f32>,
+            };
+
+            struct MatricesF64 {
+                a: mat4x4<f64>,
+                b: mat4x3<f64>,
+                c: mat4x2<f64>,
+                d: mat3x4<f64>,
+                e: mat3x3<f64>,
+                f: mat3x2<f64>,
+                g: mat2x4<f64>,
+                h: mat2x3<f64>,
+                i: mat2x2<f64>,
+            };
+
+            struct StaticArrays {
+                a: array<u32, 5>,
+                b: array<f32, 3>,
+                c: array<mat4x4<f32>, 512>,
+            };
+
+            struct Nested {
+                a: MatricesF32,
+                b: MatricesF64
+            }
+
+            @fragment
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let structs = structs(
+            &module,
+            WriteOptions {
+                matrix_vector_types: MatrixVectorTypes::Nalgebra,
+                ..Default::default()
+            },
+        );
+        let actual = quote!(#(#structs)*);
+
+        assert_tokens_eq!(
+            quote! {
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct Scalars {
+                    pub a: u32,
+                    pub b: i32,
+                    pub c: f32,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsU8 {
+                    pub a: nalgebra::SVector<u8, 2>,
+                    pub b: nalgebra::SVector<u8, 3>,
+                    pub c: nalgebra::SVector<u8, 4>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsU16 {
+                    pub a: nalgebra::SVector<u16, 2>,
+                    pub b: nalgebra::SVector<u16, 3>,
+                    pub c: nalgebra::SVector<u16, 4>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsU32 {
+                    pub a: nalgebra::SVector<u32, 2>,
+                    pub b: nalgebra::SVector<u32, 3>,
+                    pub c: nalgebra::SVector<u32, 4>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsI8 {
+                    pub a: nalgebra::SVector<i8, 2>,
+                    pub b: nalgebra::SVector<i8, 3>,
+                    pub c: nalgebra::SVector<i8, 4>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsI16 {
+                    pub a: nalgebra::SVector<i16, 2>,
+                    pub b: nalgebra::SVector<i16, 3>,
+                    pub c: nalgebra::SVector<i16, 4>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsI32 {
+                    pub a: nalgebra::SVector<i32, 2>,
+                    pub b: nalgebra::SVector<i32, 3>,
+                    pub c: nalgebra::SVector<i32, 4>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsF32 {
+                    pub a: nalgebra::SVector<f32, 2>,
+                    pub b: nalgebra::SVector<f32, 3>,
+                    pub c: nalgebra::SVector<f32, 4>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct VectorsF64 {
+                    pub a: nalgebra::SVector<f64, 2>,
+                    pub b: nalgebra::SVector<f64, 3>,
+                    pub c: nalgebra::SVector<f64, 4>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct MatricesF32 {
+                    pub a: nalgebra::SMatrix<f32, 4, 4>,
+                    pub b: nalgebra::SMatrix<f32, 3, 4>,
+                    pub c: nalgebra::SMatrix<f32, 2, 4>,
+                    pub d: nalgebra::SMatrix<f32, 4, 3>,
+                    pub e: nalgebra::SMatrix<f32, 3, 3>,
+                    pub f: nalgebra::SMatrix<f32, 2, 3>,
+                    pub g: nalgebra::SMatrix<f32, 4, 2>,
+                    pub h: nalgebra::SMatrix<f32, 3, 2>,
+                    pub i: nalgebra::SMatrix<f32, 2, 2>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct MatricesF64 {
+                    pub a: nalgebra::SMatrix<f64, 4, 4>,
+                    pub b: nalgebra::SMatrix<f64, 3, 4>,
+                    pub c: nalgebra::SMatrix<f64, 2, 4>,
+                    pub d: nalgebra::SMatrix<f64, 4, 3>,
+                    pub e: nalgebra::SMatrix<f64, 3, 3>,
+                    pub f: nalgebra::SMatrix<f64, 2, 3>,
+                    pub g: nalgebra::SMatrix<f64, 4, 2>,
+                    pub h: nalgebra::SMatrix<f64, 3, 2>,
+                    pub i: nalgebra::SMatrix<f64, 2, 2>,
+                }
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq)]
+                pub struct StaticArrays {
+                    pub a: [u32; 5],
+                    pub b: [f32; 3],
+                    pub c: [nalgebra::SMatrix<f32, 4, 4>; 512],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
