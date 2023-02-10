@@ -19,6 +19,7 @@ struct State {
     config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
     bind_group0: crate::shader::bind_groups::BindGroup0,
+    bind_group1: crate::shader::bind_groups::BindGroup1,
 }
 
 impl State {
@@ -136,6 +137,21 @@ impl State {
             },
         );
 
+        let uniforms_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("uniforms"),
+            contents: bytemuck::cast_slice(&[crate::shader::Uniforms {
+                color_rgb: [1.0, 1.0, 1.0, 1.0],
+            }]),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        let bind_group1 = crate::shader::bind_groups::BindGroup1::from_bindings(
+            &device,
+            crate::shader::bind_groups::BindGroupLayout1 {
+                uniforms: uniforms_buffer.as_entire_buffer_binding(),
+            },
+        );
+
         Self {
             surface,
             device,
@@ -144,6 +160,7 @@ impl State {
             config,
             pipeline,
             bind_group0,
+            bind_group1,
         }
     }
 
@@ -188,6 +205,7 @@ impl State {
             &mut render_pass,
             crate::shader::bind_groups::BindGroups {
                 bind_group0: &self.bind_group0,
+                bind_group1: &self.bind_group1,
             },
         );
 
