@@ -4,17 +4,16 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Index};
 
-// TODO: Improve error handling/error reporting.
 pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
-    let mut shader_stages = wgpu::ShaderStages::NONE;
-    for entry in &module.entry_points {
-        match entry.stage {
-            naga::ShaderStage::Vertex => shader_stages.insert(wgpu::ShaderStages::VERTEX),
-            naga::ShaderStage::Fragment => shader_stages.insert(wgpu::ShaderStages::FRAGMENT),
-            naga::ShaderStage::Compute => shader_stages.insert(wgpu::ShaderStages::COMPUTE),
-        }
-    }
-    shader_stages
+    module
+        .entry_points
+        .iter()
+        .map(|entry| match entry.stage {
+            naga::ShaderStage::Vertex => wgpu::ShaderStages::VERTEX,
+            naga::ShaderStage::Fragment => wgpu::ShaderStages::FRAGMENT,
+            naga::ShaderStage::Compute => wgpu::ShaderStages::COMPUTE,
+        })
+        .collect()
 }
 
 fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> TokenStream {
@@ -141,7 +140,6 @@ fn rust_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -
 }
 
 fn glam_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -> TokenStream {
-    // Use Rust types for unsupported types.
     match (size, kind, width) {
         (naga::VectorSize::Bi, naga::ScalarKind::Float, 4) => quote!(glam::Vec2),
         (naga::VectorSize::Tri, naga::ScalarKind::Float, 4) => quote!(glam::Vec3),
@@ -155,6 +153,7 @@ fn glam_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -
         (naga::VectorSize::Bi, naga::ScalarKind::Sint, 4) => quote!(glam::IVec2),
         (naga::VectorSize::Tri, naga::ScalarKind::Sint, 4) => quote!(glam::IVec3),
         (naga::VectorSize::Quad, naga::ScalarKind::Sint, 4) => quote!(glam::IVec4),
+        // Use Rust types for unsupported types.
         _ => rust_vector_type(size, kind, width),
     }
 }
