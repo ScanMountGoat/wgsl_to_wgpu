@@ -13,10 +13,10 @@ Add the following lines to the `Cargo.toml` and fill in the appropriate versions
 
 ```toml
 [dependencies]
-memoffset = ...
+memoffset = "..."
 
 [build-dependencies]
-wgsl_to_wgpu = ...
+wgsl_to_wgpu = "..."
 ```
 
 See the example crate for how to use the generated code. Run the example with `cargo run`.
