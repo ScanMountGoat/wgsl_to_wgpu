@@ -35,7 +35,7 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
 
                         let wgsl_offset = Index::from(m.offset as usize);
 
-                        let assert_text = format!("assert_{}_{}_offset_matches_WGSL", t.name.as_ref().unwrap(), m.name.as_ref().unwrap());
+                        let assert_text = format!("offset of {}.{} does not match WGSL", t.name.as_ref().unwrap(), m.name.as_ref().unwrap());
                         quote! {
                             const _: () = assert!(#rust_offset == #wgsl_offset, #assert_text);
                         }
@@ -46,7 +46,7 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
 
                 // TODO: Does the Rust alignment matter if it's copied to a buffer anyway?
                 let struct_size = Index::from(layout.size as usize);
-                let assert_size_text = format!("assert_{}_size_matches_WGSL", t.name.as_ref().unwrap());
+                let assert_size_text = format!("size of {} does not match WGSL", t.name.as_ref().unwrap());
                 let assert_size = quote! {
                     const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
                 };
@@ -806,16 +806,16 @@ mod tests {
                     pub c: f32,
                 }
                 const _: () = assert!(
-                    std::mem::size_of:: < Input0 > () == 12, "assert_Input0_size_matches_WGSL"
+                    std::mem::size_of:: < Input0 > () == 12, "size of Input0 does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, a) == 0, "assert_Input0_a_offset_matches_WGSL"
+                    memoffset::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, b) == 4, "assert_Input0_b_offset_matches_WGSL"
+                    memoffset::offset_of!(Input0, b) == 4, "offset of Input0.b does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, c) == 8, "assert_Input0_c_offset_matches_WGSL"
+                    memoffset::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
                 );
                 #[repr(C)]
                 #[derive(
@@ -832,13 +832,13 @@ mod tests {
                     pub b: f32,
                 }
                 const _: () = assert!(
-                    std::mem::size_of:: < Nested > () == 16, "assert_Nested_size_matches_WGSL"
+                    std::mem::size_of:: < Nested > () == 16, "size of Nested does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Nested, a) == 0, "assert_Nested_a_offset_matches_WGSL"
+                    memoffset::offset_of!(Nested, a) == 0, "offset of Nested.a does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Nested, b) == 12, "assert_Nested_b_offset_matches_WGSL"
+                    memoffset::offset_of!(Nested, b) == 12, "offset of Nested.b does not match WGSL"
                 );
             },
             actual
