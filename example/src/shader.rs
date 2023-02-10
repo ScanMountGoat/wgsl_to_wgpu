@@ -5,6 +5,13 @@
 pub struct Uniforms {
     pub color_rgb: [f32; 4],
 }
+const _: () = assert!(
+    std::mem::size_of:: < Uniforms > () == 16, "assert_Uniforms_size_matches_WGSL"
+);
+const _: () = assert!(
+    memoffset::offset_of!(Uniforms, color_rgb) == 0,
+    "assert_Uniforms_color_rgb_offset_matches_WGSL"
+);
 pub mod bind_groups {
     pub struct BindGroup0(wgpu::BindGroup);
     pub struct BindGroupLayout0<'a> {

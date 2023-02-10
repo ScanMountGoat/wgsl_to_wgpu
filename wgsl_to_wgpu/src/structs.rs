@@ -1,10 +1,14 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::Ident;
+use syn::{Ident, Index};
 
 use crate::{wgsl::rust_type, MatrixVectorTypes, WriteOptions};
 
 pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream> {
+    // Initialize the layout calculator provided by naga.
+    let mut layouter = naga::proc::Layouter::default();
+    layouter.update(&module.types, &module.constants).unwrap();
+
     // Create matching Rust structs for WGSL structs.
     // This is a UniqueArena, so each struct will only be generated once.
     module
@@ -13,15 +17,40 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
         .filter(|(h, _)| {
             // Shader stage outputs don't need to be instantiated by the user.
             // Many builtin outputs also don't satisfy alignment requirements.
-            // Skipping these structs avoids issues deriving encase or bytemuck.
+            // Skipping these structs helps avoid issues deriving encase or bytemuck.
             !module
                 .entry_points
                 .iter()
                 .any(|e| e.function.result.as_ref().map(|r| r.ty) == Some(*h))
         })
-        .filter_map(|(_, t)| {
+        .filter_map(|(t_handle, t)| {
             if let naga::TypeInner::Struct { members, .. } = &t.inner {
-                let name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
+                let struct_name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
+
+                let assert_member_offsets: Vec<_> = members
+                    .iter()
+                    .map(|m| {
+                        let name = Ident::new(&m.name.as_ref().unwrap(), Span::call_site());
+                        let rust_offset = quote!(memoffset::offset_of!(#struct_name, #name));
+
+                        let wgsl_offset = Index::from(m.offset as usize);
+
+                        let assert_text = format!("assert_{}_{}_offset_matches_WGSL", t.name.as_ref().unwrap(), m.name.as_ref().unwrap());
+                        quote! {
+                            const _: () = assert!(#rust_offset == #wgsl_offset, #assert_text);
+                        }
+                    })
+                    .collect();
+
+                let layout = layouter[t_handle];
+
+                // TODO: Does the Rust alignment matter if it's copied to a buffer anyway?
+                let struct_size = Index::from(layout.size as usize);
+                let assert_size_text = format!("assert_{}_size_matches_WGSL", t.name.as_ref().unwrap());
+                let assert_size = quote! {
+                    const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
+                };
+
                 let members = struct_members(members, module, options.matrix_vector_types);
                 let mut derives = vec![
                     quote!(Debug),
@@ -36,12 +65,27 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
                 if options.derive_encase {
                     derives.push(quote!(encase::ShaderType));
                 }
+
+                let assert_layout = if options.derive_bytemuck {
+                    // Assert that the Rust layout matches the WGSL layout.
+                    // Enable for bytemuck since it uses the Rust struct's memory layout.
+                    // TODO: This isn't necessary for vertex input structs?
+                    // TODO: Add an option to still validate vertex inputs for storage buffer compatibility.
+                    quote!{
+                        #assert_size
+                        #(#assert_member_offsets)*
+                    }
+                } else {
+                    quote!()
+                };
+
                 Some(quote! {
                     #[repr(C)]
                     #[derive(#(#derives),*)]
-                    pub struct #name {
+                    pub struct #struct_name {
                         #(#members),*
                     }
+                    #assert_layout
                 })
             } else {
                 None
@@ -723,6 +767,11 @@ mod tests {
                 c: f32,
             };
 
+            struct Nested {
+                a: Input0,
+                b: f32
+            }
+
             @fragment
             fn main() {}
         "#};
@@ -756,6 +805,41 @@ mod tests {
                     pub b: i32,
                     pub c: f32,
                 }
+                const _: () = assert!(
+                    std::mem::size_of:: < Input0 > () == 12, "assert_Input0_size_matches_WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Input0, a) == 0, "assert_Input0_a_offset_matches_WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Input0, b) == 4, "assert_Input0_b_offset_matches_WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Input0, c) == 8, "assert_Input0_c_offset_matches_WGSL"
+                );
+                #[repr(C)]
+                #[derive(
+                    Debug,
+                    Copy,
+                    Clone,
+                    PartialEq,
+                    bytemuck::Pod,
+                    bytemuck::Zeroable,
+                    encase::ShaderType
+                )]
+                pub struct Nested {
+                    pub a: Input0,
+                    pub b: f32,
+                }
+                const _: () = assert!(
+                    std::mem::size_of:: < Nested > () == 16, "assert_Nested_size_matches_WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Nested, a) == 0, "assert_Nested_a_offset_matches_WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Nested, b) == 12, "assert_Nested_b_offset_matches_WGSL"
+                );
             },
             actual
         );

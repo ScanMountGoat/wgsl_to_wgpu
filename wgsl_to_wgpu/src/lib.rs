@@ -23,8 +23,8 @@ use syn::{Ident, Index};
 use thiserror::Error;
 
 mod bindgroup;
-mod wgsl;
 mod structs;
+mod wgsl;
 
 /// Errors while generating Rust source for a WGSl shader module.
 #[derive(Debug, PartialEq, Eq, Error)]
@@ -157,10 +157,10 @@ pub fn create_shader_module(
 
         #create_pipeline_layout
     };
-    Ok(pretty_print(output))
+    Ok(pretty_print(&output))
 }
 
-fn pretty_print(tokens: TokenStream) -> String {
+fn pretty_print(tokens: &TokenStream) -> String {
     let file = syn::parse_file(&tokens.to_string()).unwrap();
     prettyplease::unparse(&file)
 }
@@ -275,7 +275,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
 #[macro_export]
 macro_rules! assert_tokens_eq {
     ($a:expr, $b:expr) => {
-        pretty_assertions::assert_eq!(crate::pretty_print($a), crate::pretty_print($b));
+        pretty_assertions::assert_eq!(crate::pretty_print(&$a), crate::pretty_print(&$b));
     };
 }
 
