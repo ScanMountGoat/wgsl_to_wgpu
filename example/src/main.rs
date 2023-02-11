@@ -24,8 +24,11 @@ struct State {
 
 impl State {
     async fn new(window: &Window) -> Self {
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
-        let surface = unsafe { instance.create_surface(window) };
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
+        let surface = unsafe { instance.create_surface(window).unwrap() };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -48,7 +51,8 @@ impl State {
             .unwrap();
 
         let size = window.inner_size();
-        let surface_format = surface.get_supported_formats(&adapter)[0];
+        let caps = surface.get_capabilities(&adapter);
+        let surface_format = caps.formats[0];
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -56,6 +60,7 @@ impl State {
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: Vec::new(),
         };
         surface.configure(&device, &config);
 
@@ -97,6 +102,7 @@ impl State {
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8Unorm,
                 usage: wgpu::TextureUsages::all(),
+                view_formats: &[],
             },
             &vec![
                 [0, 0, 255, 255],

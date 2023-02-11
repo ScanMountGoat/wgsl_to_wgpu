@@ -125,34 +125,10 @@ mod tests {
                 c: f32,
             };
 
-            struct VectorsU8 {
-                a: vec2<u8>,
-                b: vec3<u8>,
-                c: vec4<u8>,
-            };
-
-            struct VectorsU16 {
-                a: vec2<u16>,
-                b: vec3<u16>,
-                c: vec4<u16>,
-            };
-
             struct VectorsU32 {
                 a: vec2<u32>,
                 b: vec3<u32>,
                 c: vec4<u32>,
-            };
-
-            struct VectorsI8 {
-                a: vec2<i8>,
-                b: vec3<i8>,
-                c: vec4<i8>,
-            };
-
-            struct VectorsI16 {
-                a: vec2<i16>,
-                b: vec3<i16>,
-                c: vec4<i16>,
             };
 
             struct VectorsI32 {
@@ -228,38 +204,10 @@ mod tests {
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsU8 {
-                    pub a: [u8; 2],
-                    pub b: [u8; 3],
-                    pub c: [u8; 4],
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsU16 {
-                    pub a: [u16; 2],
-                    pub b: [u16; 3],
-                    pub c: [u16; 4],
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsU32 {
                     pub a: [u32; 2],
                     pub b: [u32; 3],
                     pub c: [u32; 4],
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsI8 {
-                    pub a: [i8; 2],
-                    pub b: [i8; 3],
-                    pub c: [i8; 4],
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsI16 {
-                    pub a: [i16; 2],
-                    pub b: [i16; 3],
-                    pub c: [i16; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -335,34 +283,10 @@ mod tests {
                 c: f32,
             };
 
-            struct VectorsU8 {
-                a: vec2<u8>,
-                b: vec3<u8>,
-                c: vec4<u8>,
-            };
-
-            struct VectorsU16 {
-                a: vec2<u16>,
-                b: vec3<u16>,
-                c: vec4<u16>,
-            };
-
             struct VectorsU32 {
                 a: vec2<u32>,
                 b: vec3<u32>,
                 c: vec4<u32>,
-            };
-
-            struct VectorsI8 {
-                a: vec2<i8>,
-                b: vec3<i8>,
-                c: vec4<i8>,
-            };
-
-            struct VectorsI16 {
-                a: vec2<i16>,
-                b: vec3<i16>,
-                c: vec4<i16>,
             };
 
             struct VectorsI32 {
@@ -444,38 +368,10 @@ mod tests {
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsU8 {
-                    pub a: [u8; 2],
-                    pub b: [u8; 3],
-                    pub c: [u8; 4],
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsU16 {
-                    pub a: [u16; 2],
-                    pub b: [u16; 3],
-                    pub c: [u16; 4],
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsU32 {
                     pub a: glam::UVec2,
                     pub b: glam::UVec3,
                     pub c: glam::UVec4,
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsI8 {
-                    pub a: [i8; 2],
-                    pub b: [i8; 3],
-                    pub c: [i8; 4],
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsI16 {
-                    pub a: [i16; 2],
-                    pub b: [i16; 3],
-                    pub c: [i16; 4],
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -551,34 +447,10 @@ mod tests {
                 c: f32,
             };
 
-            struct VectorsU8 {
-                a: vec2<u8>,
-                b: vec3<u8>,
-                c: vec4<u8>,
-            };
-
-            struct VectorsU16 {
-                a: vec2<u16>,
-                b: vec3<u16>,
-                c: vec4<u16>,
-            };
-
             struct VectorsU32 {
                 a: vec2<u32>,
                 b: vec3<u32>,
                 c: vec4<u32>,
-            };
-
-            struct VectorsI8 {
-                a: vec2<i8>,
-                b: vec3<i8>,
-                c: vec4<i8>,
-            };
-
-            struct VectorsI16 {
-                a: vec2<i16>,
-                b: vec3<i16>,
-                c: vec4<i16>,
             };
 
             struct VectorsI32 {
@@ -660,38 +532,10 @@ mod tests {
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsU8 {
-                    pub a: nalgebra::SVector<u8, 2>,
-                    pub b: nalgebra::SVector<u8, 3>,
-                    pub c: nalgebra::SVector<u8, 4>,
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsU16 {
-                    pub a: nalgebra::SVector<u16, 2>,
-                    pub b: nalgebra::SVector<u16, 3>,
-                    pub c: nalgebra::SVector<u16, 4>,
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
                 pub struct VectorsU32 {
                     pub a: nalgebra::SVector<u32, 2>,
                     pub b: nalgebra::SVector<u32, 3>,
                     pub c: nalgebra::SVector<u32, 4>,
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsI8 {
-                    pub a: nalgebra::SVector<i8, 2>,
-                    pub b: nalgebra::SVector<i8, 3>,
-                    pub c: nalgebra::SVector<i8, 4>,
-                }
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct VectorsI16 {
-                    pub a: nalgebra::SVector<i16, 2>,
-                    pub b: nalgebra::SVector<i16, 3>,
-                    pub c: nalgebra::SVector<i16, 4>,
                 }
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq)]

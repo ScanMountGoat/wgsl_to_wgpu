@@ -4,10 +4,10 @@ version = "0.3.1"
 edition = "2021"
 
 [dependencies]
-winit = "0.27"
-wgpu = "0.14.0"
+winit = "0.28.1"
+wgpu = "0.15.0"
 futures = "0.3"
-bytemuck = { version = "1.7", features = [ "derive" ] }
+bytemuck = { version = "1.13", features = [ "derive" ] }
 memoffset = "0.8.0"
 
 [build-dependencies]
