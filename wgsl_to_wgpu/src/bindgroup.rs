@@ -187,22 +187,35 @@ fn bind_group_layout_entry(
                 naga::ImageDimension::Cube => quote!(wgpu::TextureViewDimension::Cube),
             };
 
-            let sample_type = match class {
+            match class {
                 naga::ImageClass::Sampled { kind: _, multi: _ } => {
-                    quote!(wgpu::TextureSampleType::Float { filterable: true })
+                    // TODO: Don't assume all textures are filterable.
+                    quote!(wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: #view_dim,
+                        multisampled: false,
+                    })
                 }
-                naga::ImageClass::Depth { multi: _ } => quote!(wgpu::TextureSampleType::Depth),
-                naga::ImageClass::Storage {
-                    format: _,
-                    access: _,
-                } => todo!(),
-            };
+                naga::ImageClass::Depth { multi: _ } => {
+                    quote!(wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: #view_dim,
+                        multisampled: false,
+                    })
+                }
+                naga::ImageClass::Storage { format, access } => {
+                    // TODO: Will the debug implementation always work with the macro?
+                    // Assume texture format variants are the same as storage formats.
+                    let format = syn::Ident::new(&format!("{:?}", format), Span::call_site());
+                    let storage_access = storage_access(access);
 
-            quote!(wgpu::BindingType::Texture {
-                multisampled: false,
-                view_dimension: #view_dim,
-                sample_type: #sample_type,
-            })
+                    quote!(wgpu::BindingType::StorageTexture {
+                        access: #storage_access,
+                        format: wgpu::TextureFormat::#format,
+                        view_dimension: #view_dim,
+                    })
+                }
+            }
         }
         naga::TypeInner::Sampler { comparison } => {
             let sampler_type = if comparison {
@@ -223,6 +236,17 @@ fn bind_group_layout_entry(
             ty: #binding_type,
             count: None,
         }
+    }
+}
+
+fn storage_access(access: naga::StorageAccess) -> TokenStream {
+    let is_read = access.contains(naga::StorageAccess::LOAD);
+    let is_write = access.contains(naga::StorageAccess::STORE);
+    match (is_read, is_write) {
+        (true, true) => quote!(wgpu::StorageTextureAccess::ReadWrite),
+        (true, false) => quote!(wgpu::StorageTextureAccess::ReadOnly),
+        (false, true) => quote!(wgpu::StorageTextureAccess::WriteOnly),
+        _ => todo!(), // shouldn't be possible
     }
 }
 
@@ -572,6 +596,7 @@ mod tests {
     #[test]
     fn bind_groups_module_vertex_fragment() {
         // Test different texture and sampler types.
+        // TODO: Storage textures.
         let source = indoc! {r#"
             struct Transforms {};
 
@@ -583,6 +608,13 @@ mod tests {
             var depth_texture: texture_depth_2d;
             @group(0) @binding(3)
             var comparison_sampler: sampler_comparison;
+
+            @group(0) @binding(4)
+            var storage_tex_read: texture_storage_2d<r32float, read>;
+            @group(0) @binding(5)
+            var storage_tex_write: texture_storage_2d<rg32sint, write>;
+            @group(0) @binding(6)
+            var storage_tex_read_write: texture_storage_2d<rgba8uint, read_write>;
 
             @group(1) @binding(0) var<uniform> transforms: Transforms;
 
@@ -608,6 +640,9 @@ mod tests {
                         pub color_sampler: &'a wgpu::Sampler,
                         pub depth_texture: &'a wgpu::TextureView,
                         pub comparison_sampler: &'a wgpu::Sampler,
+                        pub storage_tex_read: &'a wgpu::TextureView,
+                        pub storage_tex_write: &'a wgpu::TextureView,
+                        pub storage_tex_read_write: &'a wgpu::TextureView,
                     }
                     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                         label: None,
@@ -616,11 +651,11 @@ mod tests {
                                 binding: 0,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::Texture {
-                                    multisampled: false,
-                                    view_dimension: wgpu::TextureViewDimension::D2,
                                     sample_type: wgpu::TextureSampleType::Float {
                                         filterable: true,
                                     },
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    multisampled: false,
                                 },
                                 count: None,
                             },
@@ -634,9 +669,9 @@ mod tests {
                                 binding: 2,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::Texture {
-                                    multisampled: false,
-                                    view_dimension: wgpu::TextureViewDimension::D2,
                                     sample_type: wgpu::TextureSampleType::Depth,
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    multisampled: false,
                                 },
                                 count: None,
                             },
@@ -644,6 +679,36 @@ mod tests {
                                 binding: 3,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 4,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::StorageTexture {
+                                    access: wgpu::StorageTextureAccess::ReadOnly,
+                                    format: wgpu::TextureFormat::R32Float,
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 5,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::StorageTexture {
+                                    access: wgpu::StorageTextureAccess::WriteOnly,
+                                    format: wgpu::TextureFormat::Rg32Sint,
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 6,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::StorageTexture {
+                                    access: wgpu::StorageTextureAccess::ReadWrite,
+                                    format: wgpu::TextureFormat::Rgba8Uint,
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                },
                                 count: None,
                             },
                         ],
@@ -681,6 +746,24 @@ mod tests {
                                                 binding: 3,
                                                 resource: wgpu::BindingResource::Sampler(
                                                     bindings.comparison_sampler,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 4,
+                                                resource: wgpu::BindingResource::TextureView(
+                                                    bindings.storage_tex_read,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 5,
+                                                resource: wgpu::BindingResource::TextureView(
+                                                    bindings.storage_tex_write,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 6,
+                                                resource: wgpu::BindingResource::TextureView(
+                                                    bindings.storage_tex_read_write,
                                                 ),
                                             },
                                         ],
