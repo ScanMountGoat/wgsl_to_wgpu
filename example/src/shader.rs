@@ -12,6 +12,29 @@ const _: () = assert!(
     memoffset::offset_of!(Uniforms, color_rgb) == 0,
     "offset of Uniforms.color_rgb does not match WGSL"
 );
+pub trait Drawable<'d> {
+    fn base_vertex(&self) -> i32 {
+        return 0;
+    }
+    fn instance_range(&self) -> core::ops::Range<u32> {
+        return 0..1;
+    }
+    fn get_index_buffer(
+        &self,
+    ) -> (wgpu::BufferSlice<'d>, wgpu::IndexFormat, core::ops::Range<u32>);
+    fn get_bind_group0(&self) -> &'d bind_groups::BindGroup0;
+    fn get_bind_group1(&self) -> &'d bind_groups::BindGroup1;
+}
+pub fn draw<'rp, 'd: 'rp, D: Drawable<'d>>(
+    d: D,
+    render_pass: &mut wgpu::RenderPass<'rp>,
+) {
+    let (idx_buffer, idx_fmt, idx_range) = d.get_index_buffer();
+    render_pass.set_index_buffer(idx_buffer, idx_fmt);
+    d.get_bind_group0().set(render_pass);
+    d.get_bind_group1().set(render_pass);
+    render_pass.draw_indexed(idx_range, d.base_vertex(), d.instance_range());
+}
 pub mod bind_groups {
     pub struct BindGroup0(wgpu::BindGroup);
     pub struct BindGroupLayout0<'a> {

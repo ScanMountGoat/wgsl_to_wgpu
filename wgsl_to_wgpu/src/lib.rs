@@ -45,9 +45,13 @@
 
 extern crate wgpu_types as wgpu;
 
+use convert_case::{Case, Casing};
 use bindgroup::{bind_groups_module, get_bind_group_data};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
+use std::collections::BTreeMap;
+use std::num::NonZeroU32;
+use naga::ShaderStage;
 use syn::{Ident, Index};
 use thiserror::Error;
 
@@ -173,8 +177,15 @@ pub fn create_shader_module(
         }
     };
 
+    let draw_traits = draw_fns(&bind_group_data, &module);
+    let pipeline_fns = pipeline_fns(&module);
+
     let output = quote! {
         #(#structs)*
+
+        #pipeline_fns
+
+        #draw_traits
 
         #bind_groups_module
 
@@ -235,9 +246,25 @@ fn vertex_module(module: &naga::Module) -> TokenStream {
         // Don't include empty modules.
         quote!()
     } else {
+        let vertex_inputs = wgsl::get_vertex_input_structs(module);
+        let n = Literal::usize_unsuffixed(vertex_inputs.len());
+        let layouts: Vec<TokenStream> = vertex_inputs.iter().map(|s| {
+            let name = &s.name;
+            let mode = if name.to_lowercase().contains("instance") {
+                quote!(wgpu::VertexStepMode::Instance)
+            } else {
+                quote!(wgpu::VertexStepMode::Vertex)
+            };
+            let name = Ident::new(&s.name, Span::call_site());
+            quote!(super::#name::vertex_buffer_layout(#mode))
+        }).collect();
         quote! {
             pub mod vertex {
                 #(#structs)*
+
+                pub const INFERRED_BUFFER_LAYOUTS: [wgpu::VertexBufferLayout<'static>; #n] = [
+                    #(#layouts),*
+                ];
             }
         }
     }
@@ -285,7 +312,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
             impl super::#name {
                 pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; #count] = [#(#attributes),*];
 
-                pub fn vertex_buffer_layout(step_mode: wgpu::VertexStepMode) -> wgpu::VertexBufferLayout<'static> {
+                pub const fn vertex_buffer_layout(step_mode: wgpu::VertexStepMode) -> wgpu::VertexBufferLayout<'static> {
                     wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<super::#name>() as u64,
                         step_mode,
@@ -295,6 +322,148 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
             }
         }
     }).collect()
+}
+
+
+fn pipeline_fns(module: &naga::Module) -> TokenStream {
+    if wgsl::get_vertex_input_structs(module).is_empty() {
+        return quote!()
+    }
+
+    let vertex_state: TokenStream = module.entry_points.iter().find_map(|entry_point| {
+        let entry_name = Literal::string(&entry_point.name);
+        match &entry_point.stage {
+            ShaderStage::Fragment => None,
+            ShaderStage::Compute => None,
+            ShaderStage::Vertex => Some(quote! {
+                wgpu::VertexState {
+                    module: &shader_module,
+                    entry_point: #entry_name,
+                    buffers: &vertex_layouts
+                }
+            }),
+        }
+    }).expect("The module must have a vertex entry point");
+
+    let fragment_state: TokenStream = module.entry_points.iter().find_map(|entry_point| {
+        let entry_name = Literal::string(&entry_point.name);
+        match &entry_point.stage {
+            ShaderStage::Vertex => None,
+            ShaderStage::Compute => None,
+            ShaderStage::Fragment => Some(quote! {
+                wgpu::FragmentState {
+                    module: &shader_module,
+                    entry_point: #entry_name,
+                    targets: &partial_descriptor.fragment_targets
+                }
+            }),
+        }
+    }).map(|ts| quote!(Some(#ts))).unwrap_or_else(|| quote!(None));
+
+    quote! {
+
+        pub fn create_render_pipeline(
+            device: &wgpu::Device,
+            partial_descriptor: wgsl_to_wgpu::PartialRenderPipelineDescriptor
+        ) -> wgpu::RenderPipeline {
+            let shader_module = create_shader_module(&device);
+            let vertex_layouts = vertex::INFERRED_BUFFER_LAYOUTS;
+            let pipeline_layout = create_pipeline_layout(device);
+            return device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: partial_descriptor.label,
+                depth_stencil: partial_descriptor.depth_stencil,
+                multiview: partial_descriptor.multiview,
+                primitive: partial_descriptor.primitive,
+                multisample: partial_descriptor.multisample,
+                layout: Some(&pipeline_layout),
+                vertex: #vertex_state,
+                fragment: #fragment_state,
+            });
+        }
+    }
+}
+
+
+
+pub struct PartialRenderPipelineDescriptor {
+    pub label: Option<&'static str>,
+    pub depth_stencil: Option<wgpu::DepthStencilState>,
+    pub multiview: Option<NonZeroU32>,
+    pub fragment_targets: Vec<Option<wgpu::ColorTargetState>>,
+    pub primitive: wgpu::PrimitiveState,
+    pub multisample: wgpu::MultisampleState
+}
+
+
+
+fn draw_fns(
+    bind_group_data: &BTreeMap<u32, bindgroup::GroupData>,
+    module: &naga::Module
+) -> TokenStream {
+
+    let vertex_inputs = wgsl::get_vertex_input_structs(module);
+    let mut idx = 0;
+    let vertex_buffer_methods: Vec<TokenStream> = vertex_inputs.iter().map(|vertex_input| {
+        let n = vertex_input.name.clone().to_case(Case::Snake);
+        let by_slot = indexed_name_to_ident("get_vertex_buffer", idx);
+        let by_type = Ident::new(&format!("get_{}_buffer", n), Span::call_site());
+        let q = quote! {
+            fn #by_slot(&self) -> wgpu::BufferSlice<'d> {
+                return self.#by_type();
+            }
+            fn #by_type(&self) -> wgpu::BufferSlice<'d>;
+        };
+        idx = idx+1;
+        q
+    }).collect();
+
+    let mut idx = 0;
+    let vertex_buffer_uses: Vec<TokenStream> = vertex_inputs.iter().map(|vertex_input| {
+        let slot = idx;
+        let by_slot = indexed_name_to_ident("get_vertex_buffer", idx);
+        let q = quote! {
+            render_pass.set_vertex_buffer(#slot, d.#by_slot());
+        };
+        idx = idx+1;
+        q
+    }).collect();
+
+    let bind_group_methods: Vec<TokenStream> = bind_group_data.iter().map(|(group_no, group_data)| {
+        let group_name = indexed_name_to_ident("BindGroup", *group_no);
+        let method_name = indexed_name_to_ident("get_bind_group", *group_no);
+        quote! {
+            fn #method_name(&self) -> &'d bind_groups::#group_name;
+        }
+    }).collect();
+
+    let bind_group_uses: Vec<TokenStream> = bind_group_data.iter().map(|(group_no, group_data)| {
+        let method_name = indexed_name_to_ident("get_bind_group", *group_no);
+        quote! {
+            d.#method_name().set(render_pass);
+        }
+    }).collect();
+
+    quote! {
+        pub trait Drawable<'d> {
+            fn base_vertex(&self) -> i32 {
+                return 0;
+            }
+            fn instance_range(&self) -> core::ops::Range<u32> {
+                // Default impl assumes rendering 1 thing
+                return 0..1;
+            }
+            fn get_index_buffer(&self) -> (wgpu::BufferSlice<'d>, wgpu::IndexFormat, core::ops::Range<u32>);
+            #(#vertex_buffer_methods)*
+            #(#bind_group_methods)*
+        }
+        pub fn draw<'rp, 'd: 'rp, D: Drawable<'d>>(d: D, render_pass: &mut wgpu::RenderPass<'rp>) {
+            let (idx_buffer, idx_fmt, idx_range) = d.get_index_buffer();
+            render_pass.set_index_buffer(idx_buffer, idx_fmt);
+            #(#vertex_buffer_uses)*
+            #(#bind_group_uses)*
+            render_pass.draw_indexed(idx_range, d.base_vertex(), d.instance_range());
+        }
+    }
 }
 
 // Tokenstreams can't be compared directly using PartialEq.
@@ -426,7 +595,7 @@ mod test {
                                 shader_location: 3,
                             },
                         ];
-                        pub fn vertex_buffer_layout(
+                        pub const fn vertex_buffer_layout(
                             step_mode: wgpu::VertexStepMode,
                         ) -> wgpu::VertexBufferLayout<'static> {
                             wgpu::VertexBufferLayout {
