@@ -46,8 +46,9 @@
 extern crate wgpu_types as wgpu;
 
 use bindgroup::{bind_groups_module, get_bind_group_data};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
+use naga::ShaderStage;
 use syn::{Ident, Index};
 use thiserror::Error;
 
@@ -147,6 +148,8 @@ pub fn create_shader_module(
     let bind_groups_module = bind_groups_module(&bind_group_data, shader_stages);
     let vertex_module = vertex_module(&module);
     let compute_module = compute_module(&module);
+    let entry_point_constants = entry_point_constants(&module);
+    let vertex_states = vertex_states(&module);
 
     let create_shader_module = quote! {
         pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
@@ -186,6 +189,10 @@ pub fn create_shader_module(
         #vertex_module
 
         #compute_module
+
+        #entry_point_constants
+
+        #vertex_states
 
         #create_shader_module
 
@@ -278,6 +285,64 @@ fn vertex_module(module: &naga::Module) -> TokenStream {
     }
 }
 
+fn entry_point_constants(module: &naga::Module) -> TokenStream {
+    let entry_points: Vec<TokenStream> = module.entry_points.iter().map(|entry_point| {
+        let entry_name = Literal::string(&entry_point.name);
+        let const_name = Ident::new(
+            &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
+            Span::call_site());
+        quote! {
+            pub const #const_name: &'static str = #entry_name;
+        }
+    }).collect();
+
+    quote! {
+        #(#entry_points)*
+    }
+}
+
+fn vertex_states(module: &naga::Module) -> TokenStream {
+    let vertex_inputs = wgsl::get_vertex_input_structs(module);
+    let mut step_mode_params = vec![];
+    let layout_expressions: Vec<TokenStream> = vertex_inputs.iter().enumerate().map(|(idx, s)| {
+        let name = Ident::new(&s.name, Span::call_site());
+        let step_mode = indexed_name_to_ident("step_mode_", idx as u32);
+        let step_mode_clone = step_mode.clone();
+        step_mode_params.push(quote!(#step_mode_clone: wgpu::VertexStepMode));
+        quote!(#name::vertex_buffer_layout(#step_mode))
+    }).collect();
+
+    let vertex_states: Vec<TokenStream> = module.entry_points.iter().map(|entry_point| {
+        match &entry_point.stage {
+            ShaderStage::Vertex => {
+                let fn_name = Ident::new(
+                    &format!("{}_vertex_state", &entry_point.name),
+                    Span::call_site());
+                let const_name = Ident::new(
+                    &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
+                    Span::call_site());
+                quote! {
+                    pub fn #fn_name(shader_module: &wgpu::ShaderModule, #(#step_mode_params),*) -> wgpu::VertexState {
+                        let vertex_layouts = [
+                            #(#layout_expressions),*
+                        ];
+                        wgpu::VertexState {
+                            module: &shader_module,
+                            entry_point: #const_name,
+                            buffers: &vertex_layouts
+                        }
+                    }
+                }
+            }
+            _ => quote!()
+        }
+    }).collect();
+
+    quote! {
+        #(#vertex_states)*
+    }
+}
+
 fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
     let vertex_inputs = wgsl::get_vertex_input_structs(module);
     vertex_inputs.iter().map(|input|  {
@@ -293,7 +358,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
                 let location = Index::from(*location as usize);
                 let format = wgsl::vertex_format(&module.types[m.ty]);
                 // TODO: Will the debug implementation always work with the macro?
-                let format = syn::Ident::new(&format!("{:?}", format), Span::call_site());
+                let format = Ident::new(&format!("{:?}", format), Span::call_site());
 
                 quote! {
                     wgpu::VertexAttribute {
@@ -320,7 +385,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
             impl super::#name {
                 pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; #count] = [#(#attributes),*];
 
-                pub fn vertex_buffer_layout(step_mode: wgpu::VertexStepMode) -> wgpu::VertexBufferLayout<'static> {
+                pub const fn vertex_buffer_layout(step_mode: wgpu::VertexStepMode) -> wgpu::VertexBufferLayout<'static> {
                     wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<super::#name>() as u64,
                         step_mode,
@@ -461,7 +526,7 @@ mod test {
                                 shader_location: 3,
                             },
                         ];
-                        pub fn vertex_buffer_layout(
+                        pub const fn vertex_buffer_layout(
                             step_mode: wgpu::VertexStepMode,
                         ) -> wgpu::VertexBufferLayout<'static> {
                             wgpu::VertexBufferLayout {
