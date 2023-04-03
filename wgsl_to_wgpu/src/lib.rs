@@ -199,34 +199,64 @@ fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
 }
 
 fn compute_module(module: &naga::Module) -> TokenStream {
-    let workgroup_sizes: Vec<_> = module
+    let entry_points: Vec<_> = module
         .entry_points
         .iter()
         .filter_map(|e| {
             if e.stage == naga::ShaderStage::Compute {
-                // Use Index to avoid specifying the type on literals.
-                let name = Ident::new(
-                    &format!("{}_WORKGROUP_SIZE", e.name.to_uppercase()),
-                    Span::call_site(),
-                );
-                let [x, y, z] = e.workgroup_size.map(|s| Index::from(s as usize));
-                Some(quote!(pub const #name: [u32; 3] = [#x, #y, #z];))
+                let workgroup_size_constant = workgroup_size(e);
+                let create_pipeline = create_compute_pipeline(e);
+
+                Some(quote! {
+                    #workgroup_size_constant
+                    #create_pipeline
+                })
             } else {
                 None
             }
         })
         .collect();
 
-    if workgroup_sizes.is_empty() {
+    if entry_points.is_empty() {
         // Don't include empty modules.
         quote!()
     } else {
         quote! {
             pub mod compute {
-                #(#workgroup_sizes)*
+                #(#entry_points)*
             }
         }
     }
+}
+
+fn create_compute_pipeline(e: &naga::EntryPoint) -> TokenStream {
+    // Compute pipeline creation has few parameters and can be generated.
+    let pipeline_name = Ident::new(&format!("create_{}_pipeline", e.name), Span::call_site());
+    let entry_point = &e.name;
+    // TODO: Include a user supplied module name in the label?
+    let label = format!("Compute Pipeline {}", e.name);
+    quote! {
+        pub fn #pipeline_name(device: &wgpu::Device) -> wgpu::ComputePipeline {
+            let module = super::create_shader_module(device);
+            let layout = super::create_pipeline_layout(device);
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(#label),
+                layout: Some(&layout),
+                module: &module,
+                entry_point: #entry_point,
+            })
+        }
+    }
+}
+
+fn workgroup_size(e: &naga::EntryPoint) -> TokenStream {
+    // Use Index to avoid specifying the type on literals.
+    let name = Ident::new(
+        &format!("{}_WORKGROUP_SIZE", e.name.to_uppercase()),
+        Span::call_site(),
+    );
+    let [x, y, z] = e.workgroup_size.map(|s| Index::from(s as usize));
+    quote!(pub const #name: [u32; 3] = [#x, #y, #z];)
 }
 
 fn vertex_module(module: &naga::Module) -> TokenStream {
@@ -653,7 +683,33 @@ mod test {
             quote! {
                 pub mod compute {
                     pub const MAIN1_WORKGROUP_SIZE: [u32; 3] = [1, 2, 3];
+                    pub fn create_main1_pipeline(device: &wgpu::Device) -> wgpu::ComputePipeline {
+                        let module = super::create_shader_module(device);
+                        let layout = super::create_pipeline_layout(device);
+                        device
+                            .create_compute_pipeline(
+                                &wgpu::ComputePipelineDescriptor {
+                                    label: Some("Compute Pipeline main1"),
+                                    layout: Some(&layout),
+                                    module: &module,
+                                    entry_point: "main1",
+                                },
+                            )
+                    }
                     pub const MAIN2_WORKGROUP_SIZE: [u32; 3] = [256, 1, 1];
+                    pub fn create_main2_pipeline(device: &wgpu::Device) -> wgpu::ComputePipeline {
+                        let module = super::create_shader_module(device);
+                        let layout = super::create_pipeline_layout(device);
+                        device
+                            .create_compute_pipeline(
+                                &wgpu::ComputePipelineDescriptor {
+                                    label: Some("Compute Pipeline main2"),
+                                    layout: Some(&layout),
+                                    module: &module,
+                                    entry_point: "main2",
+                                },
+                            )
+                    }
                 }
             },
             actual
