@@ -18,8 +18,9 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
-    bind_group0: crate::shader::bind_groups::BindGroup0,
-    bind_group1: crate::shader::bind_groups::BindGroup1,
+    bind_group0: shader::bind_groups::BindGroup0,
+    bind_group1: shader::bind_groups::BindGroup1,
+    vertex_buffer: wgpu::Buffer,
 }
 
 impl State {
@@ -65,8 +66,8 @@ impl State {
         surface.configure(&device, &config);
 
         // Use the generated bindings to create the pipeline.
-        let shader = crate::shader::create_shader_module(&device);
-        let render_pipeline_layout = crate::shader::create_pipeline_layout(&device);
+        let shader = shader::create_shader_module(&device);
+        let render_pipeline_layout = shader::create_pipeline_layout(&device);
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
@@ -74,7 +75,9 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[shader::VertexInput::vertex_buffer_layout(
+                    wgpu::VertexStepMode::Vertex,
+                )],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -135,9 +138,9 @@ impl State {
         });
 
         // Use the generated types to ensure the correct bind group is assigned to each slot.
-        let bind_group0 = crate::shader::bind_groups::BindGroup0::from_bindings(
+        let bind_group0 = shader::bind_groups::BindGroup0::from_bindings(
             &device,
-            crate::shader::bind_groups::BindGroupLayout0 {
+            shader::bind_groups::BindGroupLayout0 {
                 color_texture: &view,
                 color_sampler: &sampler,
             },
@@ -145,18 +148,36 @@ impl State {
 
         let uniforms_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("uniforms"),
-            contents: bytemuck::cast_slice(&[crate::shader::Uniforms {
+            contents: bytemuck::cast_slice(&[shader::Uniforms {
                 color_rgb: [1.0, 1.0, 1.0, 1.0],
             }]),
             usage: wgpu::BufferUsages::UNIFORM,
         });
 
-        let bind_group1 = crate::shader::bind_groups::BindGroup1::from_bindings(
+        let bind_group1 = shader::bind_groups::BindGroup1::from_bindings(
             &device,
-            crate::shader::bind_groups::BindGroupLayout1 {
+            shader::bind_groups::BindGroupLayout1 {
                 uniforms: uniforms_buffer.as_entire_buffer_binding(),
             },
         );
+
+        // Initialize the vertex buffer based on the expected input structs.
+        // For storage buffer compatibility, consider using encase instead.
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vertex buffer"),
+            contents: bytemuck::cast_slice(&[
+                shader::VertexInput {
+                    position: [-1.0, -1.0, 0.0, 1.0],
+                },
+                shader::VertexInput {
+                    position: [3.0, -1.0, 0.0, 1.0],
+                },
+                shader::VertexInput {
+                    position: [-1.0, 3.0, 0.0, 1.0],
+                },
+            ]),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
         Self {
             surface,
@@ -167,6 +188,7 @@ impl State {
             pipeline,
             bind_group0,
             bind_group1,
+            vertex_buffer,
         }
     }
 
@@ -214,7 +236,7 @@ impl State {
                 bind_group1: &self.bind_group1,
             },
         );
-
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.draw(0..3, 0..1);
 
         drop(render_pass);

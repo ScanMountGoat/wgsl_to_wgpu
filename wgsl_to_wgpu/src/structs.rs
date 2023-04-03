@@ -30,7 +30,7 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
                 let assert_member_offsets: Vec<_> = members
                     .iter()
                     .map(|m| {
-                        let name = Ident::new(&m.name.as_ref().unwrap(), Span::call_site());
+                        let name = Ident::new(m.name.as_ref().unwrap(), Span::call_site());
                         let rust_offset = quote!(memoffset::offset_of!(#struct_name, #name));
 
                         let wgsl_offset = Index::from(m.offset as usize);

@@ -2,6 +2,19 @@
 // Changes made to this file will not be saved.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct VertexInput {
+    pub position: [f32; 4],
+}
+const _: () = assert!(
+    std::mem::size_of:: < VertexInput > () == 16,
+    "size of VertexInput does not match WGSL"
+);
+const _: () = assert!(
+    memoffset::offset_of!(VertexInput, position) == 0,
+    "offset of VertexInput.position does not match WGSL"
+);
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
     pub color_rgb: [f32; 4],
 }
@@ -128,6 +141,26 @@ pub mod bind_groups {
     ) {
         bind_groups.bind_group0.set(pass);
         bind_groups.bind_group1.set(pass);
+    }
+}
+pub mod vertex {
+    impl super::VertexInput {
+        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = [
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: memoffset::offset_of!(super::VertexInput, position) as u64,
+                shader_location: 0,
+            },
+        ];
+        pub fn vertex_buffer_layout(
+            step_mode: wgpu::VertexStepMode,
+        ) -> wgpu::VertexBufferLayout<'static> {
+            wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<super::VertexInput>() as u64,
+                step_mode,
+                attributes: &super::VertexInput::VERTEX_ATTRIBUTES,
+            }
+        }
     }
 }
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
