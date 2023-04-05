@@ -188,19 +188,19 @@ fn bind_group_layout_entry(
             };
 
             match class {
-                naga::ImageClass::Sampled { kind: _, multi: _ } => {
+                naga::ImageClass::Sampled { kind: _, multi } => {
                     // TODO: Don't assume all textures are filterable.
                     quote!(wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         view_dimension: #view_dim,
-                        multisampled: false,
+                        multisampled: #multi,
                     })
                 }
-                naga::ImageClass::Depth { multi: _ } => {
+                naga::ImageClass::Depth { multi } => {
                     quote!(wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Depth,
                         view_dimension: #view_dim,
-                        multisampled: false,
+                        multisampled: #multi,
                     })
                 }
                 naga::ImageClass::Storage { format, access } => {
@@ -616,6 +616,11 @@ mod tests {
             @group(0) @binding(6)
             var storage_tex_read_write: texture_storage_2d<rgba8uint, read_write>;
 
+            @group(0) @binding(7)
+            var color_texture_msaa: texture_multisampled_2d<f32>;
+            @group(0) @binding(8)
+            var depth_texture_msaa: texture_depth_multisampled_2d;
+
             @group(1) @binding(0) var<uniform> transforms: Transforms;
 
             @vertex
@@ -643,6 +648,8 @@ mod tests {
                         pub storage_tex_read: &'a wgpu::TextureView,
                         pub storage_tex_write: &'a wgpu::TextureView,
                         pub storage_tex_read_write: &'a wgpu::TextureView,
+                        pub color_texture_msaa: &'a wgpu::TextureView,
+                        pub depth_texture_msaa: &'a wgpu::TextureView,
                     }
                     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
                         label: None,
@@ -711,6 +718,28 @@ mod tests {
                                 },
                                 count: None,
                             },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 7,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Float {
+                                        filterable: true,
+                                    },
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    multisampled: true,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 8,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Depth,
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    multisampled: true,
+                                },
+                                count: None,
+                            },
                         ],
                     };
                     impl BindGroup0 {
@@ -764,6 +793,18 @@ mod tests {
                                                 binding: 6,
                                                 resource: wgpu::BindingResource::TextureView(
                                                     bindings.storage_tex_read_write,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 7,
+                                                resource: wgpu::BindingResource::TextureView(
+                                                    bindings.color_texture_msaa,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 8,
+                                                resource: wgpu::BindingResource::TextureView(
+                                                    bindings.depth_texture_msaa,
                                                 ),
                                             },
                                         ],
