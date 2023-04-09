@@ -82,6 +82,11 @@ pub struct WriteOptions {
     /// for user defined WGSL structs when `true`.
     pub derive_bytemuck: bool,
 
+    /// Derive [serde::Serialize](https://docs.rs/serde/1.0.159/serde/trait.Serialize.html)
+    /// and [serde::Deserialize](https://docs.rs/serde/1.0.159/serde/trait.Deserialize.html)
+    /// for user defined WGSL structs when `true`.
+    pub derive_serde: bool,
+
     /// The format to use for matrix and vector types.
     pub matrix_vector_types: MatrixVectorTypes,
 }
