@@ -65,6 +65,10 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
                 if options.derive_encase {
                     derives.push(quote!(encase::ShaderType));
                 }
+                if options.derive_serde {
+                    derives.push(quote!(serde::Serialize));
+                    derives.push(quote!(serde::Deserialize));
+                }
 
                 let assert_layout = if options.derive_bytemuck {
                     // Assert that the Rust layout matches the WGSL layout.
@@ -627,6 +631,7 @@ mod tests {
             WriteOptions {
                 derive_encase: true,
                 derive_bytemuck: true,
+                derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
             },
         );
@@ -690,6 +695,98 @@ mod tests {
     }
 
     #[test]
+    fn write_all_structs_serde_encase_bytemuck() {
+        let source = indoc! {r#"
+            struct Input0 {
+                a: u32,
+                b: i32,
+                c: f32,
+            };
+
+            struct Nested {
+                a: Input0,
+                b: f32
+            }
+
+            @fragment
+            fn main() {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let structs = structs(
+            &module,
+            WriteOptions {
+                derive_encase: true,
+                derive_bytemuck: true,
+                derive_serde: true,
+                matrix_vector_types: MatrixVectorTypes::Rust,
+            },
+        );
+        let actual = quote!(#(#structs)*);
+
+        assert_tokens_eq!(
+            quote! {
+                #[repr(C)]
+                #[derive(
+                    Debug,
+                    Copy,
+                    Clone,
+                    PartialEq,
+                    bytemuck::Pod,
+                    bytemuck::Zeroable,
+                    encase::ShaderType,
+                    serde::Serialize,
+                    serde::Deserialize
+                )]
+                pub struct Input0 {
+                    pub a: u32,
+                    pub b: i32,
+                    pub c: f32,
+                }
+                const _: () = assert!(
+                    std::mem::size_of:: < Input0 > () == 12, "size of Input0 does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Input0, b) == 4, "offset of Input0.b does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
+                );
+                #[repr(C)]
+                #[derive(
+                    Debug,
+                    Copy,
+                    Clone,
+                    PartialEq,
+                    bytemuck::Pod,
+                    bytemuck::Zeroable,
+                    encase::ShaderType,
+                    serde::Serialize,
+                    serde::Deserialize
+                )]
+                pub struct Nested {
+                    pub a: Input0,
+                    pub b: f32,
+                }
+                const _: () = assert!(
+                    std::mem::size_of:: < Nested > () == 16, "size of Nested does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Nested, a) == 0, "offset of Nested.a does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Nested, b) == 12, "offset of Nested.b does not match WGSL"
+                );
+            },
+            actual
+        );
+    }
+
+    #[test]
     fn write_all_structs_skip_stage_outputs() {
         let source = indoc! {r#"
             struct Input0 {
@@ -716,6 +813,7 @@ mod tests {
             WriteOptions {
                 derive_encase: false,
                 derive_bytemuck: false,
+                derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
             },
         );
