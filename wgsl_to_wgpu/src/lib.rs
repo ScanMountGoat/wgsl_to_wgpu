@@ -17,31 +17,6 @@
 //! - configuring shader initialization
 //! - getting vertex attribute offsets for vertex buffers
 //! - const validation of struct memory layouts when using bytemuck
-//!
-//! ## Limitations
-//! - It may be necessary to disable running this function for shaders with unsupported types or features.
-//! Insufficient or innaccurate generated code should be replaced by handwritten implementations as needed.
-//!
-//! - The generated code will not prevent accidentally calling a function from an unrelated generated module.
-//! It's recommended to name the shader module with the same name as the shader
-//! and use unique shader names to avoid issues.
-//! Using generated code from a different shader module may be desirable in some cases
-//! such as using the same camera struct definition in multiple WGSL shaders.
-//!
-//! - The current implementation assumes all shader stages are part of a single WGSL source file.
-//! Shader modules split across files will be supported in a future release.
-//!
-//! - Uniform and storage buffers can be initialized using the wrong generated Rust struct.
-//! WGPU will still validate the size of the buffer binding at runtime.
-//!
-//! - Most but not all WGSL types are currently supported.
-//!
-//! - Vertex attributes using floating point types in WGSL like `vec2<f32>` are assumed to use
-//! float inputs instead of normalized attributes like unorm or snorm integers.
-//!
-//! - It's possible to achieve slightly better performance than the generated code in some cases like
-//! avoiding redundant bind group bindings or adjusting resource shader stage visibility.
-//! This can be fixed by calling lower level generated functions or handwriting functions as needed.
 
 extern crate wgpu_types as wgpu;
 
