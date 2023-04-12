@@ -3,16 +3,8 @@
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct VertexInput {
-    pub position: [f32; 4],
+    pub position: [f32; 3],
 }
-const _: () = assert!(
-    std::mem::size_of:: < VertexInput > () == 16,
-    "size of VertexInput does not match WGSL"
-);
-const _: () = assert!(
-    memoffset::offset_of!(VertexInput, position) == 0,
-    "offset of VertexInput.position does not match WGSL"
-);
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
@@ -147,7 +139,7 @@ pub mod vertex {
     impl super::VertexInput {
         pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = [
             wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x4,
+                format: wgpu::VertexFormat::Float32x3,
                 offset: memoffset::offset_of!(super::VertexInput, position) as u64,
                 shader_location: 0,
             },

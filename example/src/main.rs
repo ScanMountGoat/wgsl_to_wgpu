@@ -167,13 +167,13 @@ impl State {
             label: Some("vertex buffer"),
             contents: bytemuck::cast_slice(&[
                 shader::VertexInput {
-                    position: [-1.0, -1.0, 0.0, 1.0],
+                    position: [-1.0, -1.0, 0.0],
                 },
                 shader::VertexInput {
-                    position: [3.0, -1.0, 0.0, 1.0],
+                    position: [3.0, -1.0, 0.0],
                 },
                 shader::VertexInput {
-                    position: [-1.0, 3.0, 0.0, 1.0],
+                    position: [-1.0, 3.0, 0.0],
                 },
             ]),
             usage: wgpu::BufferUsages::VERTEX,

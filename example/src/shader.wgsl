@@ -1,5 +1,5 @@
 struct VertexInput {
-    @location(0) position: vec4<f32>,
+    @location(0) position: vec3<f32>,
 };
 
 struct VertexOutput {
@@ -11,7 +11,7 @@ struct VertexOutput {
 fn vs_main(in: VertexInput) -> VertexOutput {
     // A fullscreen triangle.
     var out: VertexOutput;
-    out.clip_position = in.position;
+    out.clip_position = vec4(in.position.xyz, 1.0);
     out.tex_coords = in.position.xy * 0.5 + 0.5;
     return out;
 }

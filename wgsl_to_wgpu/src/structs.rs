@@ -25,77 +25,100 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
         })
         .filter_map(|(t_handle, t)| {
             if let naga::TypeInner::Struct { members, .. } = &t.inner {
-                let struct_name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
-
-                let assert_member_offsets: Vec<_> = members
-                    .iter()
-                    .map(|m| {
-                        let name = Ident::new(m.name.as_ref().unwrap(), Span::call_site());
-                        let rust_offset = quote!(memoffset::offset_of!(#struct_name, #name));
-
-                        let wgsl_offset = Index::from(m.offset as usize);
-
-                        let assert_text = format!("offset of {}.{} does not match WGSL", t.name.as_ref().unwrap(), m.name.as_ref().unwrap());
-                        quote! {
-                            const _: () = assert!(#rust_offset == #wgsl_offset, #assert_text);
-                        }
-                    })
-                    .collect();
-
-                let layout = layouter[t_handle];
-
-                // TODO: Does the Rust alignment matter if it's copied to a buffer anyway?
-                let struct_size = Index::from(layout.size as usize);
-                let assert_size_text = format!("size of {} does not match WGSL", t.name.as_ref().unwrap());
-                let assert_size = quote! {
-                    const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
-                };
-
-                let members = struct_members(members, module, options.matrix_vector_types);
-                let mut derives = vec![
-                    quote!(Debug),
-                    quote!(Copy),
-                    quote!(Clone),
-                    quote!(PartialEq),
-                ];
-                if options.derive_bytemuck {
-                    derives.push(quote!(bytemuck::Pod));
-                    derives.push(quote!(bytemuck::Zeroable));
-                }
-                if options.derive_encase {
-                    derives.push(quote!(encase::ShaderType));
-                }
-                if options.derive_serde {
-                    derives.push(quote!(serde::Serialize));
-                    derives.push(quote!(serde::Deserialize));
-                }
-
-                let assert_layout = if options.derive_bytemuck {
-                    // Assert that the Rust layout matches the WGSL layout.
-                    // Enable for bytemuck since it uses the Rust struct's memory layout.
-                    // TODO: This isn't necessary for vertex input structs?
-                    // TODO: Add an option to still validate vertex inputs for storage buffer compatibility.
-                    quote!{
-                        #assert_size
-                        #(#assert_member_offsets)*
-                    }
-                } else {
-                    quote!()
-                };
-
-                Some(quote! {
-                    #[repr(C)]
-                    #[derive(#(#derives),*)]
-                    pub struct #struct_name {
-                        #(#members),*
-                    }
-                    #assert_layout
-                })
+                Some(rust_struct(
+                    t, members, &layouter, t_handle, module, options,
+                ))
             } else {
                 None
             }
         })
         .collect()
+}
+
+fn rust_struct(
+    t: &naga::Type,
+    members: &Vec<naga::StructMember>,
+    layouter: &naga::proc::Layouter,
+    t_handle: naga::Handle<naga::Type>,
+    module: &naga::Module,
+    options: WriteOptions,
+) -> TokenStream {
+    let struct_name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
+
+    let assert_member_offsets: Vec<_> = members
+        .iter()
+        .map(|m| {
+            let name = Ident::new(m.name.as_ref().unwrap(), Span::call_site());
+            let rust_offset = quote!(memoffset::offset_of!(#struct_name, #name));
+
+            let wgsl_offset = Index::from(m.offset as usize);
+
+            let assert_text = format!(
+                "offset of {}.{} does not match WGSL",
+                t.name.as_ref().unwrap(),
+                m.name.as_ref().unwrap()
+            );
+            quote! {
+                const _: () = assert!(#rust_offset == #wgsl_offset, #assert_text);
+            }
+        })
+        .collect();
+
+    let layout = layouter[t_handle];
+
+    // TODO: Does the Rust alignment matter if it's copied to a buffer anyway?
+    let struct_size = Index::from(layout.size as usize);
+    let assert_size_text = format!("size of {} does not match WGSL", t.name.as_ref().unwrap());
+    let assert_size = quote! {
+        const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
+    };
+
+    let members = struct_members(members, module, options.matrix_vector_types);
+    let mut derives = vec![
+        quote!(Debug),
+        quote!(Copy),
+        quote!(Clone),
+        quote!(PartialEq),
+    ];
+    if options.derive_bytemuck {
+        derives.push(quote!(bytemuck::Pod));
+        derives.push(quote!(bytemuck::Zeroable));
+    }
+    if options.derive_encase {
+        derives.push(quote!(encase::ShaderType));
+    }
+    if options.derive_serde {
+        derives.push(quote!(serde::Serialize));
+        derives.push(quote!(serde::Deserialize));
+    }
+
+    // Assume global variables structs are host shareable and require validation.
+    // This includes storage, uniform, and workgroup variables.
+    // This also means types that are never used will not be validated.
+    // Structs used only for vertex inputs do not require validation on desktop platforms.
+    // Vertex input layout is handled already by setting the attribute offsets and types.
+    // This allows vertex input field types without padding like vec3 for positions.
+    let is_host_shareable = module.global_variables.iter().any(|g| g.1.ty == t_handle);
+
+    let assert_layout = if options.derive_bytemuck && is_host_shareable {
+        // Assert that the Rust layout matches the WGSL layout.
+        // Enable for bytemuck since it uses the Rust struct's memory layout.
+        quote! {
+            #assert_size
+            #(#assert_member_offsets)*
+        }
+    } else {
+        quote!()
+    };
+
+    quote! {
+        #[repr(C)]
+        #[derive(#(#derives),*)]
+        pub struct #struct_name {
+            #(#members),*
+        }
+        #assert_layout
+    }
 }
 
 fn struct_members(
@@ -620,6 +643,9 @@ mod tests {
                 b: f32
             }
 
+            var<uniform> a: Input0;
+            var<storage, read> b: Nested;
+
             @fragment
             fn main() {}
         "#};
@@ -708,7 +734,10 @@ mod tests {
                 b: f32
             }
 
-            @fragment
+            var<workgroup> a: Input0;
+            var<uniform> b: Nested;
+
+            @compute
             fn main() {}
         "#};
 
@@ -828,6 +857,107 @@ mod tests {
                     pub b: i32,
                     pub c: f32,
                 }
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_all_structs_bytemuck_skip_input_layout_validation() {
+        // Structs used only for vertex inputs don't require layout validation.
+        // Correctly specifying the offsets is handled by the buffer layout itself.
+        let source = indoc! {r#"
+            struct Input0 {
+                a: u32,
+                b: i32,
+                c: f32,
+            };
+
+            @vertex
+            fn main(input: Input0) -> vec4<f32> {
+                return vec4(0.0);
+            }
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let structs = structs(
+            &module,
+            WriteOptions {
+                derive_encase: false,
+                derive_bytemuck: true,
+                derive_serde: false,
+                matrix_vector_types: MatrixVectorTypes::Rust,
+            },
+        );
+        let actual = quote!(#(#structs)*);
+
+        assert_tokens_eq!(
+            quote! {
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct Input0 {
+                    pub a: u32,
+                    pub b: i32,
+                    pub c: f32,
+                }
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_all_structs_bytemuck_input_layout_validation() {
+        // The struct is also used with a storage buffer and should be validated.
+        let source = indoc! {r#"
+            struct Input0 {
+                a: u32,
+                b: i32,
+                c: f32,
+            };
+
+            var<storage, read_write> test: Input0;
+
+            @vertex
+            fn main(input: Input0) -> vec4<f32> {
+                return vec4(0.0);
+            }
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let structs = structs(
+            &module,
+            WriteOptions {
+                derive_encase: false,
+                derive_bytemuck: true,
+                derive_serde: false,
+                matrix_vector_types: MatrixVectorTypes::Rust,
+            },
+        );
+        let actual = quote!(#(#structs)*);
+
+        assert_tokens_eq!(
+            quote! {
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct Input0 {
+                    pub a: u32,
+                    pub b: i32,
+                    pub c: f32,
+                }
+                const _: () = assert!(
+                    std::mem::size_of:: < Input0 > () == 12, "size of Input0 does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Input0, b) == 4, "offset of Input0.b does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
+                );
             },
             actual
         );
