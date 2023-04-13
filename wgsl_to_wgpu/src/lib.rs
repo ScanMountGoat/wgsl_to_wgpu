@@ -312,24 +312,24 @@ fn vertex_states(module: &naga::Module) -> TokenStream {
         quote!(#name::vertex_buffer_layout(#step_mode))
     }).collect();
 
-    let vertex_states: Vec<TokenStream> = module.entry_points.iter().map(|entry_point| {
+    let vertex_entries: Vec<TokenStream> = module.entry_points.iter().map(|entry_point| {
         match &entry_point.stage {
             ShaderStage::Vertex => {
                 let fn_name = Ident::new(
-                    &format!("{}_vertex_state", &entry_point.name),
+                    &format!("{}_entry", &entry_point.name),
                     Span::call_site());
                 let const_name = Ident::new(
                     &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
                     Span::call_site());
+                let n = vertex_inputs.len();
+                let n = Literal::usize_unsuffixed(n);
                 quote! {
-                    pub fn #fn_name(shader_module: &wgpu::ShaderModule, #(#step_mode_params),*) -> wgpu::VertexState {
-                        let vertex_layouts = [
-                            #(#layout_expressions),*
-                        ];
-                        wgpu::VertexState {
-                            module: &shader_module,
+                    pub fn #fn_name(#(#step_mode_params),*) -> VertexEntry<#n> {
+                        VertexEntry {
                             entry_point: #const_name,
-                            buffers: &vertex_layouts
+                            buffers: [
+                                #(#layout_expressions),*
+                            ]
                         }
                     }
                 }
@@ -339,7 +339,23 @@ fn vertex_states(module: &naga::Module) -> TokenStream {
     }).collect();
 
     quote! {
-        #(#vertex_states)*
+        pub struct VertexEntry<const N: usize> {
+            entry_point: &'static str,
+            buffers: [wgpu::VertexBufferLayout<'static>; N]
+        }
+
+        pub fn vertex_state<'a, const N: usize>(
+            module: &'a wgpu::ShaderModule,
+            entry: &'a VertexEntry<N>,
+        ) -> wgpu::VertexState<'a> {
+            wgpu::VertexState {
+                module,
+                entry_point: entry.entry_point,
+                buffers: &entry.buffers,
+            }
+        }
+
+        #(#vertex_entries)*
     }
 }
 
