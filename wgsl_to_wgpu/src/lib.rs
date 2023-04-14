@@ -21,8 +21,9 @@
 extern crate wgpu_types as wgpu;
 
 use bindgroup::{bind_groups_module, get_bind_group_data};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
+use naga::ShaderStage;
 use syn::{Ident, Index};
 use thiserror::Error;
 
@@ -122,6 +123,8 @@ pub fn create_shader_module(
     let bind_groups_module = bind_groups_module(&bind_group_data, shader_stages);
     let vertex_module = vertex_module(&module);
     let compute_module = compute_module(&module);
+    let entry_point_constants = entry_point_constants(&module);
+    let vertex_states = vertex_states(&module);
 
     let create_shader_module = quote! {
         pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
@@ -161,6 +164,10 @@ pub fn create_shader_module(
         #vertex_module
 
         #compute_module
+
+        #entry_point_constants
+
+        #vertex_states
 
         #create_shader_module
 
@@ -253,6 +260,80 @@ fn vertex_module(module: &naga::Module) -> TokenStream {
     }
 }
 
+fn entry_point_constants(module: &naga::Module) -> TokenStream {
+    let entry_points: Vec<TokenStream> = module.entry_points.iter().map(|entry_point| {
+        let entry_name = Literal::string(&entry_point.name);
+        let const_name = Ident::new(
+            &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
+            Span::call_site());
+        quote! {
+            pub const #const_name: &'static str = #entry_name;
+        }
+    }).collect();
+
+    quote! {
+        #(#entry_points)*
+    }
+}
+
+fn vertex_states(module: &naga::Module) -> TokenStream {
+    let vertex_inputs = wgsl::get_vertex_input_structs(module);
+    let mut step_mode_params = vec![];
+    let layout_expressions: Vec<TokenStream> = vertex_inputs.iter().enumerate().map(|(idx, s)| {
+        let name = Ident::new(&s.name, Span::call_site());
+        let step_mode = indexed_name_to_ident("step_mode_", idx as u32);
+        let step_mode_clone = step_mode.clone();
+        step_mode_params.push(quote!(#step_mode_clone: wgpu::VertexStepMode));
+        quote!(#name::vertex_buffer_layout(#step_mode))
+    }).collect();
+
+    let vertex_entries: Vec<TokenStream> = module.entry_points.iter().map(|entry_point| {
+        match &entry_point.stage {
+            ShaderStage::Vertex => {
+                let fn_name = Ident::new(
+                    &format!("{}_entry", &entry_point.name),
+                    Span::call_site());
+                let const_name = Ident::new(
+                    &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
+                    Span::call_site());
+                let n = vertex_inputs.len();
+                let n = Literal::usize_unsuffixed(n);
+                quote! {
+                    pub fn #fn_name(#(#step_mode_params),*) -> VertexEntry<#n> {
+                        VertexEntry {
+                            entry_point: #const_name,
+                            buffers: [
+                                #(#layout_expressions),*
+                            ]
+                        }
+                    }
+                }
+            }
+            _ => quote!()
+        }
+    }).collect();
+
+    quote! {
+        pub struct VertexEntry<const N: usize> {
+            entry_point: &'static str,
+            buffers: [wgpu::VertexBufferLayout<'static>; N]
+        }
+
+        pub fn vertex_state<'a, const N: usize>(
+            module: &'a wgpu::ShaderModule,
+            entry: &'a VertexEntry<N>,
+        ) -> wgpu::VertexState<'a> {
+            wgpu::VertexState {
+                module,
+                entry_point: entry.entry_point,
+                buffers: &entry.buffers,
+            }
+        }
+
+        #(#vertex_entries)*
+    }
+}
+
 fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
     let vertex_inputs = wgsl::get_vertex_input_structs(module);
     vertex_inputs.iter().map(|input|  {
@@ -268,7 +349,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
                 let location = Index::from(*location as usize);
                 let format = wgsl::vertex_format(&module.types[m.ty]);
                 // TODO: Will the debug implementation always work with the macro?
-                let format = syn::Ident::new(&format!("{:?}", format), Span::call_site());
+                let format = Ident::new(&format!("{:?}", format), Span::call_site());
 
                 quote! {
                     wgpu::VertexAttribute {
@@ -295,7 +376,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
             impl super::#name {
                 pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; #count] = [#(#attributes),*];
 
-                pub fn vertex_buffer_layout(step_mode: wgpu::VertexStepMode) -> wgpu::VertexBufferLayout<'static> {
+                pub const fn vertex_buffer_layout(step_mode: wgpu::VertexStepMode) -> wgpu::VertexBufferLayout<'static> {
                     wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<super::#name>() as u64,
                         step_mode,
@@ -436,7 +517,7 @@ mod test {
                                 shader_location: 3,
                             },
                         ];
-                        pub fn vertex_buffer_layout(
+                        pub const fn vertex_buffer_layout(
                             step_mode: wgpu::VertexStepMode,
                         ) -> wgpu::VertexBufferLayout<'static> {
                             wgpu::VertexBufferLayout {
@@ -495,7 +576,7 @@ mod test {
                                 shader_location: 3,
                             },
                         ];
-                        pub fn vertex_buffer_layout(
+                        pub const fn vertex_buffer_layout(
                             step_mode: wgpu::VertexStepMode,
                         ) -> wgpu::VertexBufferLayout<'static> {
                             wgpu::VertexBufferLayout {
@@ -555,7 +636,7 @@ mod test {
                                 shader_location: 3,
                             },
                         ];
-                        pub fn vertex_buffer_layout(
+                        pub const fn vertex_buffer_layout(
                             step_mode: wgpu::VertexStepMode,
                         ) -> wgpu::VertexBufferLayout<'static> {
                             wgpu::VertexBufferLayout {
@@ -614,7 +695,7 @@ mod test {
                                 shader_location: 3,
                             },
                         ];
-                        pub fn vertex_buffer_layout(
+                        pub const fn vertex_buffer_layout(
                             step_mode: wgpu::VertexStepMode,
                         ) -> wgpu::VertexBufferLayout<'static> {
                             wgpu::VertexBufferLayout {
@@ -694,5 +775,171 @@ mod test {
             },
             actual
         );
+    }
+
+    #[test]
+    fn write_entry_constants() {
+        let source = indoc! {r#"
+            @vertex
+            fn vs_main() {}
+
+            @vertex
+            fn another_vs() {}
+
+            @fragment
+            fn fs_main() {}
+
+            @fragment
+            fn another_fs() {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = entry_point_constants(&module);
+
+        assert_tokens_eq!(
+            quote!{
+                pub const ENTRY_VS_MAIN: &'static str = "vs_main";
+                pub const ENTRY_ANOTHER_VS: &'static str = "another_vs";
+                pub const ENTRY_FS_MAIN: &'static str = "fs_main";
+                pub const ENTRY_ANOTHER_FS: &'static str = "another_fs";
+            },
+            actual
+        )
+    }
+
+    #[test]
+    fn write_vertex_shader_entry_no_buffers() {
+        let source = indoc! {r#"
+            @vertex
+            fn vs_main() {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = vertex_states(&module);
+
+        assert_tokens_eq!(
+            quote! {
+                pub struct VertexEntry<const N: usize> {
+                    entry_point: &'static str,
+                    buffers: [wgpu::VertexBufferLayout<'static>; N],
+                }
+                pub fn vertex_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a VertexEntry<N>,
+                ) -> wgpu::VertexState<'a> {
+                    wgpu::VertexState {
+                        module,
+                        entry_point: entry.entry_point,
+                        buffers: &entry.buffers,
+                    }
+                }
+                pub fn vs_main_entry() -> VertexEntry<0> {
+                    VertexEntry {
+                        entry_point: ENTRY_VS_MAIN,
+                        buffers: [],
+                    }
+                }
+            },
+            actual
+        )
+    }
+
+    #[test]
+    fn write_vertex_shader_multiple_entries() {
+        let source = indoc! {r#"
+            struct VertexInput {
+                @location(0) position: vec4<f32>,
+            };
+            @vertex
+            fn vs_main_1(in: VertexInput) {}
+
+            @vertex
+            fn vs_main_2(in: VertexInput) {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = vertex_states(&module);
+
+        assert_tokens_eq!(
+            quote! {
+                pub struct VertexEntry<const N: usize> {
+                    entry_point: &'static str,
+                    buffers: [wgpu::VertexBufferLayout<'static>; N],
+                }
+                pub fn vertex_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a VertexEntry<N>,
+                ) -> wgpu::VertexState<'a> {
+                    wgpu::VertexState {
+                        module,
+                        entry_point: entry.entry_point,
+                        buffers: &entry.buffers,
+                    }
+                }
+                pub fn vs_main_1_entry(step_mode_0: wgpu::VertexStepMode) -> VertexEntry<1> {
+                    VertexEntry {
+                        entry_point: ENTRY_VS_MAIN_1,
+                        buffers: [VertexInput::vertex_buffer_layout(step_mode_0)],
+                    }
+                }
+                pub fn vs_main_2_entry(step_mode_0: wgpu::VertexStepMode) -> VertexEntry<1> {
+                    VertexEntry {
+                        entry_point: ENTRY_VS_MAIN_2,
+                        buffers: [VertexInput::vertex_buffer_layout(step_mode_0)],
+                    }
+                }
+            },
+            actual
+        )
+    }
+
+    #[test]
+    fn write_vertex_shader_entry_multiple_buffers() {
+        let source = indoc! {r#"
+            struct VertexInput {
+                @location(0) position: vec4<f32>,
+            };
+            struct AnotherVertexInput {
+                @location(1) some_data: vec2<f32>
+            }
+            @vertex
+            fn vs_main(in: VertexInput, another: AnotherVertexInput) {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = vertex_states(&module);
+
+        assert_tokens_eq!(
+            quote! {
+                pub struct VertexEntry<const N: usize> {
+                    entry_point: &'static str,
+                    buffers: [wgpu::VertexBufferLayout<'static>; N],
+                }
+                pub fn vertex_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a VertexEntry<N>,
+                ) -> wgpu::VertexState<'a> {
+                    wgpu::VertexState {
+                        module,
+                        entry_point: entry.entry_point,
+                        buffers: &entry.buffers,
+                    }
+                }
+                pub fn vs_main_entry(step_mode_0: wgpu::VertexStepMode, step_mode_1: wgpu::VertexStepMode) -> VertexEntry<2> {
+                    VertexEntry {
+                        entry_point: ENTRY_VS_MAIN,
+                        buffers: [
+                            VertexInput::vertex_buffer_layout(step_mode_0),
+                            AnotherVertexInput::vertex_buffer_layout(step_mode_1),
+                        ],
+                    }
+                }
+            },
+            actual
+        )
     }
 }

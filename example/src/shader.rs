@@ -144,7 +144,7 @@ pub mod vertex {
                 shader_location: 0,
             },
         ];
-        pub fn vertex_buffer_layout(
+        pub const fn vertex_buffer_layout(
             step_mode: wgpu::VertexStepMode,
         ) -> wgpu::VertexBufferLayout<'static> {
             wgpu::VertexBufferLayout {
@@ -153,6 +153,28 @@ pub mod vertex {
                 attributes: &super::VertexInput::VERTEX_ATTRIBUTES,
             }
         }
+    }
+}
+pub const ENTRY_VS_MAIN: &'static str = "vs_main";
+pub const ENTRY_FS_MAIN: &'static str = "fs_main";
+pub struct VertexEntry<const N: usize> {
+    entry_point: &'static str,
+    buffers: [wgpu::VertexBufferLayout<'static>; N],
+}
+pub fn vertex_state<'a, const N: usize>(
+    module: &'a wgpu::ShaderModule,
+    entry: &'a VertexEntry<N>,
+) -> wgpu::VertexState<'a> {
+    wgpu::VertexState {
+        module,
+        entry_point: entry.entry_point,
+        buffers: &entry.buffers,
+    }
+}
+pub fn vs_main_entry(step_mode_0: wgpu::VertexStepMode) -> VertexEntry<1> {
+    VertexEntry {
+        entry_point: ENTRY_VS_MAIN,
+        buffers: [VertexInput::vertex_buffer_layout(step_mode_0)],
     }
 }
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
