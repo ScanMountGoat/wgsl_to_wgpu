@@ -206,7 +206,7 @@ fn bind_group_layout_entry(
                 naga::ImageClass::Storage { format, access } => {
                     // TODO: Will the debug implementation always work with the macro?
                     // Assume texture format variants are the same as storage formats.
-                    let format = syn::Ident::new(&format!("{:?}", format), Span::call_site());
+                    let format = syn::Ident::new(&format!("{format:?}"), Span::call_site());
                     let storage_access = storage_access(access);
 
                     quote!(wgpu::BindingType::StorageTexture {

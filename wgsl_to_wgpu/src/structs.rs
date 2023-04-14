@@ -37,7 +37,7 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
 
 fn rust_struct(
     t: &naga::Type,
-    members: &Vec<naga::StructMember>,
+    members: &[naga::StructMember],
     layouter: &naga::proc::Layouter,
     t_handle: naga::Handle<naga::Type>,
     module: &naga::Module,

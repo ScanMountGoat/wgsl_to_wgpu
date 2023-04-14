@@ -21,9 +21,9 @@
 extern crate wgpu_types as wgpu;
 
 use bindgroup::{bind_groups_module, get_bind_group_data};
+use naga::ShaderStage;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
-use naga::ShaderStage;
 use syn::{Ident, Index};
 use thiserror::Error;
 
@@ -182,7 +182,7 @@ fn pretty_print(tokens: &TokenStream) -> String {
 }
 
 fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
-    Ident::new(&format!("{}{}", name, index), Span::call_site())
+    Ident::new(&format!("{name}{index}"), Span::call_site())
 }
 
 fn compute_module(module: &naga::Module) -> TokenStream {
@@ -261,15 +261,20 @@ fn vertex_module(module: &naga::Module) -> TokenStream {
 }
 
 fn entry_point_constants(module: &naga::Module) -> TokenStream {
-    let entry_points: Vec<TokenStream> = module.entry_points.iter().map(|entry_point| {
-        let entry_name = Literal::string(&entry_point.name);
-        let const_name = Ident::new(
-            &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
-            Span::call_site());
-        quote! {
-            pub const #const_name: &'static str = #entry_name;
-        }
-    }).collect();
+    let entry_points: Vec<TokenStream> = module
+        .entry_points
+        .iter()
+        .map(|entry_point| {
+            let entry_name = Literal::string(&entry_point.name);
+            let const_name = Ident::new(
+                &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
+                Span::call_site(),
+            );
+            quote! {
+                pub const #const_name: &str = #entry_name;
+            }
+        })
+        .collect();
 
     quote! {
         #(#entry_points)*
@@ -279,23 +284,29 @@ fn entry_point_constants(module: &naga::Module) -> TokenStream {
 fn vertex_states(module: &naga::Module) -> TokenStream {
     let vertex_inputs = wgsl::get_vertex_input_structs(module);
     let mut step_mode_params = vec![];
-    let layout_expressions: Vec<TokenStream> = vertex_inputs.iter().enumerate().map(|(idx, s)| {
-        let name = Ident::new(&s.name, Span::call_site());
-        let step_mode = indexed_name_to_ident("step_mode_", idx as u32);
-        let step_mode_clone = step_mode.clone();
-        step_mode_params.push(quote!(#step_mode_clone: wgpu::VertexStepMode));
-        quote!(#name::vertex_buffer_layout(#step_mode))
-    }).collect();
+    let layout_expressions: Vec<TokenStream> = vertex_inputs
+        .iter()
+        .enumerate()
+        .map(|(idx, s)| {
+            let name = Ident::new(&s.name, Span::call_site());
+            let step_mode = indexed_name_to_ident("step_mode_", idx as u32);
+            let step_mode_clone = step_mode.clone();
+            step_mode_params.push(quote!(#step_mode_clone: wgpu::VertexStepMode));
+            quote!(#name::vertex_buffer_layout(#step_mode))
+        })
+        .collect();
 
-    let vertex_entries: Vec<TokenStream> = module.entry_points.iter().map(|entry_point| {
-        match &entry_point.stage {
+    let vertex_entries: Vec<TokenStream> = module
+        .entry_points
+        .iter()
+        .map(|entry_point| match &entry_point.stage {
             ShaderStage::Vertex => {
-                let fn_name = Ident::new(
-                    &format!("{}_entry", &entry_point.name),
-                    Span::call_site());
+                let fn_name =
+                    Ident::new(&format!("{}_entry", &entry_point.name), Span::call_site());
                 let const_name = Ident::new(
                     &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
-                    Span::call_site());
+                    Span::call_site(),
+                );
                 let n = vertex_inputs.len();
                 let n = Literal::usize_unsuffixed(n);
                 quote! {
@@ -309,9 +320,9 @@ fn vertex_states(module: &naga::Module) -> TokenStream {
                     }
                 }
             }
-            _ => quote!()
-        }
-    }).collect();
+            _ => quote!(),
+        })
+        .collect();
 
     quote! {
         pub struct VertexEntry<const N: usize> {
@@ -349,7 +360,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
                 let location = Index::from(*location as usize);
                 let format = wgsl::vertex_format(&module.types[m.ty]);
                 // TODO: Will the debug implementation always work with the macro?
-                let format = Ident::new(&format!("{:?}", format), Span::call_site());
+                let format = Ident::new(&format!("{format:?}"), Span::call_site());
 
                 quote! {
                     wgpu::VertexAttribute {
@@ -395,7 +406,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
 #[macro_export]
 macro_rules! assert_tokens_eq {
     ($a:expr, $b:expr) => {
-        pretty_assertions::assert_eq!(crate::pretty_print(&$a), crate::pretty_print(&$b));
+        pretty_assertions::assert_eq!(crate::pretty_print(&$a), crate::pretty_print(&$b))
     };
 }
 
@@ -798,11 +809,11 @@ mod test {
         let actual = entry_point_constants(&module);
 
         assert_tokens_eq!(
-            quote!{
-                pub const ENTRY_VS_MAIN: &'static str = "vs_main";
-                pub const ENTRY_ANOTHER_VS: &'static str = "another_vs";
-                pub const ENTRY_FS_MAIN: &'static str = "fs_main";
-                pub const ENTRY_ANOTHER_FS: &'static str = "another_fs";
+            quote! {
+                pub const ENTRY_VS_MAIN: &str = "vs_main";
+                pub const ENTRY_ANOTHER_VS: &str = "another_vs";
+                pub const ENTRY_FS_MAIN: &str = "fs_main";
+                pub const ENTRY_ANOTHER_FS: &str = "another_fs";
             },
             actual
         )

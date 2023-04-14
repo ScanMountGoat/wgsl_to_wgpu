@@ -155,8 +155,8 @@ pub mod vertex {
         }
     }
 }
-pub const ENTRY_VS_MAIN: &'static str = "vs_main";
-pub const ENTRY_FS_MAIN: &'static str = "fs_main";
+pub const ENTRY_VS_MAIN: &str = "vs_main";
+pub const ENTRY_FS_MAIN: &str = "fs_main";
 pub struct VertexEntry<const N: usize> {
     entry_point: &'static str,
     buffers: [wgpu::VertexBufferLayout<'static>; N],
