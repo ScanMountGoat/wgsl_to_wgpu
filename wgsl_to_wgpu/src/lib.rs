@@ -601,7 +601,7 @@ mod test {
                                 shader_location: 3,
                             },
                         ];
-                        pub fn vertex_buffer_layout(
+                        pub const fn vertex_buffer_layout(
                             step_mode: wgpu::VertexStepMode,
                         ) -> wgpu::VertexBufferLayout<'static> {
                             wgpu::VertexBufferLayout {
@@ -661,7 +661,7 @@ mod test {
                                 shader_location: 3,
                             },
                         ];
-                        pub fn vertex_buffer_layout(
+                        pub const fn vertex_buffer_layout(
                             step_mode: wgpu::VertexStepMode,
                         ) -> wgpu::VertexBufferLayout<'static> {
                             wgpu::VertexBufferLayout {
@@ -720,7 +720,7 @@ mod test {
                                 shader_location: 3,
                             },
                         ];
-                        pub fn vertex_buffer_layout(
+                        pub const fn vertex_buffer_layout(
                             step_mode: wgpu::VertexStepMode,
                         ) -> wgpu::VertexBufferLayout<'static> {
                             wgpu::VertexBufferLayout {
@@ -800,5 +800,171 @@ mod test {
             },
             actual
         );
+    }
+
+    #[test]
+    fn write_entry_constants() {
+        let source = indoc! {r#"
+            @vertex
+            fn vs_main() {}
+
+            @vertex
+            fn another_vs() {}
+
+            @fragment
+            fn fs_main() {}
+
+            @fragment
+            fn another_fs() {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = entry_point_constants(&module);
+
+        assert_tokens_eq!(
+            quote!{
+                pub const ENTRY_VS_MAIN: &'static str = "vs_main";
+                pub const ENTRY_ANOTHER_VS: &'static str = "another_vs";
+                pub const ENTRY_FS_MAIN: &'static str = "fs_main";
+                pub const ENTRY_ANOTHER_FS: &'static str = "another_fs";
+            },
+            actual
+        )
+    }
+
+    #[test]
+    fn write_vertex_shader_entry_no_buffers() {
+        let source = indoc! {r#"
+            @vertex
+            fn vs_main() {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = vertex_states(&module);
+
+        assert_tokens_eq!(
+            quote! {
+                pub struct VertexEntry<const N: usize> {
+                    entry_point: &'static str,
+                    buffers: [wgpu::VertexBufferLayout<'static>; N],
+                }
+                pub fn vertex_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a VertexEntry<N>,
+                ) -> wgpu::VertexState<'a> {
+                    wgpu::VertexState {
+                        module,
+                        entry_point: entry.entry_point,
+                        buffers: &entry.buffers,
+                    }
+                }
+                pub fn vs_main_entry() -> VertexEntry<0> {
+                    VertexEntry {
+                        entry_point: ENTRY_VS_MAIN,
+                        buffers: [],
+                    }
+                }
+            },
+            actual
+        )
+    }
+
+    #[test]
+    fn write_vertex_shader_multiple_entries() {
+        let source = indoc! {r#"
+            struct VertexInput {
+                @location(0) position: vec4<f32>,
+            };
+            @vertex
+            fn vs_main_1(in: VertexInput) {}
+
+            @vertex
+            fn vs_main_2(in: VertexInput) {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = vertex_states(&module);
+
+        assert_tokens_eq!(
+            quote! {
+                pub struct VertexEntry<const N: usize> {
+                    entry_point: &'static str,
+                    buffers: [wgpu::VertexBufferLayout<'static>; N],
+                }
+                pub fn vertex_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a VertexEntry<N>,
+                ) -> wgpu::VertexState<'a> {
+                    wgpu::VertexState {
+                        module,
+                        entry_point: entry.entry_point,
+                        buffers: &entry.buffers,
+                    }
+                }
+                pub fn vs_main_1_entry(step_mode_0: wgpu::VertexStepMode) -> VertexEntry<1> {
+                    VertexEntry {
+                        entry_point: ENTRY_VS_MAIN_1,
+                        buffers: [VertexInput::vertex_buffer_layout(step_mode_0)],
+                    }
+                }
+                pub fn vs_main_2_entry(step_mode_0: wgpu::VertexStepMode) -> VertexEntry<1> {
+                    VertexEntry {
+                        entry_point: ENTRY_VS_MAIN_2,
+                        buffers: [VertexInput::vertex_buffer_layout(step_mode_0)],
+                    }
+                }
+            },
+            actual
+        )
+    }
+
+    #[test]
+    fn write_vertex_shader_entry_multiple_buffers() {
+        let source = indoc! {r#"
+            struct VertexInput {
+                @location(0) position: vec4<f32>,
+            };
+            struct AnotherVertexInput {
+                @location(1) some_data: vec2<f32>
+            }
+            @vertex
+            fn vs_main(in: VertexInput, another: AnotherVertexInput) {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = vertex_states(&module);
+
+        assert_tokens_eq!(
+            quote! {
+                pub struct VertexEntry<const N: usize> {
+                    entry_point: &'static str,
+                    buffers: [wgpu::VertexBufferLayout<'static>; N],
+                }
+                pub fn vertex_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a VertexEntry<N>,
+                ) -> wgpu::VertexState<'a> {
+                    wgpu::VertexState {
+                        module,
+                        entry_point: entry.entry_point,
+                        buffers: &entry.buffers,
+                    }
+                }
+                pub fn vs_main_entry(step_mode_0: wgpu::VertexStepMode, step_mode_1: wgpu::VertexStepMode) -> VertexEntry<2> {
+                    VertexEntry {
+                        entry_point: ENTRY_VS_MAIN,
+                        buffers: [
+                            VertexInput::vertex_buffer_layout(step_mode_0),
+                            AnotherVertexInput::vertex_buffer_layout(step_mode_1),
+                        ],
+                    }
+                }
+            },
+            actual
+        )
     }
 }
