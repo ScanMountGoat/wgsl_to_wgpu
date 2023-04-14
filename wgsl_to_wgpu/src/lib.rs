@@ -29,6 +29,7 @@ use syn::{Ident, Index};
 use thiserror::Error;
 
 mod bindgroup;
+mod renderpass;
 mod structs;
 mod wgsl;
 
@@ -157,6 +158,11 @@ pub fn create_shader_module(
         }
     };
 
+    let enhanced_render_pass = renderpass::enhanced_render_pass(
+        wgsl::get_vertex_input_structs(&module).len(),
+        bind_group_data.len()
+    );
+
     let output = quote! {
         #(#structs)*
 
@@ -173,6 +179,8 @@ pub fn create_shader_module(
         #create_shader_module
 
         #create_pipeline_layout
+
+        #enhanced_render_pass
     };
     Ok(pretty_print(&output))
 }

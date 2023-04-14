@@ -198,3 +198,67 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             },
         )
 }
+pub struct NeedsVertexBuffer0;
+pub struct NeedsBindGroup0;
+pub struct NeedsBindGroup1;
+pub struct Ready;
+pub struct EnhancedRenderPass<'rp, VB0, BG0, BG1> {
+    render_pass: wgpu::RenderPass<'rp>,
+    type_state: std::marker::PhantomData<(VB0, BG0, BG1)>,
+}
+impl<'rp> EnhancedRenderPass<'rp, NeedsVertexBuffer0, NeedsBindGroup0, NeedsBindGroup1> {
+    pub fn new(
+        encoder: &'rp mut wgpu::CommandEncoder,
+        desc: &wgpu::RenderPassDescriptor<'rp, '_>,
+    ) -> EnhancedRenderPass<'rp, NeedsVertexBuffer0, NeedsBindGroup0, NeedsBindGroup1> {
+        let render_pass = encoder.begin_render_pass(desc);
+        EnhancedRenderPass {
+            render_pass,
+            type_state: std::marker::PhantomData,
+        }
+    }
+}
+impl<'rp, VB0, BG0, BG1> EnhancedRenderPass<'rp, VB0, BG0, BG1> {
+    pub fn inner(&mut self) -> &mut wgpu::RenderPass<'rp> {
+        &mut self.render_pass
+    }
+    pub fn set_vertex_buffer_0(
+        mut self,
+        buffer_slice: wgpu::BufferSlice<'rp>,
+    ) -> EnhancedRenderPass<'rp, Ready, BG0, BG1> {
+        self.render_pass.set_vertex_buffer(0, buffer_slice);
+        EnhancedRenderPass {
+            render_pass: self.render_pass,
+            type_state: std::marker::PhantomData,
+        }
+    }
+    pub fn set_bind_group_0(
+        mut self,
+        bind_group: &'rp bind_groups::BindGroup0,
+    ) -> EnhancedRenderPass<'rp, VB0, Ready, BG1> {
+        bind_group.set(&mut self.render_pass);
+        EnhancedRenderPass {
+            render_pass: self.render_pass,
+            type_state: std::marker::PhantomData,
+        }
+    }
+    pub fn set_bind_group_1(
+        mut self,
+        bind_group: &'rp bind_groups::BindGroup1,
+    ) -> EnhancedRenderPass<'rp, VB0, BG0, Ready> {
+        bind_group.set(&mut self.render_pass);
+        EnhancedRenderPass {
+            render_pass: self.render_pass,
+            type_state: std::marker::PhantomData,
+        }
+    }
+}
+impl<'rp> EnhancedRenderPass<'rp, Ready, Ready, Ready> {
+    pub fn draw(
+        &mut self,
+        vertices: std::ops::Range<u32>,
+        instances: std::ops::Range<u32>,
+    ) {
+        self.render_pass.draw(vertices, instances);
+    }
+}

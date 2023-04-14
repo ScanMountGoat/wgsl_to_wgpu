@@ -1,6 +1,6 @@
 use std::iter;
 
-use crate::shader::ENTRY_FS_MAIN;
+use crate::shader::{EnhancedRenderPass, ENTRY_FS_MAIN};
 use futures::executor::block_on;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -211,7 +211,7 @@ impl State {
                 label: Some("Render Encoder"),
             });
 
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut render_pass = shader::EnhancedRenderPass::new(&mut encoder, &wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &output_view,
@@ -224,17 +224,26 @@ impl State {
             depth_stencil_attachment: None,
         });
 
-        render_pass.set_pipeline(&self.pipeline);
+        render_pass.inner().set_pipeline(&self.pipeline);
 
-        // Use this function to ensure all bind groups are set.
-        crate::shader::bind_groups::set_bind_groups(
-            &mut render_pass,
-            crate::shader::bind_groups::BindGroups {
-                bind_group0: &self.bind_group0,
-                bind_group1: &self.bind_group1,
-            },
-        );
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        // Before:
+        // EnhancedRenderPass<NeedsVertexBuffer0, NeedsBindGroup0, NeedsBindGroup1>
+        // - draw function is not accessible (unless you dip into inner())
+
+        // You can chain initialization all at once
+        let mut render_pass = render_pass
+            .set_bind_group_0(&self.bind_group0)
+            .set_bind_group_1(&self.bind_group1);
+
+        // Or shadow variables to initialize a bit at a time
+        let mut render_pass = render_pass
+            .set_vertex_buffer_0(self.vertex_buffer.slice(..));
+
+        // After:
+        // EnhancedRenderPass<Ready, Ready, Ready>
+        // - draw function is now accessible
+        // - You can still replace bind groups and vertex buffers though
+
         render_pass.draw(0..3, 0..1);
 
         drop(render_pass);
