@@ -171,10 +171,10 @@ pub fn vertex_state<'a, const N: usize>(
         buffers: &entry.buffers,
     }
 }
-pub fn vs_main_entry(step_mode_0: wgpu::VertexStepMode) -> VertexEntry<1> {
+pub fn vs_main_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
     VertexEntry {
         entry_point: ENTRY_VS_MAIN,
-        buffers: [VertexInput::vertex_buffer_layout(step_mode_0)],
+        buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
     }
 }
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
