@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+
+use naga::{Handle, Type};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Index};
@@ -92,13 +95,18 @@ fn rust_struct(
         derives.push(quote!(serde::Deserialize));
     }
 
-    // Assume global variables structs are host shareable and require validation.
+    // Assume types used in global variables are host shareable and require validation.
     // This includes storage, uniform, and workgroup variables.
     // This also means types that are never used will not be validated.
     // Structs used only for vertex inputs do not require validation on desktop platforms.
     // Vertex input layout is handled already by setting the attribute offsets and types.
     // This allows vertex input field types without padding like vec3 for positions.
-    let is_host_shareable = module.global_variables.iter().any(|g| g.1.ty == t_handle);
+    let mut global_variable_types = HashSet::new();
+    for g in module.global_variables.iter() {
+        add_types_recursive(&mut global_variable_types, module, g.1.ty);
+    }
+
+    let is_host_shareable = global_variable_types.contains(&t_handle);
 
     let assert_layout = if options.derive_bytemuck && is_host_shareable {
         // Assert that the Rust layout matches the WGSL layout.
@@ -118,6 +126,26 @@ fn rust_struct(
             #(#members),*
         }
         #assert_layout
+    }
+}
+
+fn add_types_recursive(
+    types: &mut HashSet<naga::Handle<naga::Type>>,
+    module: &naga::Module,
+    ty: Handle<Type>,
+) {
+    types.insert(ty);
+
+    match &module.types[ty].inner {
+        naga::TypeInner::Pointer { base, .. } => add_types_recursive(types, module, *base),
+        naga::TypeInner::Array { base, .. } => add_types_recursive(types, module, *base),
+        naga::TypeInner::Struct { members, .. } => {
+            for member in members {
+                add_types_recursive(types, module, member.ty);
+            }
+        }
+        naga::TypeInner::BindingArray { base, .. } => add_types_recursive(types, module, *base),
+        _ => (),
     }
 }
 
@@ -918,6 +946,16 @@ mod tests {
 
             var<storage, read_write> test: Input0;
 
+            struct Outer {
+                inner: Inner
+            }
+
+            struct Inner {
+                a: f32
+            }
+
+            var<storage, read_write> test2: array<Outer>;
+
             @vertex
             fn main(input: Input0) -> vec4<f32> {
                 return vec4(0.0);
@@ -957,6 +995,28 @@ mod tests {
                 );
                 const _: () = assert!(
                     memoffset::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
+                );
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct Inner {
+                    pub a: f32,
+                }
+                const _: () = assert!(
+                    std::mem::size_of:: < Inner > () == 4, "size of Inner does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Inner, a) == 0, "offset of Inner.a does not match WGSL"
+                );
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct Outer {
+                    pub inner: Inner,
+                }
+                const _: () = assert!(
+                    std::mem::size_of:: < Outer > () == 4, "size of Outer does not match WGSL"
+                );
+                const _: () = assert!(
+                    memoffset::offset_of!(Outer, inner) == 0, "offset of Outer.inner does not match WGSL"
                 );
             },
             actual
