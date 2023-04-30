@@ -12,24 +12,34 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
     let mut layouter = naga::proc::Layouter::default();
     layouter.update(&module.types, &module.constants).unwrap();
 
+    let mut global_variable_types = HashSet::new();
+    for g in module.global_variables.iter() {
+        add_types_recursive(&mut global_variable_types, module, g.1.ty);
+    }
+
     // Create matching Rust structs for WGSL structs.
     // This is a UniqueArena, so each struct will only be generated once.
     module
         .types
         .iter()
         .filter(|(h, _)| {
-            // Shader stage outputs don't need to be instantiated by the user.
-            // Many builtin outputs also don't satisfy alignment requirements.
-            // Skipping these structs helps avoid issues deriving encase or bytemuck.
-            !module
-                .entry_points
-                .iter()
-                .any(|e| e.function.result.as_ref().map(|r| r.ty) == Some(*h))
+            // Check if the struct will need to be used by the user from Rust.
+            // This includes function inputs like vertex attributes and global variables.
+            // Skipping internal structs helps avoid issues deriving encase or bytemuck.
+            module.entry_points.iter().any(|e| {
+                global_variable_types.contains(h) || e.function.arguments.iter().any(|a| a.ty == *h)
+            })
         })
         .filter_map(|(t_handle, t)| {
             if let naga::TypeInner::Struct { members, .. } = &t.inner {
                 Some(rust_struct(
-                    t, members, &layouter, t_handle, module, options,
+                    t,
+                    members,
+                    &layouter,
+                    t_handle,
+                    module,
+                    options,
+                    &global_variable_types,
                 ))
             } else {
                 None
@@ -45,6 +55,7 @@ fn rust_struct(
     t_handle: naga::Handle<naga::Type>,
     module: &naga::Module,
     options: WriteOptions,
+    global_variable_types: &HashSet<Handle<Type>>,
 ) -> TokenStream {
     let struct_name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
 
@@ -101,11 +112,6 @@ fn rust_struct(
     // Structs used only for vertex inputs do not require validation on desktop platforms.
     // Vertex input layout is handled already by setting the attribute offsets and types.
     // This allows vertex input field types without padding like vec3 for positions.
-    let mut global_variable_types = HashSet::new();
-    for g in module.global_variables.iter() {
-        add_types_recursive(&mut global_variable_types, module, g.1.ty);
-    }
-
     let is_host_shareable = global_variable_types.contains(&t_handle);
 
     let assert_layout = if options.derive_bytemuck && is_host_shareable {
@@ -179,30 +185,35 @@ mod tests {
                 b: i32,
                 c: f32,
             };
+            var<uniform> a: Scalars;
 
             struct VectorsU32 {
                 a: vec2<u32>,
                 b: vec3<u32>,
                 c: vec4<u32>,
             };
+            var<uniform> b: VectorsU32;
 
             struct VectorsI32 {
                 a: vec2<i32>,
                 b: vec3<i32>,
                 c: vec4<i32>,
             };
+            var<uniform> c: VectorsI32;
 
             struct VectorsF32 {
                 a: vec2<f32>,
                 b: vec3<f32>,
                 c: vec4<f32>,
             };
+            var<uniform> d: VectorsF32;
 
             struct VectorsF64 {
                 a: vec2<f64>,
                 b: vec3<f64>,
                 c: vec4<f64>,
             };
+            var<uniform> e: VectorsF64;
 
             struct MatricesF32 {
                 a: mat4x4<f32>,
@@ -215,6 +226,7 @@ mod tests {
                 h: mat2x3<f32>,
                 i: mat2x2<f32>,
             };
+            var<uniform> f: MatricesF32;
 
             struct MatricesF64 {
                 a: mat4x4<f64>,
@@ -227,17 +239,20 @@ mod tests {
                 h: mat2x3<f64>,
                 i: mat2x2<f64>,
             };
+            var<uniform> g: MatricesF64;
 
             struct StaticArrays {
                 a: array<u32, 5>,
                 b: array<f32, 3>,
                 c: array<mat4x4<f32>, 512>,
             };
+            var<uniform> h: StaticArrays;
 
             struct Nested {
                 a: MatricesF32,
                 b: MatricesF64
             }
+            var<uniform> i: Nested;
 
             @fragment
             fn main() {}
@@ -337,30 +352,35 @@ mod tests {
                 b: i32,
                 c: f32,
             };
+            var<uniform> a: Scalars;
 
             struct VectorsU32 {
                 a: vec2<u32>,
                 b: vec3<u32>,
                 c: vec4<u32>,
             };
+            var<uniform> b: VectorsU32;
 
             struct VectorsI32 {
                 a: vec2<i32>,
                 b: vec3<i32>,
                 c: vec4<i32>,
             };
+            var<uniform> c: VectorsI32;
 
             struct VectorsF32 {
                 a: vec2<f32>,
                 b: vec3<f32>,
                 c: vec4<f32>,
             };
+            var<uniform> d: VectorsF32;
 
             struct VectorsF64 {
                 a: vec2<f64>,
                 b: vec3<f64>,
                 c: vec4<f64>,
             };
+            var<uniform> e: VectorsF64;
 
             struct MatricesF32 {
                 a: mat4x4<f32>,
@@ -373,6 +393,7 @@ mod tests {
                 h: mat2x3<f32>,
                 i: mat2x2<f32>,
             };
+            var<uniform> f: MatricesF32;
 
             struct MatricesF64 {
                 a: mat4x4<f64>,
@@ -385,17 +406,20 @@ mod tests {
                 h: mat2x3<f64>,
                 i: mat2x2<f64>,
             };
+            var<uniform> g: MatricesF64;
 
             struct StaticArrays {
                 a: array<u32, 5>,
                 b: array<f32, 3>,
                 c: array<mat4x4<f32>, 512>,
             };
+            var<uniform> h: StaticArrays;
 
             struct Nested {
                 a: MatricesF32,
                 b: MatricesF64
             }
+            var<uniform> i: Nested;
 
             @fragment
             fn main() {}
@@ -501,30 +525,35 @@ mod tests {
                 b: i32,
                 c: f32,
             };
+            var<uniform> a: Scalars;
 
             struct VectorsU32 {
                 a: vec2<u32>,
                 b: vec3<u32>,
                 c: vec4<u32>,
             };
+            var<uniform> b: VectorsU32;
 
             struct VectorsI32 {
                 a: vec2<i32>,
                 b: vec3<i32>,
                 c: vec4<i32>,
             };
+            var<uniform> c: VectorsI32;
 
             struct VectorsF32 {
                 a: vec2<f32>,
                 b: vec3<f32>,
                 c: vec4<f32>,
             };
+            var<uniform> d: VectorsF32;
 
             struct VectorsF64 {
                 a: vec2<f64>,
                 b: vec3<f64>,
                 c: vec4<f64>,
             };
+            var<uniform> e: VectorsF64;
 
             struct MatricesF32 {
                 a: mat4x4<f32>,
@@ -537,6 +566,7 @@ mod tests {
                 h: mat2x3<f32>,
                 i: mat2x2<f32>,
             };
+            var<uniform> f: MatricesF32;
 
             struct MatricesF64 {
                 a: mat4x4<f64>,
@@ -549,17 +579,20 @@ mod tests {
                 h: mat2x3<f64>,
                 i: mat2x2<f64>,
             };
+            var<uniform> g: MatricesF64;
 
             struct StaticArrays {
                 a: array<u32, 5>,
                 b: array<f32, 3>,
                 c: array<mat4x4<f32>, 512>,
             };
+            var<uniform> h: StaticArrays;
 
             struct Nested {
                 a: MatricesF32,
                 b: MatricesF64
             }
+            var<uniform> i: Nested;
 
             @fragment
             fn main() {}
@@ -856,8 +889,12 @@ mod tests {
                 a: f32
             }
 
+            struct Unused {
+                a: vec3<f32>
+            }
+
             @fragment
-            fn main() -> Output0 {
+            fn main(in: Input0) -> Output0 {
                 var out: Output0;
                 return out;
             }

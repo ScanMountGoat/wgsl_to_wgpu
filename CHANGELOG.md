@@ -6,7 +6,11 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### 0.4.0 - 2023-04-30
+## unreleased
+### Changed
+* Adjusted code generation to skip structs that are only used internally in the shader.
+
+## 0.4.0 - 2023-04-30
 ### Added
 * Added vertex buffer layout function to each vertex input struct.
 * Added support for nalgebra for matrix and vector types.
@@ -15,16 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added support for multisampled textures.
 * Added a function for creating compute pipelines.
 * Added optional derives for `serde::Serialize` and `serde::Deserialize`.
-* Add functions to initialize vertex state for pipeline descriptors.
+* Added functions to initialize vertex state for pipeline descriptors.
 
 ### Changed
 * Skip generating structs for shader stage outputs since they aren't needed.
 
-### 0.3.1 - 2022-12-18
+## 0.3.1 - 2022-12-18
 ### Changed
 * Updated documentation.
 
-### 0.3.0 - 2022-12-13
+## 0.3.0 - 2022-12-13
 ### Added
 * Added a check to force bind groups to be consecutive.
 * Added a check for repeated bind groups or bindings.
@@ -48,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Removed vertex attribute location code.
 * Removed inaccurate generated struct size code.
 
-### 0.2.0 - 2022-03-09
+## 0.2.0 - 2022-03-09
 ### Added
 * Added create_pipeline_layout function.
 * Added create_shader_module function.
@@ -66,5 +70,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Converted the procedural macro to a function to be used in build scripts.
 * Always generate Rust types like arrays instead of forcing glam.
 
-### 0.1.0 - 2021-07-10
+## 0.1.0 - 2021-07-10
 Initial release!
