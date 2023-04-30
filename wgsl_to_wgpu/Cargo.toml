@@ -11,7 +11,7 @@ edition = "2021"
 
 [dependencies]
 naga = { version = "0.11.0", features = ["wgsl-in"] }
-wgpu-types = "0.15.0"
+wgpu-types = "0.16.0"
 syn = "1.0"
 quote = "1.0"
 proc-macro2 = "1.0"
