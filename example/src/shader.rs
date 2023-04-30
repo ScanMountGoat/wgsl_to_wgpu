@@ -7,12 +7,6 @@ pub struct VertexInput {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct VertexOutput {
-    pub clip_position: [f32; 4],
-    pub tex_coords: [f32; 2],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
     pub color_rgb: [f32; 4],
 }

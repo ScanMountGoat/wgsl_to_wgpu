@@ -25,10 +25,17 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
         .filter(|(h, _)| {
             // Check if the struct will need to be used by the user from Rust.
             // This includes function inputs like vertex attributes and global variables.
+            // Shader stage function outputs will not be accessible from Rust.
             // Skipping internal structs helps avoid issues deriving encase or bytemuck.
-            module.entry_points.iter().any(|e| {
-                global_variable_types.contains(h) || e.function.arguments.iter().any(|a| a.ty == *h)
-            })
+            !module
+                .entry_points
+                .iter()
+                .any(|e| e.function.result.as_ref().map(|r| r.ty) == Some(*h))
+                && module
+                    .entry_points
+                    .iter()
+                    .any(|e| e.function.arguments.iter().any(|a| a.ty == *h))
+                || global_variable_types.contains(h)
         })
         .filter_map(|(t_handle, t)| {
             if let naga::TypeInner::Struct { members, .. } = &t.inner {
