@@ -7,7 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 0.4.0 - 2023-04-30
-TODO
+### Added
+* Added vertex buffer layout function to each vertex input struct.
+* Added support for nalgebra for matrix and vector types.
+* Added const asserts to check approriate Rust struct memory layouts with WGSL when deriving bytemuck.
+* Added support for storage textures.
+* Added support for multisampled textures.
+* Added a function for creating compute pipelines.
+* Added optional derives for `serde::Serialize` and `serde::Deserialize`.
+* Add functions to initialize vertex state for pipeline descriptors.
+
+### Changed
+* Skip generating structs for shader stage outputs since they aren't needed.
 
 ### 0.3.1 - 2022-12-18
 ### Changed
@@ -25,8 +36,6 @@ TODO
 * Added support for `glam` or Rust types for vectors and matrices.
 * Added the workgroup size for generated code for compute shaders.
 
-### Fixed
-
 ### Changed
 * Changed the return type of `create_shader_module` to `String` instead of writing to a file.
 * Changed the visibility of resources to match the shader stages present in the module.
@@ -38,7 +47,6 @@ TODO
 * Removed the notice for generated code from the generated module string.
 * Removed vertex attribute location code.
 * Removed inaccurate generated struct size code.
-
 
 ### 0.2.0 - 2022-03-09
 ### Added
@@ -57,9 +65,6 @@ TODO
 * Moved bindgroup layout descriptors to constants.
 * Converted the procedural macro to a function to be used in build scripts.
 * Always generate Rust types like arrays instead of forcing glam.
-
-### Removed
-
 
 ### 0.1.0 - 2021-07-10
 Initial release!
