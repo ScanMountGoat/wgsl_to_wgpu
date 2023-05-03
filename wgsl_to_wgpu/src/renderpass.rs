@@ -44,9 +44,9 @@ pub fn enhanced_render_pass(qty_vertex_buffers: usize, qty_bind_groups: usize) -
         type_params_after[i] = quote!(Ready);
         let slot = Literal::u32_unsuffixed(i as u32);
         quote! {
-            pub fn #fn_name(mut self, buffer_slice: wgpu::BufferSlice<'rp>) -> EnhancedRenderPass<'rp, #(#type_params_after),*> {
+            pub fn #fn_name(mut self, buffer_slice: wgpu::BufferSlice<'rp>) -> PreparedRenderPass<'rp, #(#type_params_after),*> {
                 self.render_pass.set_vertex_buffer(#slot, buffer_slice);
-                EnhancedRenderPass {
+                PreparedRenderPass {
                     render_pass: self.render_pass,
                     type_state: std::marker::PhantomData,
                 }
@@ -60,9 +60,9 @@ pub fn enhanced_render_pass(qty_vertex_buffers: usize, qty_bind_groups: usize) -
         type_params_after[vertex_buffers.len() + i] = quote!(Ready);
         let bg_name = format_ident!("BindGroup{}", i);
         quote! {
-            pub fn #fn_name(mut self, bind_group: &'rp bind_groups::#bg_name) -> EnhancedRenderPass<'rp, #(#type_params_after),*> {
+            pub fn #fn_name(mut self, bind_group: &'rp bind_groups::#bg_name) -> PreparedRenderPass<'rp, #(#type_params_after),*> {
                 bind_group.set(&mut self.render_pass);
-                EnhancedRenderPass {
+                PreparedRenderPass {
                     render_pass: self.render_pass,
                     type_state: std::marker::PhantomData,
                 }
@@ -73,29 +73,38 @@ pub fn enhanced_render_pass(qty_vertex_buffers: usize, qty_bind_groups: usize) -
     let type_args_all_ready = (0..type_params.len()).map(|_| quote!(Ready)).collect::<Vec<_>>();
 
     quote! {
-        #(#needy_structs)*
-        pub struct Ready;
-        pub struct EnhancedRenderPass<'rp, #(#type_params),*> {
-            render_pass: wgpu::RenderPass<'rp>,
-            type_state: std::marker::PhantomData<(#(#type_params),*)>,
+        pub struct PipelineStage(wgpu::RenderPipeline);
+        impl core::ops::Deref for PipelineStage {
+            type Target = wgpu::RenderPipeline;
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
         }
-        impl<'rp> EnhancedRenderPass<'rp, #(#type_args_needy),*> {
-            pub fn new(encoder: &'rp mut wgpu::CommandEncoder, desc: &wgpu::RenderPassDescriptor<'rp, '_>) -> EnhancedRenderPass<'rp, #(#type_args_needy),*> {
-                let render_pass = encoder.begin_render_pass(desc);
-                EnhancedRenderPass {
+        impl core::ops::DerefMut for PipelineStage {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }
+        impl PipelineStage {
+            pub fn new(render_pipeline: wgpu::RenderPipeline) -> Self {
+                PipelineStage(render_pipeline)
+            }
+            pub fn set<'s, 'rp>(&'s self, mut render_pass: wgpu::RenderPass<'rp>) -> PreparedRenderPass<'rp, #(#type_args_needy),*> where 's: 'rp {
+                render_pass.set_pipeline(&self.0);
+                PreparedRenderPass {
                     render_pass,
                     type_state: std::marker::PhantomData,
                 }
             }
         }
-        impl<'rp, #(#type_params),*> EnhancedRenderPass<'rp, #(#type_params),*> {
 
-            // Tentative Goal:
-            // Adequately wrap RenderPass that this method is almost never necessary.
-            //
-            // Restraint:
-            // Never fully get rid of this method because there are probably lots
-            // of extensions on RenderPass out there that people want to keep access to.
+        #(#needy_structs)*
+        pub struct Ready;
+        pub struct PreparedRenderPass<'rp, #(#type_params),*> {
+            render_pass: wgpu::RenderPass<'rp>,
+            type_state: std::marker::PhantomData<(#(#type_params),*)>,
+        }
+        impl<'rp, #(#type_params),*> PreparedRenderPass<'rp, #(#type_params),*> {
             pub fn inner(&mut self) -> &mut wgpu::RenderPass<'rp> {
                 &mut self.render_pass
             }
@@ -104,9 +113,21 @@ pub fn enhanced_render_pass(qty_vertex_buffers: usize, qty_bind_groups: usize) -
 
             #(#bind_group_setters)*
         }
-        impl<'rp> EnhancedRenderPass<'rp, #(#type_args_all_ready),*> {
-            pub fn draw(&mut self, vertices: std::ops::Range<u32>, instances: std::ops::Range<u32>) {
-                self.render_pass.draw(vertices, instances);
+        impl<'rp> PreparedRenderPass<'rp, #(#type_args_all_ready),*> {
+
+            pub fn into_inner(self) -> wgpu::RenderPass<'rp> {
+                self.render_pass
+            }
+        }
+        impl<'rp> core::ops::Deref for PreparedRenderPass<'rp, #(#type_args_all_ready),*> {
+            type Target = wgpu::RenderPass<'rp>;
+            fn deref(&self) -> &Self::Target {
+                &self.render_pass
+            }
+        }
+        impl<'rp> core::ops::DerefMut for PreparedRenderPass<'rp, #(#type_args_all_ready),*> {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.render_pass
             }
         }
     }

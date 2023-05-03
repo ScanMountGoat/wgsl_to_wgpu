@@ -1,6 +1,6 @@
 use std::iter;
 
-use crate::shader::{EnhancedRenderPass, ENTRY_FS_MAIN};
+use crate::shader::{PreparedRenderPass, ENTRY_FS_MAIN};
 use futures::executor::block_on;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -18,7 +18,7 @@ struct State {
     queue: wgpu::Queue,
     size: winit::dpi::PhysicalSize<u32>,
     config: wgpu::SurfaceConfiguration,
-    pipeline: wgpu::RenderPipeline,
+    pipeline: shader::PipelineStage,
     bind_group0: shader::bind_groups::BindGroup0,
     bind_group1: shader::bind_groups::BindGroup1,
     vertex_buffer: wgpu::Buffer,
@@ -70,7 +70,7 @@ impl State {
         let shader = shader::create_shader_module(&device);
         let render_pipeline_layout = shader::create_pipeline_layout(&device);
 
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline = shader::PipelineStage::new(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: shader::vertex_state(
@@ -86,7 +86,7 @@ impl State {
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
-        });
+        }));
 
         // Create a gradient texture.
         let texture = device.create_texture_with_data(
@@ -211,7 +211,7 @@ impl State {
                 label: Some("Render Encoder"),
             });
 
-        let mut render_pass = shader::EnhancedRenderPass::new(&mut encoder, &wgpu::RenderPassDescriptor {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &output_view,
@@ -224,11 +224,11 @@ impl State {
             depth_stencil_attachment: None,
         });
 
-        render_pass.inner().set_pipeline(&self.pipeline);
+
+        let mut render_pass = self.pipeline.set(render_pass);
 
         // Before:
         // EnhancedRenderPass<NeedsVertexBuffer0, NeedsBindGroup0, NeedsBindGroup1>
-        // - draw function is not accessible (unless you dip into inner())
 
         // You can chain initialization all at once
         let mut render_pass = render_pass
@@ -240,9 +240,7 @@ impl State {
             .set_vertex_buffer_0(self.vertex_buffer.slice(..));
 
         // After:
-        // EnhancedRenderPass<Ready, Ready, Ready>
-        // - draw function is now accessible
-        // - You can still replace bind groups and vertex buffers though
+        // EnhancedRenderPass<Ready, Ready, Ready> implements DerefMut<Target=wgpu::RenderPass>
 
         render_pass.draw(0..3, 0..1);
 

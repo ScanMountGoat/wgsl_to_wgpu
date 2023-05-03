@@ -198,36 +198,54 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             },
         )
 }
-pub struct NeedsVertexBuffer0;
-pub struct NeedsBindGroup0;
-pub struct NeedsBindGroup1;
-pub struct Ready;
-pub struct EnhancedRenderPass<'rp, VB0, BG0, BG1> {
-    render_pass: wgpu::RenderPass<'rp>,
-    type_state: std::marker::PhantomData<(VB0, BG0, BG1)>,
+pub struct PipelineStage(wgpu::RenderPipeline);
+impl core::ops::Deref for PipelineStage {
+    type Target = wgpu::RenderPipeline;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
-impl<'rp> EnhancedRenderPass<'rp, NeedsVertexBuffer0, NeedsBindGroup0, NeedsBindGroup1> {
-    pub fn new(
-        encoder: &'rp mut wgpu::CommandEncoder,
-        desc: &wgpu::RenderPassDescriptor<'rp, '_>,
-    ) -> EnhancedRenderPass<'rp, NeedsVertexBuffer0, NeedsBindGroup0, NeedsBindGroup1> {
-        let render_pass = encoder.begin_render_pass(desc);
-        EnhancedRenderPass {
+impl core::ops::DerefMut for PipelineStage {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl PipelineStage {
+    pub fn new(render_pipeline: wgpu::RenderPipeline) -> Self {
+        PipelineStage(render_pipeline)
+    }
+    pub fn set<'s, 'rp>(
+        &'s self,
+        mut render_pass: wgpu::RenderPass<'rp>,
+    ) -> PreparedRenderPass<'rp, NeedsVertexBuffer0, NeedsBindGroup0, NeedsBindGroup1>
+    where
+        's: 'rp,
+    {
+        render_pass.set_pipeline(&self.0);
+        PreparedRenderPass {
             render_pass,
             type_state: std::marker::PhantomData,
         }
     }
 }
-impl<'rp, VB0, BG0, BG1> EnhancedRenderPass<'rp, VB0, BG0, BG1> {
+pub struct NeedsVertexBuffer0;
+pub struct NeedsBindGroup0;
+pub struct NeedsBindGroup1;
+pub struct Ready;
+pub struct PreparedRenderPass<'rp, VB0, BG0, BG1> {
+    render_pass: wgpu::RenderPass<'rp>,
+    type_state: std::marker::PhantomData<(VB0, BG0, BG1)>,
+}
+impl<'rp, VB0, BG0, BG1> PreparedRenderPass<'rp, VB0, BG0, BG1> {
     pub fn inner(&mut self) -> &mut wgpu::RenderPass<'rp> {
         &mut self.render_pass
     }
     pub fn set_vertex_buffer_0(
         mut self,
         buffer_slice: wgpu::BufferSlice<'rp>,
-    ) -> EnhancedRenderPass<'rp, Ready, BG0, BG1> {
+    ) -> PreparedRenderPass<'rp, Ready, BG0, BG1> {
         self.render_pass.set_vertex_buffer(0, buffer_slice);
-        EnhancedRenderPass {
+        PreparedRenderPass {
             render_pass: self.render_pass,
             type_state: std::marker::PhantomData,
         }
@@ -235,9 +253,9 @@ impl<'rp, VB0, BG0, BG1> EnhancedRenderPass<'rp, VB0, BG0, BG1> {
     pub fn set_bind_group_0(
         mut self,
         bind_group: &'rp bind_groups::BindGroup0,
-    ) -> EnhancedRenderPass<'rp, VB0, Ready, BG1> {
+    ) -> PreparedRenderPass<'rp, VB0, Ready, BG1> {
         bind_group.set(&mut self.render_pass);
-        EnhancedRenderPass {
+        PreparedRenderPass {
             render_pass: self.render_pass,
             type_state: std::marker::PhantomData,
         }
@@ -245,20 +263,27 @@ impl<'rp, VB0, BG0, BG1> EnhancedRenderPass<'rp, VB0, BG0, BG1> {
     pub fn set_bind_group_1(
         mut self,
         bind_group: &'rp bind_groups::BindGroup1,
-    ) -> EnhancedRenderPass<'rp, VB0, BG0, Ready> {
+    ) -> PreparedRenderPass<'rp, VB0, BG0, Ready> {
         bind_group.set(&mut self.render_pass);
-        EnhancedRenderPass {
+        PreparedRenderPass {
             render_pass: self.render_pass,
             type_state: std::marker::PhantomData,
         }
     }
 }
-impl<'rp> EnhancedRenderPass<'rp, Ready, Ready, Ready> {
-    pub fn draw(
-        &mut self,
-        vertices: std::ops::Range<u32>,
-        instances: std::ops::Range<u32>,
-    ) {
-        self.render_pass.draw(vertices, instances);
+impl<'rp> PreparedRenderPass<'rp, Ready, Ready, Ready> {
+    pub fn into_inner(self) -> wgpu::RenderPass<'rp> {
+        self.render_pass
+    }
+}
+impl<'rp> core::ops::Deref for PreparedRenderPass<'rp, Ready, Ready, Ready> {
+    type Target = wgpu::RenderPass<'rp>;
+    fn deref(&self) -> &Self::Target {
+        &self.render_pass
+    }
+}
+impl<'rp> core::ops::DerefMut for PreparedRenderPass<'rp, Ready, Ready, Ready> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.render_pass
     }
 }
