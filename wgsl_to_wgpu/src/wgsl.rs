@@ -97,6 +97,8 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             quote!(#name)
         }
         naga::TypeInner::BindingArray { base: _, size: _ } => todo!(),
+        naga::TypeInner::AccelerationStructure => todo!(),
+        naga::TypeInner::RayQuery => todo!(),
     }
 }
 
