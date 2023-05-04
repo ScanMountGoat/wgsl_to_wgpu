@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 * Adjusted code generation to skip structs that are only used internally in the shader.
 
+### Fixed
+* Update naga to 0.12.0 to match wgpu 0.16.
+
 ## 0.4.0 - 2023-04-30
 ### Added
 * Added vertex buffer layout function to each vertex input struct.
