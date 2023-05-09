@@ -70,7 +70,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
         },
         naga::TypeInner::Image { .. } => todo!(),
         naga::TypeInner::Sampler { .. } => todo!(),
-        naga::TypeInner::Atomic { kind: _, width: _ } => todo!(),
+        naga::TypeInner::Atomic { kind, width } => rust_scalar_type(*kind, *width),
         naga::TypeInner::Pointer { base: _, space: _ } => todo!(),
         naga::TypeInner::ValuePointer {
             size: _,
