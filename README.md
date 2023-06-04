@@ -14,7 +14,7 @@ wgsl_to_wgpu is designed to be incorporated into the compilation process using a
 ## Usage
 The generated code currently relies on [memoffset](https://crates.io/crates/memoffset) for calculating field offsets for vertex input structs.
 Add the following lines to the `Cargo.toml` and fill in the appropriate versions for `memoffset` and `wgsl_to_wgpu`.
-When enabling derives for crates like bytemuck, serde, or encase, these dependencies should also be added to the `Cargo.toml` with the appropriate derive features.
+When enabling derives for crates like bytemuck, serde, or encase, these dependencies should also be added to the `Cargo.toml` with the appropriate derive features. See the provided [example project](https://github.com/ScanMountGoat/wgsl_to_wgpu/tree/main/example) for basic usage.
 
 ```toml
 [dependencies]
