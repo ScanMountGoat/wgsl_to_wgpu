@@ -89,9 +89,9 @@ impl Default for MatrixVectorTypes {
     }
 }
 
-/// Parses the WGSL shader from `wgsl_source` and returns the generated Rust module's source code.
+/// Generates a Rust module for a WGSL shader included via [include_str].
 ///
-/// The `wgsl_include_path` should be a valid path for the `include_wgsl!` macro used in the generated file.
+/// The `wgsl_include_path` should be a valid input to [include_str] in the generated file's location.
 ///
 /// # Examples
 /// This function is intended to be called at build time such as in a build script.
@@ -99,10 +99,14 @@ impl Default for MatrixVectorTypes {
 ```rust no_run
 // build.rs
 fn main() {
+    println!("cargo:rerun-if-changed=src/shader.wgsl");
+
     // Read the shader source file.
     let wgsl_source = std::fs::read_to_string("src/shader.wgsl").unwrap();
+
     // Configure the output based on the dependencies for the project.
     let options = wgsl_to_wgpu::WriteOptions::default();
+
     // Generate the bindings.
     let text = wgsl_to_wgpu::create_shader_module(&wgsl_source, "shader.wgsl", options).unwrap();
     std::fs::write("src/shader.rs", text.as_bytes()).unwrap();
@@ -112,6 +116,44 @@ fn main() {
 pub fn create_shader_module(
     wgsl_source: &str,
     wgsl_include_path: &str,
+    options: WriteOptions,
+) -> Result<String, CreateModuleError> {
+    create_shader_module_inner(wgsl_source, Some(wgsl_include_path), options)
+}
+
+/// Generates a Rust module for a WGSL shader embedded as a string literal.
+///
+/// # Examples
+/// This function is intended to be called at build time such as in a build script.
+/// The source string does not need to be from an actual file on disk.
+/// This allows applying build time operations like preprocessor defines.
+/**
+```rust no_run
+// build.rs
+# fn generate_wgsl_source_string() -> String { String::new() }
+fn main() {
+    // Generate the shader at build time.
+    let wgsl_source = generate_wgsl_source_string();
+
+    // Configure the output based on the dependencies for the project.
+    let options = wgsl_to_wgpu::WriteOptions::default();
+
+    // Generate the bindings.
+    let text = wgsl_to_wgpu::create_shader_module_embedded(&wgsl_source, options).unwrap();
+    std::fs::write("src/shader.rs", text.as_bytes()).unwrap();
+}
+```
+ */
+pub fn create_shader_module_embedded(
+    wgsl_source: &str,
+    options: WriteOptions,
+) -> Result<String, CreateModuleError> {
+    create_shader_module_inner(wgsl_source, None, options)
+}
+
+fn create_shader_module_inner(
+    wgsl_source: &str,
+    wgsl_include_path: Option<&str>,
     options: WriteOptions,
 ) -> Result<String, CreateModuleError> {
     let module = naga::front::wgsl::parse_str(wgsl_source).unwrap();
@@ -127,9 +169,14 @@ pub fn create_shader_module(
     let entry_point_constants = entry_point_constants(&module);
     let vertex_states = vertex_states(&module);
 
+    // Use a string literal if no include path is provided.
+    let included_source = wgsl_include_path
+        .map(|p| quote!(include_str!(#p)))
+        .unwrap_or_else(|| quote!(#wgsl_source));
+
     let create_shader_module = quote! {
         pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
-            let source = std::borrow::Cow::Borrowed(include_str!(#wgsl_include_path));
+            let source = std::borrow::Cow::Borrowed(#included_source);
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(source)
@@ -418,6 +465,76 @@ macro_rules! assert_tokens_eq {
 mod test {
     use super::*;
     use indoc::indoc;
+
+    #[test]
+    fn create_shader_module_include_source() {
+        let source = indoc! {r#"
+            @fragment
+            fn fs_main() {}
+        "#};
+
+        let actual = create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
+
+        pretty_assertions::assert_eq!(
+            indoc! {r#"
+                pub const ENTRY_FS_MAIN: &str = "fs_main";
+                pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+                    let source = std::borrow::Cow::Borrowed(include_str!("shader.wgsl"));
+                    device
+                        .create_shader_module(wgpu::ShaderModuleDescriptor {
+                            label: None,
+                            source: wgpu::ShaderSource::Wgsl(source),
+                        })
+                }
+                pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+                    device
+                        .create_pipeline_layout(
+                            &wgpu::PipelineLayoutDescriptor {
+                                label: None,
+                                bind_group_layouts: &[],
+                                push_constant_ranges: &[],
+                            },
+                        )
+                }
+            "#},
+            actual
+        );
+    }
+
+    #[test]
+    fn create_shader_module_embed_source() {
+        let source = indoc! {r#"
+            @fragment
+            fn fs_main() {}
+        "#};
+
+        let actual = create_shader_module_embedded(source, WriteOptions::default()).unwrap();
+
+        pretty_assertions::assert_eq!(
+            indoc! {r#"
+                pub const ENTRY_FS_MAIN: &str = "fs_main";
+                pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+                    let source = std::borrow::Cow::Borrowed("@fragment\nfn fs_main() {}\n");
+                    device
+                        .create_shader_module(wgpu::ShaderModuleDescriptor {
+                            label: None,
+                            source: wgpu::ShaderSource::Wgsl(source),
+                        })
+                }
+                pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+                    device
+                        .create_pipeline_layout(
+                            &wgpu::PipelineLayoutDescriptor {
+                                label: None,
+                                bind_group_layouts: &[],
+                                push_constant_ranges: &[],
+                            },
+                        )
+                }
+            "#},
+            actual
+        );
+    }
 
     #[test]
     fn create_shader_module_consecutive_bind_groups() {

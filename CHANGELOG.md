@@ -6,6 +6,10 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### unreleased
+### Added
+* Added `create_shader_module_embedded` for including the source as a string literal instead of using `include_str!`.
+
 ## 0.4.1 - 2023-05-04
 ### Changed
 * Adjusted code generation to skip structs that are only used internally in the shader.
