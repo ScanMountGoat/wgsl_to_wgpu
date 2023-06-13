@@ -16,7 +16,7 @@ pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
         .collect()
 }
 
-fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> TokenStream {
+pub fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> TokenStream {
     // TODO: Support other widths?
     match (kind, width) {
         (naga::ScalarKind::Sint, 1) => quote!(i8),

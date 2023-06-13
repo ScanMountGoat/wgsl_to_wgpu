@@ -29,6 +29,7 @@ use syn::{Ident, Index};
 use thiserror::Error;
 
 mod bindgroup;
+mod consts;
 mod structs;
 mod wgsl;
 
@@ -163,6 +164,7 @@ fn create_shader_module_inner(
 
     // Write all the structs, including uniforms and entry function inputs.
     let structs = structs::structs(&module, options);
+    let consts = consts::consts(&module);
     let bind_groups_module = bind_groups_module(&bind_group_data, shader_stages);
     let vertex_module = vertex_module(&module);
     let compute_module = compute_module(&module);
@@ -206,6 +208,8 @@ fn create_shader_module_inner(
 
     let output = quote! {
         #(#structs)*
+
+        #(#consts)*
 
         #bind_groups_module
 
