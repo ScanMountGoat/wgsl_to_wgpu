@@ -5,7 +5,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Index};
 
-use crate::{wgsl::rust_type, MatrixVectorTypes, WriteOptions};
+use crate::{wgsl::rust_type, WriteOptions};
 
 pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream> {
     // Initialize the layout calculator provided by naga.
@@ -94,19 +94,28 @@ fn rust_struct(
         const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
     };
 
-    let members = struct_members(members, module, options.matrix_vector_types);
-    let mut derives = vec![
-        quote!(Debug),
-        quote!(Copy),
-        quote!(Clone),
-        quote!(PartialEq),
-    ];
+    let has_rts_array = struct_has_rts_array_member(members, module);
+    let members = struct_members(members, module, options);
+    let mut derives = Vec::new();
+
+    derives.push(quote!(Debug));
+    if !has_rts_array {
+        derives.push(quote!(Copy));
+    }
+    derives.push(quote!(Clone));
+    derives.push(quote!(PartialEq));
+
     if options.derive_bytemuck {
+        if has_rts_array {
+            panic!("Runtime-sized array fields are not supported in options.derive_bytemuck mode");
+        }
         derives.push(quote!(bytemuck::Pod));
         derives.push(quote!(bytemuck::Zeroable));
     }
     if options.derive_encase {
         derives.push(quote!(encase::ShaderType));
+    } else if has_rts_array {
+        panic!("Runtime-sized array fields are only supported in options.derive_encase mode");
     }
     if options.derive_serde {
         derives.push(quote!(serde::Serialize));
@@ -132,8 +141,9 @@ fn rust_struct(
         quote!()
     };
 
+    let repr_c = if !has_rts_array { quote!(#[repr(C)]) } else { quote!() };
     quote! {
-        #[repr(C)]
+        #repr_c
         #[derive(#(#derives),*)]
         pub struct #struct_name {
             #(#members),*
@@ -165,24 +175,56 @@ fn add_types_recursive(
 fn struct_members(
     members: &[naga::StructMember],
     module: &naga::Module,
-    format: MatrixVectorTypes,
+    options: WriteOptions,
 ) -> Vec<TokenStream> {
     members
         .iter()
-        .map(|member| {
+        .enumerate()
+        .map(|(index, member)| {
             let member_name = Ident::new(member.name.as_ref().unwrap(), Span::call_site());
-            let member_type = rust_type(module, &module.types[member.ty], format);
-            quote!(pub #member_name: #member_type)
+            let ty = &module.types[member.ty];
+
+            if let naga::TypeInner::Array {
+                base,
+                size: naga::ArraySize::Dynamic,
+                stride: _,
+            } = &ty.inner
+            {
+                if index != members.len() - 1 {
+                    panic!("Only the last field of a struct can be a runtime-sized array");
+                }
+                let element_type =
+                    rust_type(module, &module.types[*base], options.matrix_vector_types);
+                quote!(
+                    #[size(runtime)]
+                    pub #member_name: Vec<#element_type>
+                )
+            } else {
+                let member_type = rust_type(module, ty, options.matrix_vector_types);
+                quote!(pub #member_name: #member_type)
+            }
         })
         .collect()
 }
 
+fn struct_has_rts_array_member(members: &[naga::StructMember], module: &naga::Module) -> bool {
+    members.iter().any(|m| {
+        matches!(
+            module.types[m.ty].inner,
+            naga::TypeInner::Array {
+                size: naga::ArraySize::Dynamic,
+                ..
+            }
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use crate::{assert_tokens_eq, WriteOptions};
     use indoc::indoc;
+
+    use super::*;
+    use crate::{assert_tokens_eq, MatrixVectorTypes, WriteOptions};
 
     #[test]
     fn write_all_structs_rust() {
@@ -1100,6 +1142,97 @@ mod tests {
                 }
             },
             actual
+        );
+    }
+
+    fn runtime_sized_array_module() -> naga::Module {
+        let source = indoc! {r#"
+            struct RtsStruct {
+                other_data: i32,
+                the_array: array<u32>,
+            };
+
+            @group(0) @binding(0)
+            var <storage, read_write> rts:RtsStruct;
+        "#};
+        naga::front::wgsl::parse_str(source).unwrap()
+    }
+
+    #[test]
+    fn write_runtime_sized_array() {
+        let module = runtime_sized_array_module();
+
+        let structs = structs(
+            &module,
+            WriteOptions {
+                derive_encase: true,
+                ..Default::default()
+            },
+        );
+        let actual = quote!(#(#structs)*);
+
+        assert_tokens_eq!(
+            quote! {
+                #[derive(Debug, Clone, PartialEq, encase::ShaderType)]
+                pub struct RtsStruct {
+                    pub other_data: i32,
+                    #[size(runtime)]
+                    pub the_array: Vec<u32>,
+                }
+            },
+            actual
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_runtime_sized_array_no_encase() {
+        let module = runtime_sized_array_module();
+
+        let _structs = structs(
+            &module,
+            WriteOptions {
+                ..Default::default()
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_runtime_sized_array_bytemuck() {
+        let module = runtime_sized_array_module();
+
+        let _structs = structs(
+            &module,
+            WriteOptions {
+                derive_encase: true,
+                derive_bytemuck: true,
+                ..Default::default()
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_runtime_sized_array_not_last_field() {
+        let source = indoc! {r#"
+            struct RtsStruct {
+                other_data: i32,
+                the_array: array<u32>,
+                more_data: i32,
+            };
+
+            @group(0) @binding(0)
+            var <storage, read_write> rts:RtsStruct;
+        "#};
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let _structs = structs(
+            &module,
+            WriteOptions {
+                derive_encase: true,
+                ..Default::default()
+            },
         );
     }
 }

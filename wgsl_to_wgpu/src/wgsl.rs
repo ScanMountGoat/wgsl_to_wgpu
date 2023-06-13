@@ -80,13 +80,18 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
         } => todo!(),
         naga::TypeInner::Array {
             base,
-            size,
+            size: naga::ArraySize::Constant(size),
             stride: _,
         } => {
-            // TODO: Support arrays other than arrays with a static size?
             let element_type = rust_type(module, &module.types[*base], format);
-            let count = Index::from(array_length(size, module));
+            let count = Index::from(array_length_static(&module.constants[*size]));
             quote!([#element_type; #count])
+        }
+        naga::TypeInner::Array {
+            size: naga::ArraySize::Dynamic,
+            ..
+        } => {
+            panic!("Runtime-sized arrays can only be used in variable declarations or as the last field of a struct.");
         }
         naga::TypeInner::Struct {
             members: _,
@@ -211,18 +216,15 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
     }
 }
 
-fn array_length(size: &naga::ArraySize, module: &naga::Module) -> usize {
-    match size {
-        naga::ArraySize::Constant(c) => match &module.constants[*c].inner {
-            naga::ConstantInner::Scalar { value, .. } => match value {
-                naga::ScalarValue::Sint(v) => *v as usize,
-                naga::ScalarValue::Uint(v) => *v as usize,
-                naga::ScalarValue::Float(_) => todo!(),
-                naga::ScalarValue::Bool(_) => todo!(),
-            },
-            _ => todo!(),
+fn array_length_static(size: &naga::Constant) -> usize {
+    match &size.inner {
+        naga::ConstantInner::Scalar { value, .. } => match value {
+            naga::ScalarValue::Sint(v) => *v as usize,
+            naga::ScalarValue::Uint(v) => *v as usize,
+            naga::ScalarValue::Float(_) => todo!(),
+            naga::ScalarValue::Bool(_) => todo!(),
         },
-        naga::ArraySize::Dynamic => 0, // TODO: how to handle dynamically sized arrays?
+        _ => todo!(),
     }
 }
 
