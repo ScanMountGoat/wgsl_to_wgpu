@@ -141,7 +141,11 @@ fn rust_struct(
         quote!()
     };
 
-    let repr_c = if !has_rts_array { quote!(#[repr(C)]) } else { quote!() };
+    let repr_c = if !has_rts_array {
+        quote!(#[repr(C)])
+    } else {
+        quote!()
+    };
     quote! {
         #repr_c
         #[derive(#(#derives),*)]
@@ -1025,8 +1029,10 @@ mod tests {
         // The struct is also used with a storage buffer and should be validated.
         let source = indoc! {r#"
             struct Input0 {
+                @size(8)
                 a: u32,
                 b: i32,
+                @align(32)
                 c: f32,
             };
 
@@ -1071,16 +1077,16 @@ mod tests {
                     pub c: f32,
                 }
                 const _: () = assert!(
-                    std::mem::size_of:: < Input0 > () == 12, "size of Input0 does not match WGSL"
+                    std::mem::size_of:: < Input0 > () == 64, "size of Input0 does not match WGSL"
                 );
                 const _: () = assert!(
                     memoffset::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, b) == 4, "offset of Input0.b does not match WGSL"
+                    memoffset::offset_of!(Input0, b) == 8, "offset of Input0.b does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
+                    memoffset::offset_of!(Input0, c) == 32, "offset of Input0.c does not match WGSL"
                 );
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
