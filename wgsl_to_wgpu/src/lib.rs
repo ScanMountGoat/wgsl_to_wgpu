@@ -93,6 +93,7 @@ impl Default for MatrixVectorTypes {
 /// Generates a Rust module for a WGSL shader included via [include_str].
 ///
 /// The `wgsl_include_path` should be a valid input to [include_str] in the generated file's location.
+/// The included contents should be identical to `wgsl_source`.
 ///
 /// # Examples
 /// This function is intended to be called at build time such as in a build script.
