@@ -380,6 +380,7 @@ fn vertex_states(module: &naga::Module) -> TokenStream {
         quote!()
     } else {
         quote! {
+            #[derive(Debug)]
             pub struct VertexEntry<const N: usize> {
                 entry_point: &'static str,
                 buffers: [wgpu::VertexBufferLayout<'static>; N]
@@ -958,6 +959,7 @@ mod test {
 
         assert_tokens_eq!(
             quote! {
+                #[derive(Debug)]
                 pub struct VertexEntry<const N: usize> {
                     entry_point: &'static str,
                     buffers: [wgpu::VertexBufferLayout<'static>; N],
@@ -1002,6 +1004,7 @@ mod test {
 
         assert_tokens_eq!(
             quote! {
+                #[derive(Debug)]
                 pub struct VertexEntry<const N: usize> {
                     entry_point: &'static str,
                     buffers: [wgpu::VertexBufferLayout<'static>; N],
@@ -1052,6 +1055,7 @@ mod test {
 
         assert_tokens_eq!(
             quote! {
+                #[derive(Debug)]
                 pub struct VertexEntry<const N: usize> {
                     entry_point: &'static str,
                     buffers: [wgpu::VertexBufferLayout<'static>; N],

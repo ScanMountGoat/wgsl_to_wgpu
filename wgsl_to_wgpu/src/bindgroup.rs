@@ -30,6 +30,7 @@ pub fn bind_groups_module(
             let group_impl = bind_group(*group_no, group, shader_stages);
 
             quote! {
+                #[derive(Debug)]
                 pub struct #group_name(wgpu::BindGroup);
                 #layout
                 #layout_descriptor
@@ -59,6 +60,7 @@ pub fn bind_groups_module(
             pub mod bind_groups {
                 #(#bind_groups)*
 
+                #[derive(Debug)]
                 pub struct BindGroups<'a> {
                     #(#bind_group_fields),*
                 }
@@ -115,6 +117,7 @@ fn bind_group_layout(group_no: u32, group: &GroupData) -> TokenStream {
 
     let name = indexed_name_to_ident("BindGroupLayout", group_no);
     quote! {
+        #[derive(Debug)]
         pub struct #name<'a> {
             #(#fields),*
         }
@@ -450,7 +453,9 @@ mod tests {
         assert_tokens_eq!(
             quote! {
                 pub mod bind_groups {
+                    #[derive(Debug)]
                     pub struct BindGroup0(wgpu::BindGroup);
+                    #[derive(Debug)]
                     pub struct BindGroupLayout0<'a> {
                         pub src: wgpu::BufferBinding<'a>,
                         pub vertex_weights: wgpu::BufferBinding<'a>,
@@ -532,7 +537,9 @@ mod tests {
                             render_pass.set_bind_group(0, &self.0, &[]);
                         }
                     }
+                    #[derive(Debug)]
                     pub struct BindGroup1(wgpu::BindGroup);
+                    #[derive(Debug)]
                     pub struct BindGroupLayout1<'a> {
                         pub transforms: wgpu::BufferBinding<'a>,
                     }
@@ -576,6 +583,7 @@ mod tests {
                             render_pass.set_bind_group(1, &self.0, &[]);
                         }
                     }
+                    #[derive(Debug)]
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                         pub bind_group1: &'a BindGroup1,
@@ -639,7 +647,9 @@ mod tests {
         assert_tokens_eq!(
             quote! {
                 pub mod bind_groups {
+                    #[derive(Debug)]
                     pub struct BindGroup0(wgpu::BindGroup);
+                    #[derive(Debug)]
                     pub struct BindGroupLayout0<'a> {
                         pub color_texture: &'a wgpu::TextureView,
                         pub color_sampler: &'a wgpu::Sampler,
@@ -817,7 +827,9 @@ mod tests {
                             render_pass.set_bind_group(0, &self.0, &[]);
                         }
                     }
+                    #[derive(Debug)]
                     pub struct BindGroup1(wgpu::BindGroup);
+                    #[derive(Debug)]
                     pub struct BindGroupLayout1<'a> {
                         pub transforms: wgpu::BufferBinding<'a>,
                     }
@@ -861,6 +873,7 @@ mod tests {
                             render_pass.set_bind_group(1, &self.0, &[]);
                         }
                     }
+                    #[derive(Debug)]
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                         pub bind_group1: &'a BindGroup1,
@@ -899,7 +912,9 @@ mod tests {
         assert_tokens_eq!(
             quote! {
                 pub mod bind_groups {
+                    #[derive(Debug)]
                     pub struct BindGroup0(wgpu::BindGroup);
+                    #[derive(Debug)]
                     pub struct BindGroupLayout0<'a> {
                         pub transforms: wgpu::BufferBinding<'a>,
                     }
@@ -943,6 +958,7 @@ mod tests {
                             render_pass.set_bind_group(0, &self.0, &[]);
                         }
                     }
+                    #[derive(Debug)]
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                     }
@@ -979,7 +995,9 @@ mod tests {
         assert_tokens_eq!(
             quote! {
                 pub mod bind_groups {
+                    #[derive(Debug)]
                     pub struct BindGroup0(wgpu::BindGroup);
+                    #[derive(Debug)]
                     pub struct BindGroupLayout0<'a> {
                         pub transforms: wgpu::BufferBinding<'a>,
                     }
@@ -1023,6 +1041,7 @@ mod tests {
                             render_pass.set_bind_group(0, &self.0, &[]);
                         }
                     }
+                    #[derive(Debug)]
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                     }

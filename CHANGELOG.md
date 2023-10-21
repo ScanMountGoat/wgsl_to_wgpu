@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### unreleased
 ### Added
 * Added `create_shader_module_embedded` for including the source as a string literal instead of using `include_str!`.
+* Added `#[derive(Debug)]` to generated types for easier debugging and profiling.
 
 ## 0.4.1 - 2023-05-04
 ### Changed
