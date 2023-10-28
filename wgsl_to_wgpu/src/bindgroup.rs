@@ -442,6 +442,7 @@ mod tests {
             @group(1) @binding(0) var<uniform> transforms: Transforms;
 
             @compute
+            @workgroup_size(64)
             fn main() {}
         "#};
 
@@ -1101,6 +1102,7 @@ mod tests {
             @group(1) @binding(0) var<uniform> transforms: Transforms;
 
             @compute
+            @workgroup_size(64)
             fn main() {}
         "#};
 

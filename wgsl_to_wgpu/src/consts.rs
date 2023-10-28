@@ -3,37 +3,24 @@ use quote::quote;
 use syn::Ident;
 
 pub fn consts(module: &naga::Module) -> Vec<TokenStream> {
-    // Create matching Rust structs for WGSL structs.
-    // This is a UniqueArena, so each struct will only be generated once.
+    // Create matching Rust constants for WGSl constants.
     module
         .constants
         .iter()
         .filter_map(|(_, t)| -> Option<TokenStream> {
             let name = Ident::new(t.name.as_ref()?, Span::call_site());
-            let value = if let naga::ConstantInner::Scalar { value, .. } = &t.inner {
-                *value
-            } else {
-                return None;
-            };
-            // There is a lot of downcasting from 64 to 32 here,
-            // because the actual WGSL types are always i32, u32,
-            // f32, f16 or bool. We don't really care about f16,
-            // so that can be represented as f32.
-            let type_and_value = match value {
-                naga::ScalarValue::Sint(v) => {
-                    let v = v as i32;
-                    quote!(i32 = #v)
-                }
-                naga::ScalarValue::Uint(v) => {
-                    let v = v as u32;
-                    quote!(u32 = #v)
-                }
-                naga::ScalarValue::Float(v) => {
-                    let v = v as f32;
-                    quote!(f32 = #v)
-                }
-                naga::ScalarValue::Bool(v) => quote!(bool = #v),
-            };
+
+            // TODO: Add support for f64 and f16 once naga supports them.
+            let type_and_value = match &module.const_expressions[t.init] {
+                naga::Expression::Literal(literal) => match literal {
+                    naga::Literal::F64(v) => Some(quote!(f32 = #v)),
+                    naga::Literal::F32(v) => Some(quote!(f32 = #v)),
+                    naga::Literal::U32(v) => Some(quote!(u32 = #v)),
+                    naga::Literal::I32(v) => Some(quote!(i32 = #v)),
+                    naga::Literal::Bool(v) => Some(quote!(bool = #v)),
+                },
+                _ => None,
+            }?;
 
             Some(quote!( pub const #name: #type_and_value;))
         })

@@ -10,7 +10,7 @@ use crate::{wgsl::rust_type, WriteOptions};
 pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream> {
     // Initialize the layout calculator provided by naga.
     let mut layouter = naga::proc::Layouter::default();
-    layouter.update(&module.types, &module.constants).unwrap();
+    layouter.update(module.to_ctx()).unwrap();
 
     let mut global_variable_types = HashSet::new();
     for g in module.global_variables.iter() {
@@ -852,6 +852,7 @@ mod tests {
             var<uniform> b: Nested;
 
             @compute
+            @workgroup_size(64)
             fn main() {}
         "#};
 

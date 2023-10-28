@@ -84,7 +84,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             stride: _,
         } => {
             let element_type = rust_type(module, &module.types[*base], format);
-            let count = Index::from(array_length_static(&module.constants[*size]));
+            let count = Index::from(size.get() as usize);
             quote!([#element_type; #count])
         }
         naga::TypeInner::Array {
@@ -216,18 +216,6 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
     }
 }
 
-fn array_length_static(size: &naga::Constant) -> usize {
-    match &size.inner {
-        naga::ConstantInner::Scalar { value, .. } => match value {
-            naga::ScalarValue::Sint(v) => *v as usize,
-            naga::ScalarValue::Uint(v) => *v as usize,
-            naga::ScalarValue::Float(_) => todo!(),
-            naga::ScalarValue::Bool(_) => todo!(),
-        },
-        _ => todo!(),
-    }
-}
-
 pub struct VertexInput {
     pub name: String,
     pub fields: Vec<(u32, StructMember)>,
@@ -333,6 +321,7 @@ mod tests {
     fn shader_stages_compute() {
         let source = indoc! {r#"
             @compute
+            @workgroup_size(64)
             fn main()  {}
         "#};
 
@@ -350,6 +339,7 @@ mod tests {
             fn fs_main()  {}
 
             @compute
+            @workgroup_size(64)
             fn cs_main()  {}
         "#};
 
