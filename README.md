@@ -44,7 +44,7 @@ WGPU will still validate the size of the buffer binding at runtime.
 
 ## Publishing Crates
 Rust expects build scripts to not modify files outside of OUT_DIR. The provided example project outputs the generated bindings to the `src/` directory for documentation purposes. 
-This approach is also fine for applications, but published packages should follow the recommendations for build scripts in the [Cargo Book](https://doc.rust-lang.org/cargo/reference/build-scripts.html#case-study-code-generation).
+This approach is also fine for applications. Published crates should follow the recommendations for build scripts in the [Cargo Book](https://doc.rust-lang.org/cargo/reference/build-scripts.html#case-study-code-generation).
 
 ```rust
 use wgsl_to_wgpu::{create_shader_module_embedded, WriteOptions};
