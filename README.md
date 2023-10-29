@@ -41,3 +41,30 @@ WGPU will still validate the size of the buffer binding at runtime.
 - Vertex attributes using floating point types in WGSL like `vec2<f32>` are assumed to use float inputs instead of normalized attributes like unorm or snorm integers.
 - All textures are assumed to be filterable and all samplers are assumed to be filtering. This may lead to compatibility issues. This can usually be resolved by requesting the native only feature TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES.
 - It's possible to achieve slightly better performance than the generated code in some cases like avoiding redundant bind group bindings or adjusting resource shader stage visibility. This should be addressed by using some handwritten code where appropriate. See [descriptor table frequency (DX12)](https://learn.microsoft.com/en-us/windows/win32/direct3d12/advanced-use-of-descriptor-tables#changing-descriptor-table-entries-between-rendering-calls) and [descriptor set frequency (Vulkan)](https://vkguide.dev/docs/chapter-4/descriptors/#mental-model). 
+
+## Publishing Crates
+Rust expects build scripts to not modify files outside of OUT_DIR. The provided example project outputs the generated bindings to the `src/` directory for documentation purposes. 
+This approach is also fine for applications, but published packages should follow the recommendations for build scripts in the [Cargo Book](https://doc.rust-lang.org/cargo/reference/build-scripts.html#case-study-code-generation).
+
+```rust
+use wgsl_to_wgpu::{create_shader_module_embedded, WriteOptions};
+
+// src/build.rs
+fn main() {
+    println!("cargo:rerun-if-changed=src/model.wgsl");
+
+    // Generate the Rust bindings and write to a file.
+    let text = create_shader_module_embedded(wgsl_source, WriteOptions::default()).unwrap();
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    std::fs::write(format!("{out_dir}/model.rs"), text.as_bytes()).unwrap();
+}
+```
+
+The generated code will need to be included in one of the normal source files. This includes adding any nested modules as needed.
+
+```rust
+// src/shader.rs
+pub mod model {
+    include!(concat!(env!("OUT_DIR"), "/model.rs"));
+}
+```
