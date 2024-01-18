@@ -18,6 +18,9 @@ pub fn consts(module: &naga::Module) -> Vec<TokenStream> {
                     naga::Literal::U32(v) => Some(quote!(u32 = #v)),
                     naga::Literal::I32(v) => Some(quote!(i32 = #v)),
                     naga::Literal::Bool(v) => Some(quote!(bool = #v)),
+                    naga::Literal::I64(v) => Some(quote!(i64 = #v)),
+                    naga::Literal::AbstractInt(v) => Some(quote!(i64 = #v)),
+                    naga::Literal::AbstractFloat(v) => Some(quote!(f64 = #v)),
                 },
                 _ => None,
             }?;

@@ -16,9 +16,9 @@ pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
         .collect()
 }
 
-pub fn rust_scalar_type(kind: naga::ScalarKind, width: u8) -> TokenStream {
+pub fn rust_scalar_type(scalar: &naga::Scalar) -> TokenStream {
     // TODO: Support other widths?
-    match (kind, width) {
+    match (scalar.kind, scalar.width) {
         (naga::ScalarKind::Sint, 1) => quote!(i8),
         (naga::ScalarKind::Uint, 1) => quote!(u8),
         (naga::ScalarKind::Sint, 2) => quote!(i16),
@@ -53,31 +53,26 @@ pub fn buffer_binding_type(storage: naga::AddressSpace) -> TokenStream {
 
 pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTypes) -> TokenStream {
     match &ty.inner {
-        naga::TypeInner::Scalar { kind, width } => rust_scalar_type(*kind, *width),
-        naga::TypeInner::Vector { size, kind, width } => match format {
-            MatrixVectorTypes::Rust => rust_vector_type(*size, *kind, *width),
-            MatrixVectorTypes::Glam => glam_vector_type(*size, *kind, *width),
-            MatrixVectorTypes::Nalgebra => nalgebra_vector_type(*size, *kind, *width),
+        naga::TypeInner::Scalar(scalar) => rust_scalar_type(scalar),
+        naga::TypeInner::Vector { size, scalar } => match format {
+            MatrixVectorTypes::Rust => rust_vector_type(*size, scalar.kind, scalar.width),
+            MatrixVectorTypes::Glam => glam_vector_type(*size, scalar.kind, scalar.width),
+            MatrixVectorTypes::Nalgebra => nalgebra_vector_type(*size, scalar.kind, scalar.width),
         },
         naga::TypeInner::Matrix {
             columns,
             rows,
-            width,
+            scalar,
         } => match format {
-            MatrixVectorTypes::Rust => rust_matrix_type(*rows, *columns, *width),
-            MatrixVectorTypes::Glam => glam_matrix_type(*rows, *columns, *width),
-            MatrixVectorTypes::Nalgebra => nalgebra_matrix_type(*rows, *columns, *width),
+            MatrixVectorTypes::Rust => rust_matrix_type(*rows, *columns, scalar.width),
+            MatrixVectorTypes::Glam => glam_matrix_type(*rows, *columns, scalar.width),
+            MatrixVectorTypes::Nalgebra => nalgebra_matrix_type(*rows, *columns, scalar.width),
         },
         naga::TypeInner::Image { .. } => todo!(),
         naga::TypeInner::Sampler { .. } => todo!(),
-        naga::TypeInner::Atomic { kind, width } => rust_scalar_type(*kind, *width),
+        naga::TypeInner::Atomic(scalar) => rust_scalar_type(scalar),
         naga::TypeInner::Pointer { base: _, space: _ } => todo!(),
-        naga::TypeInner::ValuePointer {
-            size: _,
-            kind: _,
-            width: _,
-            space: _,
-        } => todo!(),
+        naga::TypeInner::ValuePointer { .. } => todo!(),
         naga::TypeInner::Array {
             base,
             size: naga::ArraySize::Constant(size),
@@ -108,7 +103,10 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
 }
 
 fn rust_matrix_type(rows: naga::VectorSize, columns: naga::VectorSize, width: u8) -> TokenStream {
-    let inner_type = rust_scalar_type(naga::ScalarKind::Float, width);
+    let inner_type = rust_scalar_type(&naga::Scalar {
+        kind: naga::ScalarKind::Float,
+        width,
+    });
     // Use Index to generate "4" instead of "4usize".
     let rows = Index::from(rows as usize);
     let columns = Index::from(columns as usize);
@@ -134,14 +132,17 @@ fn nalgebra_matrix_type(
     columns: naga::VectorSize,
     width: u8,
 ) -> TokenStream {
-    let inner_type = rust_scalar_type(naga::ScalarKind::Float, width);
+    let inner_type = rust_scalar_type(&naga::Scalar {
+        kind: naga::ScalarKind::Float,
+        width,
+    });
     let rows = Index::from(rows as usize);
     let columns = Index::from(columns as usize);
     quote!(nalgebra::SMatrix<#inner_type, #rows, #columns>)
 }
 
 fn rust_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -> TokenStream {
-    let inner_type = rust_scalar_type(kind, width);
+    let inner_type = rust_scalar_type(&naga::Scalar { kind, width });
     let size = Index::from(size as usize);
     quote!([#inner_type; #size])
 }
@@ -166,7 +167,7 @@ fn glam_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -
 }
 
 fn nalgebra_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -> TokenStream {
-    let inner_type = rust_scalar_type(kind, width);
+    let inner_type = rust_scalar_type(&naga::Scalar { kind, width });
     let size = Index::from(size as usize);
     quote!(nalgebra::SVector<#inner_type, #size>)
 }
@@ -174,15 +175,15 @@ fn nalgebra_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u
 pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
     // Not all wgsl types work as vertex attributes in wgpu.
     match &ty.inner {
-        naga::TypeInner::Scalar { kind, width } => match (kind, width) {
+        naga::TypeInner::Scalar(scalar) => match (scalar.kind, scalar.width) {
             (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32,
             (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32,
             (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32,
             (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64,
             _ => todo!(),
         },
-        naga::TypeInner::Vector { size, kind, width } => match size {
-            naga::VectorSize::Bi => match (kind, width) {
+        naga::TypeInner::Vector { size, scalar } => match size {
+            naga::VectorSize::Bi => match (scalar.kind, scalar.width) {
                 (naga::ScalarKind::Sint, 1) => wgpu::VertexFormat::Sint8x2,
                 (naga::ScalarKind::Uint, 1) => wgpu::VertexFormat::Uint8x2,
                 (naga::ScalarKind::Sint, 2) => wgpu::VertexFormat::Sint16x2,
@@ -193,14 +194,14 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
                 (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x2,
                 _ => todo!(),
             },
-            naga::VectorSize::Tri => match (kind, width) {
+            naga::VectorSize::Tri => match (scalar.kind, scalar.width) {
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x3,
                 (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x3,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x3,
                 (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x3,
                 _ => todo!(),
             },
-            naga::VectorSize::Quad => match (kind, width) {
+            naga::VectorSize::Quad => match (scalar.kind, scalar.width) {
                 (naga::ScalarKind::Sint, 1) => wgpu::VertexFormat::Sint8x4,
                 (naga::ScalarKind::Uint, 1) => wgpu::VertexFormat::Uint8x4,
                 (naga::ScalarKind::Sint, 2) => wgpu::VertexFormat::Sint16x4,
