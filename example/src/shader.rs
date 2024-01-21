@@ -132,6 +132,12 @@ pub mod bind_groups {
         pub bind_group0: &'a BindGroup0,
         pub bind_group1: &'a BindGroup1,
     }
+    impl<'a> BindGroups<'a> {
+        pub fn set(&self, pass: &mut wgpu::RenderPass<'a>) {
+            self.bind_group0.set(pass);
+            self.bind_group1.set(pass);
+        }
+    }
 }
 pub fn set_bind_groups<'a>(
     pass: &mut wgpu::RenderPass<'a>,

@@ -50,28 +50,6 @@ pub fn bind_groups_module(
 
     // TODO: Support compute shader with vertex/fragment in the same module?
     let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
-    let set_bind_groups = set_bind_groups(bind_group_data, is_compute);
-
-    if bind_groups.is_empty() {
-        // Don't include empty modules.
-        quote!()
-    } else {
-        // Create a module to avoid name conflicts with user structs.
-        quote! {
-            pub mod bind_groups {
-                #(#bind_groups)*
-
-                #[derive(Debug)]
-                pub struct BindGroups<'a> {
-                    #(#bind_group_fields),*
-                }
-            }
-            #set_bind_groups
-        }
-    }
-}
-
-fn set_bind_groups(bind_group_data: &BTreeMap<u32, GroupData>, is_compute: bool) -> TokenStream {
     let render_pass = if is_compute {
         quote!(wgpu::ComputePass<'a>)
     } else {
@@ -96,12 +74,36 @@ fn set_bind_groups(bind_group_data: &BTreeMap<u32, GroupData>, is_compute: bool)
         })
         .collect();
 
-    quote! {
+    let set_bind_groups = quote! {
         pub fn set_bind_groups<'a>(
             pass: &mut #render_pass,
             #(#group_parameters),*
         ) {
             #(#set_groups)*
+        }
+    };
+
+    if bind_groups.is_empty() {
+        // Don't include empty modules.
+        quote!()
+    } else {
+        // Create a module to avoid name conflicts with user structs.
+        quote! {
+            pub mod bind_groups {
+                #(#bind_groups)*
+
+                #[derive(Debug)]
+                pub struct BindGroups<'a> {
+                    #(#bind_group_fields),*
+                }
+
+                impl<'a> BindGroups<'a> {
+                    pub fn set(&self, pass: &mut #render_pass) {
+                        #(self.#set_groups)*
+                    }
+                }
+            }
+            #set_bind_groups
         }
     }
 }
@@ -598,6 +600,12 @@ mod tests {
                         pub bind_group0: &'a BindGroup0,
                         pub bind_group1: &'a BindGroup1,
                     }
+                    impl<'a> BindGroups<'a> {
+                        pub fn set(&self, pass: &mut wgpu::ComputePass<'a>) {
+                            self.bind_group0.set(pass);
+                            self.bind_group1.set(pass);
+                        }
+                    }
                 }
                 pub fn set_bind_groups<'a>(
                     pass: &mut wgpu::ComputePass<'a>,
@@ -889,6 +897,12 @@ mod tests {
                         pub bind_group0: &'a BindGroup0,
                         pub bind_group1: &'a BindGroup1,
                     }
+                    impl<'a> BindGroups<'a> {
+                        pub fn set(&self, pass: &mut wgpu::RenderPass<'a>) {
+                            self.bind_group0.set(pass);
+                            self.bind_group1.set(pass);
+                        }
+                    }
                 }
                 pub fn set_bind_groups<'a>(
                     pass: &mut wgpu::RenderPass<'a>,
@@ -975,6 +989,11 @@ mod tests {
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                     }
+                    impl<'a> BindGroups<'a> {
+                        pub fn set(&self, pass: &mut wgpu::RenderPass<'a>) {
+                            self.bind_group0.set(pass);
+                        }
+                    }
                 }
                 pub fn set_bind_groups<'a>(
                     pass: &mut wgpu::RenderPass<'a>,
@@ -1058,82 +1077,17 @@ mod tests {
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                     }
+                    impl<'a> BindGroups<'a> {
+                        pub fn set(&self, pass: &mut wgpu::RenderPass<'a>) {
+                            self.bind_group0.set(pass);
+                        }
+                    }
                 }
                 pub fn set_bind_groups<'a>(
                     pass: &mut wgpu::RenderPass<'a>,
                     bind_group0: &'a bind_groups::BindGroup0,
                 ) {
                     bind_group0.set(pass);
-                }
-            },
-            actual
-        );
-    }
-
-    #[test]
-    fn set_bind_groups_vertex_fragment() {
-        let source = indoc! {r#"
-            struct Transforms {};
-
-            @group(0) @binding(0) var color_texture: texture_2d<f32>;
-            @group(1) @binding(0) var<uniform> transforms: Transforms;
-
-            @vertex
-            fn vs_main() {}
-
-            @fragment
-            fn fs_main() {}
-        "#};
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-        let bind_group_data = get_bind_group_data(&module).unwrap();
-
-        let actual = set_bind_groups(&bind_group_data, false);
-
-        assert_tokens_eq!(
-            quote! {
-                pub fn set_bind_groups<'a>(
-                    pass: &mut wgpu::RenderPass<'a>,
-                    bind_group0: &'a bind_groups::BindGroup0,
-                    bind_group1: &'a bind_groups::BindGroup1,
-                ) {
-                    bind_group0.set(pass);
-                    bind_group1.set(pass);
-                }
-            },
-            actual
-        );
-    }
-
-    #[test]
-    fn set_bind_groups_compute() {
-        let source = indoc! {r#"
-            struct Transforms {};
-
-            @group(0) @binding(0)
-            var color_texture: texture_2d<f32>;
-            @group(1) @binding(0) var<uniform> transforms: Transforms;
-
-            @compute
-            @workgroup_size(64)
-            fn main() {}
-        "#};
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-        let bind_group_data = get_bind_group_data(&module).unwrap();
-
-        let actual = set_bind_groups(&bind_group_data, true);
-
-        // The only change is that the function takes a ComputePass instead.
-        assert_tokens_eq!(
-            quote! {
-                pub fn set_bind_groups<'a>(
-                    pass: &mut wgpu::ComputePass<'a>,
-                    bind_group0: &'a bind_groups::BindGroup0,
-                    bind_group1: &'a bind_groups::BindGroup1,
-                ) {
-                    bind_group0.set(pass);
-                    bind_group1.set(pass);
                 }
             },
             actual

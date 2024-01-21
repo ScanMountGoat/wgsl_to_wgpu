@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## unreleased
+### Added
+* Added `BindGroups::set` method for setting all bind groups from a struct.
+
 ### Changed
 * Moved vertex input methods from vertex module to top level.
 * Moved `set_bind_groups` to top level and changed parameters to directly take bind group references.
