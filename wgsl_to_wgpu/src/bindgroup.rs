@@ -92,7 +92,7 @@ pub fn bind_groups_module(
             pub mod bind_groups {
                 #(#bind_groups)*
 
-                #[derive(Debug)]
+                #[derive(Debug, Copy, Clone)]
                 pub struct BindGroups<'a> {
                     #(#bind_group_fields),*
                 }
@@ -595,7 +595,7 @@ mod tests {
                             render_pass.set_bind_group(1, &self.0, &[]);
                         }
                     }
-                    #[derive(Debug)]
+                    #[derive(Debug, Copy, Clone)]
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                         pub bind_group1: &'a BindGroup1,
@@ -892,7 +892,7 @@ mod tests {
                             render_pass.set_bind_group(1, &self.0, &[]);
                         }
                     }
-                    #[derive(Debug)]
+                    #[derive(Debug, Copy, Clone)]
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                         pub bind_group1: &'a BindGroup1,
@@ -985,7 +985,7 @@ mod tests {
                             render_pass.set_bind_group(0, &self.0, &[]);
                         }
                     }
-                    #[derive(Debug)]
+                    #[derive(Debug, Copy, Clone)]
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                     }
@@ -1073,7 +1073,7 @@ mod tests {
                             render_pass.set_bind_group(0, &self.0, &[]);
                         }
                     }
-                    #[derive(Debug)]
+                    #[derive(Debug, Copy, Clone)]
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                     }
