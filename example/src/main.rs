@@ -224,13 +224,8 @@ impl<'a> State<'a> {
         render_pass.set_pipeline(&self.pipeline);
 
         // Use this function to ensure all bind groups are set.
-        crate::shader::bind_groups::set_bind_groups(
-            &mut render_pass,
-            crate::shader::bind_groups::BindGroups {
-                bind_group0: &self.bind_group0,
-                bind_group1: &self.bind_group1,
-            },
-        );
+        crate::shader::set_bind_groups(&mut render_pass, &self.bind_group0, &self.bind_group1);
+
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.draw(0..3, 0..1);
 

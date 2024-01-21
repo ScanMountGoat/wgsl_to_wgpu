@@ -56,6 +56,7 @@ pub fn bind_groups_module(
         // Don't include empty modules.
         quote!()
     } else {
+        // Create a module to avoid name conflicts with user structs.
         quote! {
             pub mod bind_groups {
                 #(#bind_groups)*
@@ -64,9 +65,8 @@ pub fn bind_groups_module(
                 pub struct BindGroups<'a> {
                     #(#bind_group_fields),*
                 }
-
-                #set_bind_groups
             }
+            #set_bind_groups
         }
     }
 }
@@ -78,21 +78,30 @@ fn set_bind_groups(bind_group_data: &BTreeMap<u32, GroupData>, is_compute: bool)
         quote!(wgpu::RenderPass<'a>)
     };
 
-    // The set function for each bind group already sets the index.
-    let groups: Vec<_> = bind_group_data
+    let group_parameters: Vec<_> = bind_group_data
         .keys()
         .map(|group_no| {
             let group = indexed_name_to_ident("bind_group", *group_no);
-            quote!(bind_groups.#group.set(pass);)
+            let group_type = indexed_name_to_ident("BindGroup", *group_no);
+            quote!(#group: &'a bind_groups::#group_type)
+        })
+        .collect();
+
+    // The set function for each bind group already sets the index.
+    let set_groups: Vec<_> = bind_group_data
+        .keys()
+        .map(|group_no| {
+            let group = indexed_name_to_ident("bind_group", *group_no);
+            quote!(#group.set(pass);)
         })
         .collect();
 
     quote! {
         pub fn set_bind_groups<'a>(
             pass: &mut #render_pass,
-            bind_groups: BindGroups<'a>,
+            #(#group_parameters),*
         ) {
-            #(#groups)*
+            #(#set_groups)*
         }
     }
 }
@@ -589,13 +598,14 @@ mod tests {
                         pub bind_group0: &'a BindGroup0,
                         pub bind_group1: &'a BindGroup1,
                     }
-                    pub fn set_bind_groups<'a>(
-                        pass: &mut wgpu::ComputePass<'a>,
-                        bind_groups: BindGroups<'a>,
-                    ) {
-                        bind_groups.bind_group0.set(pass);
-                        bind_groups.bind_group1.set(pass);
-                    }
+                }
+                pub fn set_bind_groups<'a>(
+                    pass: &mut wgpu::ComputePass<'a>,
+                    bind_group0: &'a bind_groups::BindGroup0,
+                    bind_group1: &'a bind_groups::BindGroup1,
+                ) {
+                    bind_group0.set(pass);
+                    bind_group1.set(pass);
                 }
             },
             actual
@@ -879,13 +889,15 @@ mod tests {
                         pub bind_group0: &'a BindGroup0,
                         pub bind_group1: &'a BindGroup1,
                     }
-                    pub fn set_bind_groups<'a>(
-                        pass: &mut wgpu::RenderPass<'a>,
-                        bind_groups: BindGroups<'a>,
-                    ) {
-                        bind_groups.bind_group0.set(pass);
-                        bind_groups.bind_group1.set(pass);
-                    }
+                }
+                pub fn set_bind_groups<'a>(
+                    pass: &mut wgpu::RenderPass<'a>,
+                    bind_group0: &'a bind_groups::BindGroup0,
+                    bind_group1: &'a bind_groups::BindGroup1,
+
+                ) {
+                    bind_group0.set(pass);
+                    bind_group1.set(pass);
                 }
             },
             actual
@@ -963,12 +975,12 @@ mod tests {
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                     }
-                    pub fn set_bind_groups<'a>(
-                        pass: &mut wgpu::RenderPass<'a>,
-                        bind_groups: BindGroups<'a>,
-                    ) {
-                        bind_groups.bind_group0.set(pass);
-                    }
+                }
+                pub fn set_bind_groups<'a>(
+                    pass: &mut wgpu::RenderPass<'a>,
+                    bind_group0: &'a bind_groups::BindGroup0,
+                ) {
+                    bind_group0.set(pass);
                 }
             },
             actual
@@ -1046,12 +1058,12 @@ mod tests {
                     pub struct BindGroups<'a> {
                         pub bind_group0: &'a BindGroup0,
                     }
-                    pub fn set_bind_groups<'a>(
-                        pass: &mut wgpu::RenderPass<'a>,
-                        bind_groups: BindGroups<'a>,
-                    ) {
-                        bind_groups.bind_group0.set(pass);
-                    }
+                }
+                pub fn set_bind_groups<'a>(
+                    pass: &mut wgpu::RenderPass<'a>,
+                    bind_group0: &'a bind_groups::BindGroup0,
+                ) {
+                    bind_group0.set(pass);
                 }
             },
             actual
@@ -1082,10 +1094,11 @@ mod tests {
             quote! {
                 pub fn set_bind_groups<'a>(
                     pass: &mut wgpu::RenderPass<'a>,
-                    bind_groups: BindGroups<'a>,
+                    bind_group0: &'a bind_groups::BindGroup0,
+                    bind_group1: &'a bind_groups::BindGroup1,
                 ) {
-                    bind_groups.bind_group0.set(pass);
-                    bind_groups.bind_group1.set(pass);
+                    bind_group0.set(pass);
+                    bind_group1.set(pass);
                 }
             },
             actual
@@ -1116,10 +1129,11 @@ mod tests {
             quote! {
                 pub fn set_bind_groups<'a>(
                     pass: &mut wgpu::ComputePass<'a>,
-                    bind_groups: BindGroups<'a>,
+                    bind_group0: &'a bind_groups::BindGroup0,
+                    bind_group1: &'a bind_groups::BindGroup1,
                 ) {
-                    bind_groups.bind_group0.set(pass);
-                    bind_groups.bind_group1.set(pass);
+                    bind_group0.set(pass);
+                    bind_group1.set(pass);
                 }
             },
             actual

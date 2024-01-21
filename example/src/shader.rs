@@ -132,13 +132,14 @@ pub mod bind_groups {
         pub bind_group0: &'a BindGroup0,
         pub bind_group1: &'a BindGroup1,
     }
-    pub fn set_bind_groups<'a>(
-        pass: &mut wgpu::RenderPass<'a>,
-        bind_groups: BindGroups<'a>,
-    ) {
-        bind_groups.bind_group0.set(pass);
-        bind_groups.bind_group1.set(pass);
-    }
+}
+pub fn set_bind_groups<'a>(
+    pass: &mut wgpu::RenderPass<'a>,
+    bind_group0: &'a bind_groups::BindGroup0,
+    bind_group1: &'a bind_groups::BindGroup1,
+) {
+    bind_group0.set(pass);
+    bind_group1.set(pass);
 }
 impl VertexInput {
     pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = [
