@@ -140,23 +140,21 @@ pub mod bind_groups {
         bind_groups.bind_group1.set(pass);
     }
 }
-pub mod vertex {
-    impl super::VertexInput {
-        pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = [
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: memoffset::offset_of!(super::VertexInput, position) as u64,
-                shader_location: 0,
-            },
-        ];
-        pub const fn vertex_buffer_layout(
-            step_mode: wgpu::VertexStepMode,
-        ) -> wgpu::VertexBufferLayout<'static> {
-            wgpu::VertexBufferLayout {
-                array_stride: std::mem::size_of::<super::VertexInput>() as u64,
-                step_mode,
-                attributes: &super::VertexInput::VERTEX_ATTRIBUTES,
-            }
+impl VertexInput {
+    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = [
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x3,
+            offset: memoffset::offset_of!(VertexInput, position) as u64,
+            shader_location: 0,
+        },
+    ];
+    pub const fn vertex_buffer_layout(
+        step_mode: wgpu::VertexStepMode,
+    ) -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<VertexInput>() as u64,
+            step_mode,
+            attributes: &VertexInput::VERTEX_ATTRIBUTES,
         }
     }
 }
