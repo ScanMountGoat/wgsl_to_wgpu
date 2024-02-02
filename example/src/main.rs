@@ -1,4 +1,4 @@
-use std::iter;
+use std::{iter, mem::MaybeUninit};
 
 use crate::shader::ENTRY_FS_MAIN;
 use futures::executor::block_on;
@@ -143,6 +143,7 @@ impl<'a> State<'a> {
             label: Some("uniforms"),
             contents: bytemuck::cast_slice(&[shader::Uniforms {
                 color_rgb: [1.0, 1.0, 1.0, 1.0],
+                _pad_color_rgb: []
             }]),
             usage: wgpu::BufferUsages::UNIFORM,
         });
@@ -161,12 +162,15 @@ impl<'a> State<'a> {
             contents: bytemuck::cast_slice(&[
                 shader::VertexInput {
                     position: [-1.0, -1.0, 0.0],
+                    _pad_position: unsafe { MaybeUninit::zeroed().assume_init() },
                 },
                 shader::VertexInput {
                     position: [3.0, -1.0, 0.0],
+                    _pad_position: unsafe { MaybeUninit::zeroed().assume_init() },
                 },
                 shader::VertexInput {
                     position: [-1.0, 3.0, 0.0],
+                    _pad_position: unsafe { MaybeUninit::zeroed().assume_init() },
                 },
             ]),
             usage: wgpu::BufferUsages::VERTEX,

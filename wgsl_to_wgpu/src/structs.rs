@@ -95,7 +95,7 @@ fn rust_struct(
     };
 
     let has_rts_array = struct_has_rts_array_member(members, module);
-    let members = struct_members(members, module, options);
+    let members = struct_members(members, module, options, layout.size as usize);
     let mut derives = Vec::new();
 
     derives.push(quote!(Debug));
@@ -142,7 +142,7 @@ fn rust_struct(
     };
 
     let repr_c = if !has_rts_array {
-        quote!(#[repr(C)])
+        quote!(#[repr(C, packed)])
     } else {
         quote!()
     };
@@ -180,6 +180,7 @@ fn struct_members(
     members: &[naga::StructMember],
     module: &naga::Module,
     options: WriteOptions,
+    struct_size: usize
 ) -> Vec<TokenStream> {
     members
         .iter()
@@ -204,8 +205,21 @@ fn struct_members(
                     pub #member_name: Vec<#element_type>
                 )
             } else {
-                let member_type = rust_type(module, ty, options.matrix_vector_types);
-                quote!(pub #member_name: #member_type)
+              let member_type = rust_type(module, ty, options.matrix_vector_types);
+              let current_offset = Index::from(member.offset as usize);
+
+              let next_offset = if index == members.len() - 1 {
+                Index::from(struct_size)
+              } else {
+                Index::from(members[index + 1].offset as usize)
+              };
+
+              let pad_member_name = Ident::new(&format!("_pad_{}", member_name), Span::call_site());
+
+              quote!(
+                pub #member_name: #member_type,
+                pub #pad_member_name: [u8; #next_offset - #current_offset - core::mem::size_of::<#member_type>()]
+              )
             }
         })
         .collect()
