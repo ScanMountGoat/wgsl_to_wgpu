@@ -94,8 +94,16 @@ fn rust_struct(
         const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
     };
 
+    // Assume types used in global variables are host shareable and require validation.
+    // This includes storage, uniform, and workgroup variables.
+    // This also means types that are never used will not be validated.
+    // Structs used only for vertex inputs do not require validation on desktop platforms.
+    // Vertex input layout is handled already by setting the attribute offsets and types.
+    // This allows vertex input field types without padding like vec3 for positions.
+    let is_host_shareable = global_variable_types.contains(&t_handle);
+
     let has_rts_array = struct_has_rts_array_member(members, module);
-    let members = struct_members(members, module, options, layout.size as usize);
+    let members = struct_members(members, module, options, layout.size as usize, is_host_shareable);
     let mut derives = Vec::new();
 
     derives.push(quote!(Debug));
@@ -121,14 +129,6 @@ fn rust_struct(
         derives.push(quote!(serde::Serialize));
         derives.push(quote!(serde::Deserialize));
     }
-
-    // Assume types used in global variables are host shareable and require validation.
-    // This includes storage, uniform, and workgroup variables.
-    // This also means types that are never used will not be validated.
-    // Structs used only for vertex inputs do not require validation on desktop platforms.
-    // Vertex input layout is handled already by setting the attribute offsets and types.
-    // This allows vertex input field types without padding like vec3 for positions.
-    let is_host_shareable = global_variable_types.contains(&t_handle);
 
     let assert_layout = if options.derive_bytemuck && is_host_shareable {
         // Assert that the Rust layout matches the WGSL layout.
@@ -180,7 +180,8 @@ fn struct_members(
     members: &[naga::StructMember],
     module: &naga::Module,
     options: WriteOptions,
-    struct_size: usize
+    struct_size: usize, 
+    enable_padding: bool,
 ) -> Vec<TokenStream> {
     members
         .iter()
@@ -206,20 +207,24 @@ fn struct_members(
                 )
             } else {
               let member_type = rust_type(module, ty, options.matrix_vector_types);
-              let current_offset = Index::from(member.offset as usize);
-
-              let next_offset = if index == members.len() - 1 {
-                Index::from(struct_size)
+              if !enable_padding {
+                quote!(pub #member_name: #member_type)
               } else {
-                Index::from(members[index + 1].offset as usize)
-              };
+                let current_offset = Index::from(member.offset as usize);
 
-              let pad_member_name = Ident::new(&format!("_pad_{}", member_name), Span::call_site());
+                let next_offset = if index == members.len() - 1 {
+                  Index::from(struct_size)
+                } else {
+                  Index::from(members[index + 1].offset as usize)
+                };
 
-              quote!(
-                pub #member_name: #member_type,
-                pub #pad_member_name: [u8; #next_offset - #current_offset - core::mem::size_of::<#member_type>()]
-              )
+                let pad_member_name = Ident::new(&format!("_pad_{}", member_name), Span::call_site());
+
+                quote!(
+                  pub #member_name: #member_type,
+                  pub #pad_member_name: [u8; #next_offset - #current_offset - core::mem::size_of::<#member_type>()]
+                )
+              }
             }
         })
         .collect()

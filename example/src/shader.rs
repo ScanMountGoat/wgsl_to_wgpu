@@ -4,7 +4,6 @@
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct VertexInput {
     pub position: [f32; 3],
-    pub _pad_position: [u8; 16 - 0 - core::mem::size_of::<[f32; 3]>()],
 }
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]

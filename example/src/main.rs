@@ -162,15 +162,12 @@ impl<'a> State<'a> {
             contents: bytemuck::cast_slice(&[
                 shader::VertexInput {
                     position: [-1.0, -1.0, 0.0],
-                    _pad_position: unsafe { MaybeUninit::zeroed().assume_init() },
                 },
                 shader::VertexInput {
                     position: [3.0, -1.0, 0.0],
-                    _pad_position: unsafe { MaybeUninit::zeroed().assume_init() },
                 },
                 shader::VertexInput {
                     position: [-1.0, 3.0, 0.0],
-                    _pad_position: unsafe { MaybeUninit::zeroed().assume_init() },
                 },
             ]),
             usage: wgpu::BufferUsages::VERTEX,
