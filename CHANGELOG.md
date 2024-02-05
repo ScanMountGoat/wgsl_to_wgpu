@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Moved vertex input methods from vertex module to top level.
 * Moved `set_bind_groups` to top level and changed parameters to directly take bind group references.
 
+### Fixed
+* Fixed an issue where `@builtin()` attributes were not supported in struct definitions.
+
 ### 0.5.0 - 2023-10-28
 ### Added
 * Added `create_shader_module_embedded` for including the source as a string literal instead of using `include_str!`.

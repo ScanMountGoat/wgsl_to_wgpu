@@ -244,13 +244,16 @@ pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
                                 name: arg_type.name.as_ref().unwrap().clone(),
                                 fields: members
                                     .iter()
-                                    .map(|member| {
+                                    .filter_map(|member| {
+                                        // Skip builtins since they have no location binding.
                                         let location = match member.binding.as_ref().unwrap() {
-                                            naga::Binding::BuiltIn(_) => todo!(), // TODO: is it possible to have builtins for inputs?
-                                            naga::Binding::Location { location, .. } => *location,
-                                        };
+                                            naga::Binding::BuiltIn(_) => None,
+                                            naga::Binding::Location { location, .. } => {
+                                                Some(*location)
+                                            }
+                                        }?;
 
-                                        (location, member.clone())
+                                        Some((location, member.clone()))
                                     })
                                     .collect(),
                             };
@@ -360,6 +363,7 @@ mod tests {
             struct VertexInput1 {
                 @location(3) in3: vec4<f32>,
                 @location(4) in4: vec4<f32>,
+                @builtin(vertex_index) index: u32,
                 @location(5) in5: vec4<f32>,
                 @location(6) in6: vec4<u32>,
             };

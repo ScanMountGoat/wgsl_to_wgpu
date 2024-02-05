@@ -66,6 +66,13 @@ fn rust_struct(
 ) -> TokenStream {
     let struct_name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
 
+    // Skip builtins since they don't require user specified data.
+    let members: Vec<_> = members
+        .iter()
+        .filter(|m| !matches!(m.binding, Some(naga::Binding::BuiltIn(_))))
+        .cloned()
+        .collect();
+
     let assert_member_offsets: Vec<_> = members
         .iter()
         .map(|m| {
@@ -94,8 +101,8 @@ fn rust_struct(
         const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
     };
 
-    let has_rts_array = struct_has_rts_array_member(members, module);
-    let members = struct_members(members, module, options);
+    let has_rts_array = struct_has_rts_array_member(&members, module);
+    let members = struct_members(&members, module, options);
     let mut derives = Vec::new();
 
     derives.push(quote!(Debug));
@@ -1035,6 +1042,7 @@ mod tests {
                 b: i32,
                 @align(32)
                 c: f32,
+                @builtin(vertex_index) d: u32,
             };
 
             var<storage, read_write> test: Input0;
