@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use wgsl_to_wgpu::{create_shader_module, WriteOptions};
+use wgsl_to_wgpu::{create_shader_module, MatrixVectorTypes, WriteOptions};
 
 fn main() {
     println!("cargo:rerun-if-changed=src/shader.wgsl");
@@ -14,7 +14,9 @@ fn main() {
         &wgsl_source,
         "shader.wgsl",
         WriteOptions {
-            derive_bytemuck: true,
+            derive_bytemuck_vertex: true,
+            derive_encase_host_shareable: true,
+            matrix_vector_types: MatrixVectorTypes::Glam,
             ..Default::default()
         },
     )

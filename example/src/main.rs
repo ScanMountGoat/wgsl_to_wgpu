@@ -1,6 +1,7 @@
 use std::iter;
 
 use crate::shader::ENTRY_FS_MAIN;
+use encase::UniformBuffer;
 use futures::executor::block_on;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -102,27 +103,24 @@ impl<'a> State<'a> {
                 view_formats: &[],
             },
             wgpu::util::TextureDataOrder::LayerMajor,
-            &vec![
-                [0, 0, 255, 255],
-                [64, 0, 255, 255],
-                [128, 0, 255, 255],
-                [255, 0, 255, 255],
-                [0, 64, 255, 255],
-                [64, 64, 255, 255],
-                [128, 64, 255, 255],
-                [255, 64, 255, 255],
-                [0, 128, 255, 255],
-                [64, 128, 255, 255],
-                [128, 128, 255, 255],
-                [255, 128, 255, 255],
-                [0, 255, 255, 255],
-                [64, 255, 255, 255],
-                [128, 255, 255, 255],
-                [255, 255, 255, 255],
-            ]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<u8>>(),
+            bytemuck::cast_slice(&[
+                [0u8, 0u8, 255u8, 255u8],
+                [64u8, 0u8, 255u8, 255u8],
+                [128u8, 0u8, 255u8, 255u8],
+                [255u8, 0u8, 255u8, 255u8],
+                [0u8, 64u8, 255u8, 255u8],
+                [64u8, 64u8, 255u8, 255u8],
+                [128u8, 64u8, 255u8, 255u8],
+                [255u8, 64u8, 255u8, 255u8],
+                [0u8, 128u8, 255u8, 255u8],
+                [64u8, 128u8, 255u8, 255u8],
+                [128u8, 128u8, 255u8, 255u8],
+                [255u8, 128u8, 255u8, 255u8],
+                [0u8, 255u8, 255u8, 255u8],
+                [64u8, 255u8, 255u8, 255u8],
+                [128u8, 255u8, 255u8, 255u8],
+                [255u8, 255u8, 255u8, 255u8],
+            ]),
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -141,11 +139,20 @@ impl<'a> State<'a> {
             },
         );
 
+        // wgsl_to_wgpu will generate alignment assertion checks when using bytemuck.
+        // It's strongly recommended to use encase for uniform and storage buffers.
+        // encase handles any size and alignment requirements at runtime.
+        // This avoids any surprises with requirements like storage buffer offset alignment.
+        let mut uniform_bytes = UniformBuffer::new(Vec::new());
+        uniform_bytes
+            .write(&shader::Uniforms {
+                color_rgb: glam::vec3(1.0, 1.0, 1.0),
+            })
+            .unwrap();
+
         let uniforms_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("uniforms"),
-            contents: bytemuck::cast_slice(&[shader::Uniforms {
-                color_rgb: [1.0, 1.0, 1.0, 1.0],
-            }]),
+            contents: &uniform_bytes.into_inner(),
             usage: wgpu::BufferUsages::UNIFORM,
         });
 
@@ -162,13 +169,13 @@ impl<'a> State<'a> {
             label: Some("vertex buffer"),
             contents: bytemuck::cast_slice(&[
                 shader::VertexInput {
-                    position: [-1.0, -1.0, 0.0],
+                    position: glam::vec3(-1.0, -1.0, 0.0),
                 },
                 shader::VertexInput {
-                    position: [3.0, -1.0, 0.0],
+                    position: glam::vec3(3.0, -1.0, 0.0),
                 },
                 shader::VertexInput {
-                    position: [-1.0, 3.0, 0.0],
+                    position: glam::vec3(-1.0, 3.0, 0.0),
                 },
             ]),
             usage: wgpu::BufferUsages::VERTEX,

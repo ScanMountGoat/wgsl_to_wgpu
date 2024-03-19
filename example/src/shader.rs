@@ -3,20 +3,13 @@
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct VertexInput {
-    pub position: [f32; 3],
+    pub position: glam::Vec3,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, PartialEq, encase::ShaderType)]
 pub struct Uniforms {
-    pub color_rgb: [f32; 4],
+    pub color_rgb: glam::Vec3,
 }
-const _: () = assert!(
-    std::mem::size_of:: < Uniforms > () == 16, "size of Uniforms does not match WGSL"
-);
-const _: () = assert!(
-    memoffset::offset_of!(Uniforms, color_rgb) == 0,
-    "offset of Uniforms.color_rgb does not match WGSL"
-);
 pub mod bind_groups {
     #[derive(Debug)]
     pub struct BindGroup0(wgpu::BindGroup);

@@ -22,7 +22,7 @@ var color_texture: texture_2d<f32>;
 var color_sampler: sampler;
 
 struct Uniforms {
-    color_rgb: vec4<f32>,
+    color_rgb: vec3<f32>,
 }
 
 @group(1) @binding(0)

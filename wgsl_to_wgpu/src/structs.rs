@@ -112,23 +112,6 @@ fn rust_struct(
     derives.push(quote!(Clone));
     derives.push(quote!(PartialEq));
 
-    if options.derive_bytemuck {
-        if has_rts_array {
-            panic!("Runtime-sized array fields are not supported in options.derive_bytemuck mode");
-        }
-        derives.push(quote!(bytemuck::Pod));
-        derives.push(quote!(bytemuck::Zeroable));
-    }
-    if options.derive_encase {
-        derives.push(quote!(encase::ShaderType));
-    } else if has_rts_array {
-        panic!("Runtime-sized array fields are only supported in options.derive_encase mode");
-    }
-    if options.derive_serde {
-        derives.push(quote!(serde::Serialize));
-        derives.push(quote!(serde::Deserialize));
-    }
-
     // Assume types used in global variables are host shareable and require validation.
     // This includes storage, uniform, and workgroup variables.
     // This also means types that are never used will not be validated.
@@ -137,9 +120,39 @@ fn rust_struct(
     // This allows vertex input field types without padding like vec3 for positions.
     let is_host_shareable = global_variable_types.contains(&t_handle);
 
-    let assert_layout = if options.derive_bytemuck && is_host_shareable {
+    if has_rts_array && !options.derive_encase_host_shareable {
+        panic!("Runtime-sized array fields are only supported with encase");
+    }
+
+    if options.derive_bytemuck_vertex && !is_host_shareable {
+        if has_rts_array {
+            panic!("Runtime-sized array fields are not supported with bytemuck");
+        }
+        derives.push(quote!(bytemuck::Pod));
+        derives.push(quote!(bytemuck::Zeroable));
+    }
+
+    if options.derive_bytemuck_host_shareable && is_host_shareable {
+        if has_rts_array {
+            panic!("Runtime-sized array fields are not supported with bytemuck");
+        }
+        derives.push(quote!(bytemuck::Pod));
+        derives.push(quote!(bytemuck::Zeroable));
+    }
+
+    if options.derive_encase_host_shareable && is_host_shareable {
+        derives.push(quote!(encase::ShaderType));
+    }
+
+    if options.derive_serde {
+        derives.push(quote!(serde::Serialize));
+        derives.push(quote!(serde::Deserialize));
+    }
+
+    let assert_layout = if options.derive_bytemuck_host_shareable && is_host_shareable {
         // Assert that the Rust layout matches the WGSL layout.
         // Enable for bytemuck since it uses the Rust struct's memory layout.
+        // Vertex structs have their layout manually specified and don't need validation.
         quote! {
             #assert_size
             #(#assert_member_offsets)*
@@ -776,8 +789,9 @@ mod tests {
         let structs = structs(
             &module,
             WriteOptions {
-                derive_encase: true,
-                derive_bytemuck: true,
+                derive_bytemuck_vertex: true,
+                derive_bytemuck_host_shareable: true,
+                derive_encase_host_shareable: true,
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
             },
@@ -868,8 +882,9 @@ mod tests {
         let structs = structs(
             &module,
             WriteOptions {
-                derive_encase: true,
-                derive_bytemuck: true,
+                derive_bytemuck_vertex: true,
+                derive_bytemuck_host_shareable: true,
+                derive_encase_host_shareable: true,
                 derive_serde: true,
                 matrix_vector_types: MatrixVectorTypes::Rust,
             },
@@ -966,8 +981,9 @@ mod tests {
         let structs = structs(
             &module,
             WriteOptions {
-                derive_encase: false,
-                derive_bytemuck: false,
+                derive_bytemuck_vertex: false,
+                derive_bytemuck_host_shareable: false,
+                derive_encase_host_shareable: false,
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
             },
@@ -1010,8 +1026,9 @@ mod tests {
         let structs = structs(
             &module,
             WriteOptions {
-                derive_encase: false,
-                derive_bytemuck: true,
+                derive_bytemuck_vertex: true,
+                derive_bytemuck_host_shareable: true,
+                derive_encase_host_shareable: false,
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
             },
@@ -1068,8 +1085,9 @@ mod tests {
         let structs = structs(
             &module,
             WriteOptions {
-                derive_encase: false,
-                derive_bytemuck: true,
+                derive_bytemuck_vertex: true,
+                derive_bytemuck_host_shareable: true,
+                derive_encase_host_shareable: false,
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
             },
@@ -1160,7 +1178,8 @@ mod tests {
         );
     }
 
-    fn runtime_sized_array_module() -> naga::Module {
+    #[test]
+    fn write_runtime_sized_array() {
         let source = indoc! {r#"
             struct RtsStruct {
                 other_data: i32,
@@ -1170,17 +1189,12 @@ mod tests {
             @group(0) @binding(0)
             var <storage, read_write> rts:RtsStruct;
         "#};
-        naga::front::wgsl::parse_str(source).unwrap()
-    }
-
-    #[test]
-    fn write_runtime_sized_array() {
-        let module = runtime_sized_array_module();
+        let module = naga::front::wgsl::parse_str(source).unwrap();
 
         let structs = structs(
             &module,
             WriteOptions {
-                derive_encase: true,
+                derive_encase_host_shareable: true,
                 ..Default::default()
             },
         );
@@ -1202,7 +1216,16 @@ mod tests {
     #[test]
     #[should_panic]
     fn write_runtime_sized_array_no_encase() {
-        let module = runtime_sized_array_module();
+        let source = indoc! {r#"
+            struct RtsStruct {
+                other_data: i32,
+                the_array: array<u32>,
+            };
+
+            @group(0) @binding(0)
+            var <storage, read_write> rts:RtsStruct;
+        "#};
+        let module = naga::front::wgsl::parse_str(source).unwrap();
 
         let _structs = structs(
             &module,
@@ -1214,14 +1237,51 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn write_runtime_sized_array_bytemuck() {
-        let module = runtime_sized_array_module();
+    fn write_runtime_sized_array_bytemuck_vertex() {
+        let source = indoc! {r#"
+            struct RtsStruct {
+                other_data: i32,
+                the_array: array<u32>,
+            };
+
+            @vertex
+            fn main(in: RtsStruct) ->  @location(0) vec4<f32> {
+                return vec4(0.0);
+            }
+        "#};
+        let module = naga::front::wgsl::parse_str(source).unwrap();
 
         let _structs = structs(
             &module,
             WriteOptions {
-                derive_encase: true,
-                derive_bytemuck: true,
+                derive_encase_host_shareable: true,
+                derive_bytemuck_vertex: true,
+                derive_bytemuck_host_shareable: false,
+                ..Default::default()
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_runtime_sized_array_bytemuck_host_shareable() {
+        let source = indoc! {r#"
+            struct RtsStruct {
+                other_data: i32,
+                the_array: array<u32>,
+            };
+
+            @group(0) @binding(0)
+            var <storage, read_write> rts:RtsStruct;
+        "#};
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let _structs = structs(
+            &module,
+            WriteOptions {
+                derive_encase_host_shareable: true,
+                derive_bytemuck_vertex: false,
+                derive_bytemuck_host_shareable: true,
                 ..Default::default()
             },
         );
@@ -1245,7 +1305,7 @@ mod tests {
         let _structs = structs(
             &module,
             WriteOptions {
-                derive_encase: true,
+                derive_encase_host_shareable: true,
                 ..Default::default()
             },
         );
