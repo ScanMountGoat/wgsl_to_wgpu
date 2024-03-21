@@ -19,6 +19,7 @@ jobs:
         rustup install 1.77
         rustup default 1.77
         rustup component add clippy
+        rustup component add rustfmt
     - name: Build
       run: cargo build
     - name: Run tests
