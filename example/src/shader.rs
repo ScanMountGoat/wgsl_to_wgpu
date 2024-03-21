@@ -144,7 +144,7 @@ impl VertexInput {
     pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = [
         wgpu::VertexAttribute {
             format: wgpu::VertexFormat::Float32x3,
-            offset: memoffset::offset_of!(VertexInput, position) as u64,
+            offset: std::mem::offset_of!(VertexInput, position) as u64,
             shader_location: 0,
         },
     ];

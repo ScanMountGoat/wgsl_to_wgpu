@@ -10,7 +10,6 @@ futures = "0.3"
 bytemuck = { version = "1.13", features = [ "derive" ] }
 encase = { version = "0.7.0", features = ["glam"] }
 glam = { version = "0.25.0", features = ["bytemuck"] }
-memoffset = "0.9.0"
 
 [build-dependencies]
 wgsl_to_wgpu = { path = "../wgsl_to_wgpu" }

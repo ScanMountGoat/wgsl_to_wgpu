@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 * Split derives for bytemuck into `derive_bytemuck_vertex` and `derive_bytemuck_host_shareable` to `WriteOptions`.
 * Renamed `derive_encase` to `derive_encase_host_shareable` for `WriteOptions` and adjusted encase derive to not apply to vertex input structs to avoid memory layout mismatches.
+* Changed vertex input field offsets to use `std::mem::offset_of!` instead of `memoffset::offset_of!`. This requires Rust 1.77 or later.
 
 ## 0.6.0 - 2024-02-23
 ### Added

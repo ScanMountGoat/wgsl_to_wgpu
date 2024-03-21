@@ -77,7 +77,7 @@ fn rust_struct(
         .iter()
         .map(|m| {
             let name = Ident::new(m.name.as_ref().unwrap(), Span::call_site());
-            let rust_offset = quote!(memoffset::offset_of!(#struct_name, #name));
+            let rust_offset = quote!(std::mem::offset_of!(#struct_name, #name));
 
             let wgsl_offset = Index::from(m.offset as usize);
 
@@ -819,13 +819,13 @@ mod tests {
                     std::mem::size_of:: < Input0 > () == 12, "size of Input0 does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
+                    std::mem::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, b) == 4, "offset of Input0.b does not match WGSL"
+                    std::mem::offset_of!(Input0, b) == 4, "offset of Input0.b does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
+                    std::mem::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
                 );
                 #[repr(C)]
                 #[derive(
@@ -845,10 +845,10 @@ mod tests {
                     std::mem::size_of:: < Nested > () == 16, "size of Nested does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Nested, a) == 0, "offset of Nested.a does not match WGSL"
+                    std::mem::offset_of!(Nested, a) == 0, "offset of Nested.a does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Nested, b) == 12, "offset of Nested.b does not match WGSL"
+                    std::mem::offset_of!(Nested, b) == 12, "offset of Nested.b does not match WGSL"
                 );
             },
             actual
@@ -914,13 +914,13 @@ mod tests {
                     std::mem::size_of:: < Input0 > () == 12, "size of Input0 does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
+                    std::mem::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, b) == 4, "offset of Input0.b does not match WGSL"
+                    std::mem::offset_of!(Input0, b) == 4, "offset of Input0.b does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
+                    std::mem::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
                 );
                 #[repr(C)]
                 #[derive(
@@ -942,10 +942,10 @@ mod tests {
                     std::mem::size_of:: < Nested > () == 16, "size of Nested does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Nested, a) == 0, "offset of Nested.a does not match WGSL"
+                    std::mem::offset_of!(Nested, a) == 0, "offset of Nested.a does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Nested, b) == 12, "offset of Nested.b does not match WGSL"
+                    std::mem::offset_of!(Nested, b) == 12, "offset of Nested.b does not match WGSL"
                 );
             },
             actual
@@ -1107,13 +1107,13 @@ mod tests {
                     std::mem::size_of:: < Input0 > () == 64, "size of Input0 does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
+                    std::mem::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, b) == 8, "offset of Input0.b does not match WGSL"
+                    std::mem::offset_of!(Input0, b) == 8, "offset of Input0.b does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Input0, c) == 32, "offset of Input0.c does not match WGSL"
+                    std::mem::offset_of!(Input0, c) == 32, "offset of Input0.c does not match WGSL"
                 );
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -1124,7 +1124,7 @@ mod tests {
                     std::mem::size_of:: < Inner > () == 4, "size of Inner does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Inner, a) == 0, "offset of Inner.a does not match WGSL"
+                    std::mem::offset_of!(Inner, a) == 0, "offset of Inner.a does not match WGSL"
                 );
                 #[repr(C)]
                 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -1135,7 +1135,7 @@ mod tests {
                     std::mem::size_of:: < Outer > () == 4, "size of Outer does not match WGSL"
                 );
                 const _: () = assert!(
-                    memoffset::offset_of!(Outer, inner) == 0, "offset of Outer.inner does not match WGSL"
+                    std::mem::offset_of!(Outer, inner) == 0, "offset of Outer.inner does not match WGSL"
                 );
             },
             actual

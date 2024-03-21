@@ -12,14 +12,10 @@ wgsl_to_wgpu is designed to be incorporated into the compilation process using a
 - const validation of [WGSL memory layout](#memory-layout) for generated structs when using bytemuck
 
 ## Usage
-The generated code currently relies on [memoffset](https://crates.io/crates/memoffset) for calculating field offsets for vertex input structs.
-Add the following lines to the `Cargo.toml` and fill in the appropriate versions for `memoffset` and `wgsl_to_wgpu`.
+Add the following lines to the `Cargo.toml` and fill in the appropriate versions for `wgsl_to_wgpu`.
 When enabling derives for crates like bytemuck, serde, or encase, these dependencies should also be added to the `Cargo.toml` with the appropriate derive features. See the provided [example project](https://github.com/ScanMountGoat/wgsl_to_wgpu/tree/main/example) for basic usage.
 
 ```toml
-[dependencies]
-memoffset = "..."
-
 [build-dependencies]
 wgsl_to_wgpu = "..."
 ```
@@ -29,7 +25,7 @@ See the example crate for how to use the generated code. Run the example with `c
 ## Memory Layout
 WGSL structs have different memory layout requirements than Rust structs or standard layout algorithms like `repr(C)` or `repr(packed)`. Matching the expected layout to share data between the CPU and GPU can be tedious and error prone. wgsl_to_wgpu offers options to add derives for [encase](https://crates.io/crates/encase) to handle padding and alignment at runtime or [bytemuck](https://crates.io/crates/bytemuck) for enforcing padding and alignment at compile time. 
 
-When deriving bytemuck, wgsl_to_wgpu will use naga's layout calculations to add const assertions to ensure that all fields of host-shareable types (structs for uniform and storage buffers) have the correct offset, size, and alignment expected by WGSL. It's strongly recommended to use types like vec4 or mat4 instead of vec3 or mat3 with bytemuck to avoid alignment mismatches. Structs used only as vertex input structs have their layout manually specified and do not generate layout validation assertions.
+When deriving bytemuck, wgsl_to_wgpu will use naga's layout calculations to add const assertions to ensure that all fields of host-shareable types (structs for uniform and storage buffers) have the correct offset, size, and alignment expected by WGSL. It's strongly recommended to use types like vec4 or mat4 instead of vec3 or mat3 with bytemuck to avoid alignment mismatches. Structs used only as vertex input structs have their layout manually specified using `std::mem::offset_of` and do not generate layout validation assertions.
 
 ## Bind Groups
 wgpu uses resource bindings organized into bind groups to define global shader resources like textures and buffers. Shaders can have many resource bindings organized into up to 4 bind groups. wgsl_to_wgpu will generate types and functions for initializing and setting these bind groups in a more typesafe way. Adding, removing, or changing bind groups in the WGSl shader will typically result in a compile error instead of a runtime error when compiling the code without updating the code for creating or using these bind groups.
