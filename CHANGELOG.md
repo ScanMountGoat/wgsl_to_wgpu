@@ -6,7 +6,7 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## unreleased
+## 0.7.0 - 2024-04-26
 ### Changed
 * Split derives for bytemuck into `derive_bytemuck_vertex` and `derive_bytemuck_host_shareable` to `WriteOptions`.
 * Renamed `derive_encase` to `derive_encase_host_shareable` for `WriteOptions` and adjusted encase derive to not apply to vertex input structs to avoid memory layout mismatches.
