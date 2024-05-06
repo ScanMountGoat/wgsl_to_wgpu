@@ -173,6 +173,7 @@ pub fn vertex_state<'a, const N: usize>(
         module,
         entry_point: entry.entry_point,
         buffers: &entry.buffers,
+        compilation_options: Default::default(),
     }
 }
 pub fn vs_main_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
