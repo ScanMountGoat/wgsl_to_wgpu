@@ -6,6 +6,14 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## unreleased
+### Added
+* Added support for pipeline-overrideable constants.
+* Added `fragment_state` and fragment entry functions for more easily initializing `wgpu::FragmentState`.
+
+### Changed
+* Changed vertex entry functions to take `&OverrideConstants` if needed to intialize overrides.
+
 ## 0.7.0 - 2024-04-26
 ### Changed
 * Split derives for bytemuck into `derive_bytemuck_vertex` and `derive_bytemuck_host_shareable` to `WriteOptions`.

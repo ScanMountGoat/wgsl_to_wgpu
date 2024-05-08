@@ -1,6 +1,5 @@
 use std::{iter, sync::Arc};
 
-use crate::shader::ENTRY_FS_MAIN;
 use encase::UniformBuffer;
 use futures::executor::block_on;
 use wgpu::util::DeviceExt;
@@ -62,37 +61,26 @@ impl State {
         surface.configure(&device, &config);
 
         // Use the generated bindings to create the pipeline.
-        let shader = shader::create_shader_module(&device);
+        let module = shader::create_shader_module(&device);
         let render_pipeline_layout = shader::create_pipeline_layout(&device);
 
-        let constants = &shader::OverrideConstants {
+        // Set overrideable constant values or use shader defaults if None.
+        let overrides = shader::OverrideConstants {
             force_black: false,
             scale: None,
-        }
-        .constants();
+        };
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                compilation_options: wgpu::PipelineCompilationOptions {
-                    constants,
-                    ..Default::default()
-                },
-                ..shader::vertex_state(
-                    &shader,
-                    &shader::vs_main_entry(wgpu::VertexStepMode::Vertex),
-                )
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: ENTRY_FS_MAIN,
-                targets: &[Some(surface_format.into())],
-                compilation_options: wgpu::PipelineCompilationOptions {
-                    constants,
-                    ..Default::default()
-                },
-            }),
+            vertex: shader::vertex_state(
+                &module,
+                &shader::vs_main_entry(wgpu::VertexStepMode::Vertex, &overrides),
+            ),
+            fragment: Some(shader::fragment_state(
+                &module,
+                &shader::fs_main_entry([Some(surface_format.into())], &overrides),
+            )),
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),

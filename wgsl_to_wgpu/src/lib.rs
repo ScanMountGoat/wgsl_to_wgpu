@@ -35,6 +35,7 @@ extern crate wgpu_types as wgpu;
 use bindgroup::{bind_groups_module, get_bind_group_data};
 use case::CaseExt;
 use consts::pipeline_overridable_constants;
+use entry::fragment_target_count;
 use naga::ShaderStage;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
@@ -43,6 +44,7 @@ use thiserror::Error;
 
 mod bindgroup;
 mod consts;
+mod entry;
 mod structs;
 mod wgsl;
 
@@ -207,6 +209,7 @@ fn create_shader_module_inner(
     let compute_module = compute_module(&module);
     let entry_point_constants = entry_point_constants(&module);
     let vertex_states = vertex_states(&module);
+    let fragment_states = fragment_states(&module);
 
     // Use a string literal if no include path is provided.
     let included_source = wgsl_include_path
@@ -247,23 +250,15 @@ fn create_shader_module_inner(
 
     let output = quote! {
         #(#structs)*
-
         #(#consts)*
-
         #override_constants
-
         #bind_groups_module
-
         #vertex_module
-
         #compute_module
-
         #entry_point_constants
-
         #vertex_states
-
+        #fragment_states
         #create_shader_module
-
         #create_pipeline_layout
     };
     Ok(pretty_print(&output))
@@ -345,6 +340,7 @@ fn vertex_struct_methods(module: &naga::Module) -> TokenStream {
     quote!(#(#structs)*)
 }
 
+// TODO: Create an entry.rs module
 fn entry_point_constants(module: &naga::Module) -> TokenStream {
     let entry_points: Vec<TokenStream> = module
         .entry_points
@@ -390,15 +386,36 @@ fn vertex_states(module: &naga::Module) -> TokenStream {
                     &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
                     Span::call_site(),
                 );
+
                 let n = vertex_inputs.len();
                 let n = Literal::usize_unsuffixed(n);
+
+                let overrides = if !module.overrides.is_empty() {
+                    Some(quote!(overrides: &OverrideConstants))
+                } else {
+                    None
+                };
+
+                let constants = if !module.overrides.is_empty() {
+                    quote!(overrides.constants())
+                } else {
+                    quote!(Default::default())
+                };
+
+                let params = if step_mode_params.is_empty() {
+                    quote!(#overrides)
+                } else {
+                    quote!(#(#step_mode_params),*, #overrides)
+                };
+
                 Some(quote! {
-                    pub fn #fn_name(#(#step_mode_params),*) -> VertexEntry<#n> {
+                    pub fn #fn_name(#params) -> VertexEntry<#n> {
                         VertexEntry {
                             entry_point: #const_name,
                             buffers: [
                                 #(#layout_expressions),*
-                            ]
+                            ],
+                            constants: #constants
                         }
                     }
                 })
@@ -414,8 +431,9 @@ fn vertex_states(module: &naga::Module) -> TokenStream {
         quote! {
             #[derive(Debug)]
             pub struct VertexEntry<const N: usize> {
-                entry_point: &'static str,
-                buffers: [wgpu::VertexBufferLayout<'static>; N]
+                pub entry_point: &'static str,
+                pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+                pub constants: std::collections::HashMap<String, f64>,
             }
 
             pub fn vertex_state<'a, const N: usize>(
@@ -426,7 +444,10 @@ fn vertex_states(module: &naga::Module) -> TokenStream {
                     module,
                     entry_point: entry.entry_point,
                     buffers: &entry.buffers,
-                    compilation_options: Default::default(),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: &entry.constants,
+                        ..Default::default()
+                    },
                 }
             }
 
@@ -488,6 +509,85 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
     }).collect()
 }
 
+fn fragment_states(module: &naga::Module) -> TokenStream {
+    let entries: Vec<TokenStream> = module
+        .entry_points
+        .iter()
+        .filter_map(|entry_point| match &entry_point.stage {
+            ShaderStage::Fragment => {
+                let fn_name =
+                    Ident::new(&format!("{}_entry", &entry_point.name), Span::call_site());
+
+                let const_name = Ident::new(
+                    &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
+                    Span::call_site(),
+                );
+
+                // Use index to avoid adding prefix to literals.
+                let target_count =
+                    Index::from(fragment_target_count(module, &entry_point.function));
+
+                let overrides = if !module.overrides.is_empty() {
+                    Some(quote!(overrides: &OverrideConstants))
+                } else {
+                    None
+                };
+
+                let constants = if !module.overrides.is_empty() {
+                    quote!(overrides.constants())
+                } else {
+                    quote!(Default::default())
+                };
+
+                Some(quote! {
+                    pub fn #fn_name(
+                        targets: [Option<wgpu::ColorTargetState>; #target_count],
+                        #overrides
+                    ) -> FragmentEntry<#target_count> {
+                        FragmentEntry {
+                            entry_point: #const_name,
+                            targets,
+                            constants: #constants
+                        }
+                    }
+                })
+            }
+            _ => None,
+        })
+        .collect();
+
+    // Don't generate unused code.
+    if entries.is_empty() {
+        quote!()
+    } else {
+        quote! {
+            #[derive(Debug)]
+            pub struct FragmentEntry<const N: usize> {
+                pub entry_point: &'static str,
+                pub targets: [Option<wgpu::ColorTargetState>; N],
+                pub constants: std::collections::HashMap<String, f64>,
+            }
+
+            pub fn fragment_state<'a, const N: usize>(
+                module: &'a wgpu::ShaderModule,
+                entry: &'a FragmentEntry<N>,
+            ) -> wgpu::FragmentState<'a> {
+                wgpu::FragmentState {
+                    module,
+                    entry_point: entry.entry_point,
+                    targets: &entry.targets,
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: &entry.constants,
+                        ..Default::default()
+                    },
+                }
+            }
+
+            #(#entries)*
+        }
+    }
+}
+
 // Tokenstreams can't be compared directly using PartialEq.
 // Use pretty_print to normalize the formatting and compare strings.
 // Use a colored diff output to make differences easier to see.
@@ -516,6 +616,33 @@ mod test {
         pretty_assertions::assert_eq!(
             indoc! {r#"
                 pub const ENTRY_FS_MAIN: &str = "fs_main";
+                #[derive(Debug)]
+                pub struct FragmentEntry<const N: usize> {
+                    pub entry_point: &'static str,
+                    pub targets: [Option<wgpu::ColorTargetState>; N],
+                    pub constants: std::collections::HashMap<String, f64>,
+                }
+                pub fn fragment_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a FragmentEntry<N>,
+                ) -> wgpu::FragmentState<'a> {
+                    wgpu::FragmentState {
+                        module,
+                        entry_point: entry.entry_point,
+                        targets: &entry.targets,
+                        compilation_options: wgpu::PipelineCompilationOptions {
+                            constants: &entry.constants,
+                            ..Default::default()
+                        },
+                    }
+                }
+                pub fn fs_main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
+                    FragmentEntry {
+                        entry_point: ENTRY_FS_MAIN,
+                        targets,
+                        constants: Default::default(),
+                    }
+                }
                 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
                     let source = std::borrow::Cow::Borrowed(include_str!("shader.wgsl"));
                     device
@@ -551,6 +678,33 @@ mod test {
         pretty_assertions::assert_eq!(
             indoc! {r#"
                 pub const ENTRY_FS_MAIN: &str = "fs_main";
+                #[derive(Debug)]
+                pub struct FragmentEntry<const N: usize> {
+                    pub entry_point: &'static str,
+                    pub targets: [Option<wgpu::ColorTargetState>; N],
+                    pub constants: std::collections::HashMap<String, f64>,
+                }
+                pub fn fragment_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a FragmentEntry<N>,
+                ) -> wgpu::FragmentState<'a> {
+                    wgpu::FragmentState {
+                        module,
+                        entry_point: entry.entry_point,
+                        targets: &entry.targets,
+                        compilation_options: wgpu::PipelineCompilationOptions {
+                            constants: &entry.constants,
+                            ..Default::default()
+                        },
+                    }
+                }
+                pub fn fs_main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
+                    FragmentEntry {
+                        entry_point: ENTRY_FS_MAIN,
+                        targets,
+                        constants: Default::default(),
+                    }
+                }
                 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
                     let source = std::borrow::Cow::Borrowed("@fragment\nfn fs_main() {}\n");
                     device
@@ -987,8 +1141,9 @@ mod test {
             quote! {
                 #[derive(Debug)]
                 pub struct VertexEntry<const N: usize> {
-                    entry_point: &'static str,
-                    buffers: [wgpu::VertexBufferLayout<'static>; N],
+                    pub entry_point: &'static str,
+                    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+                    pub constants: std::collections::HashMap<String, f64>,
                 }
                 pub fn vertex_state<'a, const N: usize>(
                     module: &'a wgpu::ShaderModule,
@@ -998,13 +1153,17 @@ mod test {
                         module,
                         entry_point: entry.entry_point,
                         buffers: &entry.buffers,
-                        compilation_options: Default::default(),
+                        compilation_options: wgpu::PipelineCompilationOptions {
+                            constants: &entry.constants,
+                            ..Default::default()
+                        },
                     }
                 }
                 pub fn vs_main_entry() -> VertexEntry<0> {
                     VertexEntry {
                         entry_point: ENTRY_VS_MAIN,
                         buffers: [],
+                        constants: Default::default(),
                     }
                 }
             },
@@ -1033,8 +1192,9 @@ mod test {
             quote! {
                 #[derive(Debug)]
                 pub struct VertexEntry<const N: usize> {
-                    entry_point: &'static str,
-                    buffers: [wgpu::VertexBufferLayout<'static>; N],
+                    pub entry_point: &'static str,
+                    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+                    pub constants: std::collections::HashMap<String, f64>,
                 }
                 pub fn vertex_state<'a, const N: usize>(
                     module: &'a wgpu::ShaderModule,
@@ -1044,19 +1204,24 @@ mod test {
                         module,
                         entry_point: entry.entry_point,
                         buffers: &entry.buffers,
-                        compilation_options: Default::default(),
+                        compilation_options: wgpu::PipelineCompilationOptions {
+                            constants: &entry.constants,
+                            ..Default::default()
+                        },
                     }
                 }
                 pub fn vs_main_1_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
                     VertexEntry {
                         entry_point: ENTRY_VS_MAIN_1,
                         buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
+                        constants: Default::default()
                     }
                 }
                 pub fn vs_main_2_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
                     VertexEntry {
                         entry_point: ENTRY_VS_MAIN_2,
                         buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
+                        constants: Default::default()
                     }
                 }
             },
@@ -1067,6 +1232,7 @@ mod test {
     #[test]
     fn write_vertex_shader_entry_multiple_buffers() {
         let source = indoc! {r#"
+            override tests: bool = false;
             struct Input0 {
                 @location(0) position: vec4<f32>,
             };
@@ -1085,8 +1251,9 @@ mod test {
             quote! {
                 #[derive(Debug)]
                 pub struct VertexEntry<const N: usize> {
-                    entry_point: &'static str,
-                    buffers: [wgpu::VertexBufferLayout<'static>; N],
+                    pub entry_point: &'static str,
+                    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+                    pub constants: std::collections::HashMap<String, f64>
                 }
                 pub fn vertex_state<'a, const N: usize>(
                     module: &'a wgpu::ShaderModule,
@@ -1096,16 +1263,24 @@ mod test {
                         module,
                         entry_point: entry.entry_point,
                         buffers: &entry.buffers,
-                        compilation_options: Default::default(),
+                        compilation_options: wgpu::PipelineCompilationOptions {
+                            constants: &entry.constants,
+                            ..Default::default()
+                        },
                     }
                 }
-                pub fn vs_main_entry(input0: wgpu::VertexStepMode, input1: wgpu::VertexStepMode) -> VertexEntry<2> {
+                pub fn vs_main_entry(
+                    input0: wgpu::VertexStepMode,
+                    input1: wgpu::VertexStepMode,
+                    overrides: &OverrideConstants,
+                ) -> VertexEntry<2> {
                     VertexEntry {
                         entry_point: ENTRY_VS_MAIN,
                         buffers: [
                             Input0::vertex_buffer_layout(input0),
                             Input1::vertex_buffer_layout(input1),
                         ],
+                        constants: overrides.constants(),
                     }
                 }
             },
@@ -1128,5 +1303,130 @@ mod test {
         let actual = vertex_states(&module);
 
         assert_tokens_eq!(quote!(), actual)
+    }
+
+    #[test]
+    fn write_fragment_states_multiple_entries() {
+        let source = indoc! {r#"
+            struct Output {
+                @location(0) col0: vec4<f32>,
+                @location(1) col1: vec4<f32>,
+            };
+            @fragment
+            fn fs_multiple() -> Output {}
+
+            @fragment
+            fn fs_single() -> @location(0) vec4<f32> {}
+
+            @fragment
+            fn fs_empty() {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = fragment_states(&module);
+
+        assert_tokens_eq!(
+            quote! {
+                #[derive(Debug)]
+                pub struct FragmentEntry<const N: usize> {
+                    pub entry_point: &'static str,
+                    pub targets: [Option<wgpu::ColorTargetState>; N],
+                    pub constants: std::collections::HashMap<String, f64>,
+                }
+                pub fn fragment_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a FragmentEntry<N>,
+                ) -> wgpu::FragmentState<'a> {
+                    wgpu::FragmentState {
+                        module,
+                        entry_point: entry.entry_point,
+                        targets: &entry.targets,
+                        compilation_options: wgpu::PipelineCompilationOptions {
+                            constants: &entry.constants,
+                            ..Default::default()
+                        },
+                    }
+                }
+                pub fn fs_multiple_entry(
+                    targets: [Option<wgpu::ColorTargetState>; 2]
+                ) -> FragmentEntry<2> {
+                    FragmentEntry {
+                        entry_point: ENTRY_FS_MULTIPLE,
+                        targets,
+                        constants: Default::default(),
+                    }
+                }
+                pub fn fs_single_entry(
+                    targets: [Option<wgpu::ColorTargetState>; 1]
+                ) -> FragmentEntry<1> {
+                    FragmentEntry {
+                        entry_point: ENTRY_FS_SINGLE,
+                        targets,
+                        constants: Default::default(),
+                    }
+                }
+                pub fn fs_empty_entry(
+                    targets: [Option<wgpu::ColorTargetState>; 0]
+                ) -> FragmentEntry<0> {
+                    FragmentEntry {
+                        entry_point: ENTRY_FS_EMPTY,
+                        targets,
+                        constants: Default::default(),
+                    }
+                }
+            },
+            actual
+        )
+    }
+
+    #[test]
+    fn write_fragment_states_single_entry() {
+        let source = indoc! {r#"
+            override test: bool = true;
+
+            @fragment
+            fn fs_single() -> @location(0) vec4<f32> {}
+        "#
+        };
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = fragment_states(&module);
+
+        assert_tokens_eq!(
+            quote! {
+                #[derive(Debug)]
+                pub struct FragmentEntry<const N: usize> {
+                    pub entry_point: &'static str,
+                    pub targets: [Option<wgpu::ColorTargetState>; N],
+                    pub constants: std::collections::HashMap<String, f64>,
+                }
+                pub fn fragment_state<'a, const N: usize>(
+                    module: &'a wgpu::ShaderModule,
+                    entry: &'a FragmentEntry<N>,
+                ) -> wgpu::FragmentState<'a> {
+                    wgpu::FragmentState {
+                        module,
+                        entry_point: entry.entry_point,
+                        targets: &entry.targets,
+                        compilation_options: wgpu::PipelineCompilationOptions {
+                            constants: &entry.constants,
+                            ..Default::default()
+                        },
+                    }
+                }
+                pub fn fs_single_entry(
+                    targets: [Option<wgpu::ColorTargetState>; 1],
+                    overrides: &OverrideConstants
+                ) -> FragmentEntry<1> {
+                    FragmentEntry {
+                        entry_point: ENTRY_FS_SINGLE,
+                        targets,
+                        constants: overrides.constants(),
+                    }
+                }
+            },
+            actual
+        )
     }
 }
