@@ -10,8 +10,10 @@ wgsl_to_wgpu facilitates a shader focused workflow where edits to WGSL code are 
 - more strongly typed [bind group and bindings](#bind-groups) initialization
 - shader module initialization
 - Rust structs for vertex, storage, and uniform buffers
+- Rust constants for shader constants and pipeline parameters like workgroup size
 - optional derives for encase, bytemuck, and serde
-- const validation of [WGSL memory layout](#memory-layout) for generated structs when using bytemuck
+- const validation of the [WGSL memory layout](#memory-layout) for generated structs when using bytemuck
+- pipeline-overrideable constants
 
 ## Usage
 Add the following lines to the `Cargo.toml` and fill in the appropriate versions for `wgsl_to_wgpu`.
