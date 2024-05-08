@@ -34,6 +34,7 @@ extern crate wgpu_types as wgpu;
 
 use bindgroup::{bind_groups_module, get_bind_group_data};
 use case::CaseExt;
+use consts::pipeline_overridable_constants;
 use naga::ShaderStage;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
@@ -242,10 +243,14 @@ fn create_shader_module_inner(
         }
     };
 
+    let override_constants = pipeline_overridable_constants(&module);
+
     let output = quote! {
         #(#structs)*
 
         #(#consts)*
+
+        #override_constants
 
         #bind_groups_module
 

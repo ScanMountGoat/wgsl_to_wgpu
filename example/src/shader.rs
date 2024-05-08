@@ -10,6 +10,21 @@ pub struct VertexInput {
 pub struct Uniforms {
     pub color_rgb: glam::Vec3,
 }
+pub struct OverrideConstants {
+    pub force_black: bool,
+    pub scale: Option<f32>,
+}
+impl OverrideConstants {
+    pub fn constants(&self) -> std::collections::HashMap<String, f64> {
+        let mut entries = std::collections::HashMap::from([
+            ("force_black".to_owned(), if self.force_black { 1.0 } else { 0.0 }),
+        ]);
+        if let Some(value) = self.scale {
+            entries.insert("scale".to_owned(), value as f64);
+        }
+        entries
+    }
+}
 pub mod bind_groups {
     #[derive(Debug)]
     pub struct BindGroup0(wgpu::BindGroup);

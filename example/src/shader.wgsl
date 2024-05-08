@@ -28,8 +28,15 @@ struct Uniforms {
 @group(1) @binding(0)
 var<uniform> uniforms: Uniforms;
 
+override force_black: bool;
+override scale: f32 = 1.0;
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let color = textureSample(color_texture, color_sampler, in.tex_coords).rgb;
-    return vec4(color * uniforms.color_rgb.rgb, 1.0);
+    if force_black {
+        return vec4(0.0);
+    } else {
+        return vec4(color * uniforms.color_rgb.rgb * scale, 1.0);
+    }
 }
