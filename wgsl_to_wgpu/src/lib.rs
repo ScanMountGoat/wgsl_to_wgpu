@@ -1,5 +1,5 @@
 //! # wgsl_to_wgpu
-//! wgsl_to_wgpu is an experimental library for generating typesafe Rust bindings from WGSL shaders to [wgpu](https://github.com/gfx-rs/wgpu).
+//! wgsl_to_wgpu is a library for generating typesafe Rust bindings from WGSL shaders to [wgpu](https://github.com/gfx-rs/wgpu).
 //!
 //! ## Getting Started
 //! The [create_shader_module] function is intended for use in build scripts.
