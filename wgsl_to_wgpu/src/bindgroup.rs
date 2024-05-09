@@ -202,10 +202,18 @@ fn bind_group_layout_entry(
             };
 
             match class {
-                naga::ImageClass::Sampled { kind: _, multi } => {
-                    // TODO: Don't assume all textures are filterable.
+                naga::ImageClass::Sampled { kind, multi } => {
+                    let sample_type = match kind {
+                        naga::ScalarKind::Sint => quote!(wgpu::TextureSampleType::Sint),
+                        naga::ScalarKind::Uint => quote!(wgpu::TextureSampleType::Uint),
+                        naga::ScalarKind::Float => {
+                            // TODO: Don't assume all textures are filterable.
+                            quote!(wgpu::TextureSampleType::Float { filterable: true })
+                        }
+                        _ => todo!(),
+                    };
                     quote!(wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        sample_type: #sample_type,
                         view_dimension: #view_dim,
                         multisampled: #multi,
                     })
@@ -628,24 +636,29 @@ mod tests {
             struct Transforms {};
 
             @group(0) @binding(0)
-            var color_texture: texture_2d<f32>;
+            var color_texture1: texture_2d<u32>;
             @group(0) @binding(1)
-            var color_sampler: sampler;
+            var color_texture2: texture_2d<i32>;
             @group(0) @binding(2)
-            var depth_texture: texture_depth_2d;
+            var color_texture3: texture_2d<f32>;
             @group(0) @binding(3)
-            var comparison_sampler: sampler_comparison;
+            var depth_texture: texture_depth_2d;
 
             @group(0) @binding(4)
-            var storage_tex_read: texture_storage_2d<r32float, read>;
+            var color_sampler: sampler;
             @group(0) @binding(5)
-            var storage_tex_write: texture_storage_2d<rg32sint, write>;
+            var comparison_sampler: sampler_comparison;
+
             @group(0) @binding(6)
+            var storage_tex_read: texture_storage_2d<r32float, read>;
+            @group(0) @binding(7)
+            var storage_tex_write: texture_storage_2d<rg32sint, write>;
+            @group(0) @binding(8)
             var storage_tex_read_write: texture_storage_2d<rgba8uint, read_write>;
 
-            @group(0) @binding(7)
+            @group(0) @binding(9)
             var color_texture_msaa: texture_multisampled_2d<f32>;
-            @group(0) @binding(8)
+            @group(0) @binding(10)
             var depth_texture_msaa: texture_depth_multisampled_2d;
 
             @group(1) @binding(0) var<uniform> transforms: Transforms;
@@ -670,9 +683,11 @@ mod tests {
                     pub struct BindGroup0(wgpu::BindGroup);
                     #[derive(Debug)]
                     pub struct BindGroupLayout0<'a> {
-                        pub color_texture: &'a wgpu::TextureView,
-                        pub color_sampler: &'a wgpu::Sampler,
+                        pub color_texture1: &'a wgpu::TextureView,
+                        pub color_texture2: &'a wgpu::TextureView,
+                        pub color_texture3: &'a wgpu::TextureView,
                         pub depth_texture: &'a wgpu::TextureView,
+                        pub color_sampler: &'a wgpu::Sampler,
                         pub comparison_sampler: &'a wgpu::Sampler,
                         pub storage_tex_read: &'a wgpu::TextureView,
                         pub storage_tex_write: &'a wgpu::TextureView,
@@ -687,6 +702,26 @@ mod tests {
                                 binding: 0,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Uint,
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    multisampled: false,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Sint,
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    multisampled: false,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 2,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Texture {
                                     sample_type: wgpu::TextureSampleType::Float {
                                         filterable: true,
                                     },
@@ -696,13 +731,7 @@ mod tests {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 1,
-                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                                count: None,
-                            },
-                            wgpu::BindGroupLayoutEntry {
-                                binding: 2,
+                                binding: 3,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::Texture {
                                     sample_type: wgpu::TextureSampleType::Depth,
@@ -712,13 +741,19 @@ mod tests {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 3,
+                                binding: 4,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 5,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 4,
+                                binding: 6,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::StorageTexture {
                                     access: wgpu::StorageTextureAccess::ReadOnly,
@@ -728,7 +763,7 @@ mod tests {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 5,
+                                binding: 7,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::StorageTexture {
                                     access: wgpu::StorageTextureAccess::WriteOnly,
@@ -738,7 +773,7 @@ mod tests {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 6,
+                                binding: 8,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::StorageTexture {
                                     access: wgpu::StorageTextureAccess::ReadWrite,
@@ -748,7 +783,7 @@ mod tests {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 7,
+                                binding: 9,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::Texture {
                                     sample_type: wgpu::TextureSampleType::Float {
@@ -760,7 +795,7 @@ mod tests {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 8,
+                                binding: 10,
                                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                 ty: wgpu::BindingType::Texture {
                                     sample_type: wgpu::TextureSampleType::Depth,
@@ -785,53 +820,65 @@ mod tests {
                                             wgpu::BindGroupEntry {
                                                 binding: 0,
                                                 resource: wgpu::BindingResource::TextureView(
-                                                    bindings.color_texture,
+                                                    bindings.color_texture1,
                                                 ),
                                             },
                                             wgpu::BindGroupEntry {
                                                 binding: 1,
-                                                resource: wgpu::BindingResource::Sampler(
-                                                    bindings.color_sampler,
+                                                resource: wgpu::BindingResource::TextureView(
+                                                    bindings.color_texture2,
                                                 ),
                                             },
                                             wgpu::BindGroupEntry {
                                                 binding: 2,
                                                 resource: wgpu::BindingResource::TextureView(
-                                                    bindings.depth_texture,
+                                                    bindings.color_texture3,
                                                 ),
                                             },
                                             wgpu::BindGroupEntry {
                                                 binding: 3,
+                                                resource: wgpu::BindingResource::TextureView(
+                                                    bindings.depth_texture,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 4,
+                                                resource: wgpu::BindingResource::Sampler(
+                                                    bindings.color_sampler,
+                                                ),
+                                            },
+                                            wgpu::BindGroupEntry {
+                                                binding: 5,
                                                 resource: wgpu::BindingResource::Sampler(
                                                     bindings.comparison_sampler,
                                                 ),
                                             },
                                             wgpu::BindGroupEntry {
-                                                binding: 4,
+                                                binding: 6,
                                                 resource: wgpu::BindingResource::TextureView(
                                                     bindings.storage_tex_read,
                                                 ),
                                             },
                                             wgpu::BindGroupEntry {
-                                                binding: 5,
+                                                binding: 7,
                                                 resource: wgpu::BindingResource::TextureView(
                                                     bindings.storage_tex_write,
                                                 ),
                                             },
                                             wgpu::BindGroupEntry {
-                                                binding: 6,
+                                                binding: 8,
                                                 resource: wgpu::BindingResource::TextureView(
                                                     bindings.storage_tex_read_write,
                                                 ),
                                             },
                                             wgpu::BindGroupEntry {
-                                                binding: 7,
+                                                binding: 9,
                                                 resource: wgpu::BindingResource::TextureView(
                                                     bindings.color_texture_msaa,
                                                 ),
                                             },
                                             wgpu::BindGroupEntry {
-                                                binding: 8,
+                                                binding: 10,
                                                 resource: wgpu::BindingResource::TextureView(
                                                     bindings.depth_texture_msaa,
                                                 ),

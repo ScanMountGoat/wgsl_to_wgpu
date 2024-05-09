@@ -92,7 +92,6 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             members: _,
             span: _,
         } => {
-            // TODO: Support structs?
             let name = Ident::new(ty.name.as_ref().unwrap(), Span::call_site());
             quote!(#name)
         }

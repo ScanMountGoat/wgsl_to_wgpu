@@ -116,7 +116,6 @@ pub fn pipeline_overridable_constants(module: &naga::Module) -> TokenStream {
                 #(#fields),*
             }
 
-            // TODO: Only start with the required ones.
             impl OverrideConstants {
                 pub fn constants(&self) -> std::collections::HashMap<String, f64> {
                     #init_entries
