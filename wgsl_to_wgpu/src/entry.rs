@@ -9,14 +9,22 @@ use crate::wgsl::get_vertex_input_structs;
 
 pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     match &f.result {
-        Some(r) => match r.binding {
-            Some(_) => 1,
+        Some(r) => match &r.binding {
+            Some(b) => {
+                // Builtins don't have render targets.
+                if matches!(b, naga::Binding::Location { .. }) {
+                    1
+                } else {
+                    0
+                }
+            }
             None => {
                 // Fragment functions should return a single variable or a struct.
                 match &module.types[r.ty].inner {
-                    naga::TypeInner::Struct { members, .. } => {
-                        members.iter().filter(|m| m.binding.is_some()).count()
-                    }
+                    naga::TypeInner::Struct { members, .. } => members
+                        .iter()
+                        .filter(|m| matches!(m.binding, Some(naga::Binding::Location { .. })))
+                        .count(),
                     _ => 0,
                 }
             }
@@ -499,6 +507,7 @@ mod test {
         let source = indoc! {r#"
             struct Output {
                 @location(0) col0: vec4<f32>,
+                @builtin(frag_depth) depth: f32,
                 @location(1) col1: vec4<f32>,
             };
             @fragment
@@ -506,6 +515,9 @@ mod test {
 
             @fragment
             fn fs_single() -> @location(0) vec4<f32> {}
+
+            @fragment
+            fn fs_single_builtin() -> @builtin(frag_depth) f32 {}
 
             @fragment
             fn fs_empty() {}
@@ -551,6 +563,15 @@ mod test {
                 ) -> FragmentEntry<1> {
                     FragmentEntry {
                         entry_point: ENTRY_FS_SINGLE,
+                        targets,
+                        constants: Default::default(),
+                    }
+                }
+                pub fn fs_single_builtin_entry(
+                    targets: [Option<wgpu::ColorTargetState>; 0]
+                ) -> FragmentEntry<0> {
+                    FragmentEntry {
+                        entry_point: ENTRY_FS_SINGLE_BUILTIN,
                         targets,
                         constants: Default::default(),
                     }
