@@ -276,7 +276,7 @@ fn push_constant_range(module: &naga::Module) -> Option<TokenStream> {
 
     // Use a single push constant range for all shader stages.
     // This allows easily setting push constants in a single call with offset 0.
-    let push_constant_range = push_constant_size.map(|size| {
+    push_constant_size.map(|size| {
         let size = Index::from(size as usize);
         quote! {
             wgpu::PushConstantRange {
@@ -284,8 +284,7 @@ fn push_constant_range(module: &naga::Module) -> Option<TokenStream> {
                 range: 0..#size
             }
         }
-    });
-    push_constant_range
+    })
 }
 
 fn pretty_print(tokens: &TokenStream) -> String {
