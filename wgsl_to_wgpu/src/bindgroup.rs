@@ -173,11 +173,11 @@ fn bind_group_layout_entry(
     };
 
     let binding_index = Index::from(binding.binding_index as usize);
+    let buffer_binding_type = buffer_binding_type(binding.address_space);
+
     // TODO: Support more types.
     let binding_type = match binding.binding_type.inner {
         naga::TypeInner::Struct { .. } => {
-            let buffer_binding_type = buffer_binding_type(binding.address_space);
-
             quote!(wgpu::BindingType::Buffer {
                 ty: #buffer_binding_type,
                 has_dynamic_offset: false,
@@ -185,8 +185,6 @@ fn bind_group_layout_entry(
             })
         }
         naga::TypeInner::Array { .. } => {
-            let buffer_binding_type = buffer_binding_type(binding.address_space);
-
             quote!(wgpu::BindingType::Buffer {
                 ty: #buffer_binding_type,
                 has_dynamic_offset: false,
