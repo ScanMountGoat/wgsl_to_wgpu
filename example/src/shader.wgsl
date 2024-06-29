@@ -28,6 +28,12 @@ struct Uniforms {
 @group(1) @binding(0)
 var<uniform> uniforms: Uniforms;
 
+struct PushConstants {
+    color_matrix: mat4x4<f32>
+}
+
+var<push_constant> constants: PushConstants;
+
 override force_black: bool;
 override scale: f32 = 1.0;
 
@@ -37,6 +43,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if force_black {
         return vec4(0.0);
     } else {
-        return vec4(color * uniforms.color_rgb.rgb * scale, 1.0);
+        return constants.color_matrix * vec4(color * uniforms.color_rgb.rgb * scale, 1.0);
     }
 }

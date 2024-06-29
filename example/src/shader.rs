@@ -10,6 +10,11 @@ pub struct VertexInput {
 pub struct Uniforms {
     pub color_rgb: glam::Vec3,
 }
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq, encase::ShaderType)]
+pub struct PushConstants {
+    pub color_matrix: glam::Mat4,
+}
 pub struct OverrideConstants {
     pub force_black: bool,
     pub scale: Option<f32>,
@@ -252,7 +257,12 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
                     &bind_groups::BindGroup0::get_bind_group_layout(device),
                     &bind_groups::BindGroup1::get_bind_group_layout(device),
                 ],
-                push_constant_ranges: &[],
+                push_constant_ranges: &[
+                    wgpu::PushConstantRange {
+                        stages: wgpu::ShaderStages::all(),
+                        range: 0..64,
+                    },
+                ],
             },
         )
 }

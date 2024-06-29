@@ -232,6 +232,8 @@ fn create_shader_module_inner(
         })
         .collect();
 
+    let push_constant_range = push_constant_range(&module);
+
     let create_pipeline_layout = quote! {
         pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -239,7 +241,7 @@ fn create_shader_module_inner(
                 bind_group_layouts: &[
                     #(&#bind_group_layouts),*
                 ],
-                push_constant_ranges: &[],
+                push_constant_ranges: &[#push_constant_range],
             })
         }
     };
@@ -260,6 +262,30 @@ fn create_shader_module_inner(
         #create_pipeline_layout
     };
     Ok(pretty_print(&output))
+}
+
+fn push_constant_range(module: &naga::Module) -> Option<TokenStream> {
+    // Assume only one variable is used with var<push_constant> in WGSL.
+    let push_constant_size = module.global_variables.iter().find_map(|g| {
+        if g.1.space == naga::AddressSpace::PushConstant {
+            Some(module.types[g.1.ty].inner.size(module.to_ctx()))
+        } else {
+            None
+        }
+    });
+
+    // Use a single push constant range for all shader stages.
+    // This allows easily setting push constants in a single call with offset 0.
+    let push_constant_range = push_constant_size.map(|size| {
+        let size = Index::from(size as usize);
+        quote! {
+            wgpu::PushConstantRange {
+                stages: wgpu::ShaderStages::all(),
+                range: 0..#size
+            }
+        }
+    });
+    push_constant_range
 }
 
 fn pretty_print(tokens: &TokenStream) -> String {
@@ -352,6 +378,8 @@ mod test {
     #[test]
     fn create_shader_module_include_source() {
         let source = indoc! {r#"
+            var<push_constant> consts: vec4<f32>;
+
             @fragment
             fn fs_main() {}
         "#};
@@ -402,7 +430,12 @@ mod test {
                             &wgpu::PipelineLayoutDescriptor {
                                 label: None,
                                 bind_group_layouts: &[],
-                                push_constant_ranges: &[],
+                                push_constant_ranges: &[
+                                    wgpu::PushConstantRange {
+                                        stages: wgpu::ShaderStages::all(),
+                                        range: 0..16,
+                                    },
+                                ],
                             },
                         )
                 }

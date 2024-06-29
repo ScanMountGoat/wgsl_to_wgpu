@@ -40,12 +40,18 @@ impl State {
             .await
             .unwrap();
 
+        // Push constants need to be enabled and have a requested max size.
+        // 128 bytes is a reasonable limit to assume for desktop APIs.
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    required_features: wgpu::Features::TEXTURE_COMPRESSION_BC,
-                    required_limits: wgpu::Limits::default(),
+                    required_features: wgpu::Features::TEXTURE_COMPRESSION_BC
+                        | wgpu::Features::PUSH_CONSTANTS,
+                    required_limits: wgpu::Limits {
+                        max_push_constant_size: 128,
+                        ..Default::default()
+                    },
                 },
                 None,
             )
@@ -234,6 +240,19 @@ impl State {
         });
 
         render_pass.set_pipeline(&self.pipeline);
+
+        // Push constant data also needs to follow alignment rules.
+        let mut push_constant_bytes = UniformBuffer::new(Vec::new());
+        push_constant_bytes
+            .write(&shader::PushConstants {
+                color_matrix: glam::Mat4::IDENTITY,
+            })
+            .unwrap();
+        render_pass.set_push_constants(
+            wgpu::ShaderStages::all(),
+            0,
+            &push_constant_bytes.into_inner(),
+        );
 
         // Use this function to ensure all bind groups are set.
         crate::shader::set_bind_groups(&mut render_pass, &self.bind_group0, &self.bind_group1);
