@@ -10,8 +10,8 @@ readme = "../README.md"
 edition = "2021"
 
 [dependencies]
-naga = { version = "0.20.0", features = ["wgsl-in"] }
-wgpu-types = "0.20.0"
+naga = { version = "22.0.0", features = ["wgsl-in"] }
+wgpu-types = "22.0.0"
 syn = "2.0"
 quote = "1.0"
 proc-macro2 = "1.0"
@@ -20,5 +20,5 @@ thiserror = "1.0"
 case = "1.0"
 
 [dev-dependencies]
-indoc = "1.0"
+indoc = "2.0"
 pretty_assertions = "1.4"

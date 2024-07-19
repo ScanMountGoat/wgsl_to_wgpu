@@ -52,6 +52,7 @@ impl State {
                         max_push_constant_size: 128,
                         ..Default::default()
                     },
+                    memory_hints: Default::default(),
                 },
                 None,
             )
@@ -91,6 +92,7 @@ impl State {
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
+            cache: Default::default()
         });
 
         // Create a gradient texture.

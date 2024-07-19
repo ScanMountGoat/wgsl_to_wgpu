@@ -6,6 +6,10 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+### Fixed
+* Update dependencies for wgpu 22.0.0.
+
 ## 0.8.1 - 2024-06-29
 ### Added
 * Added support for a single push constant range used by all shader stages.

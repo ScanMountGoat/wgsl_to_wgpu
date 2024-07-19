@@ -343,6 +343,7 @@ fn create_compute_pipeline(e: &naga::EntryPoint) -> TokenStream {
                 module: &module,
                 entry_point: #entry_point,
                 compilation_options: Default::default(),
+                cache: Default::default(),
             })
         }
     }
@@ -848,6 +849,7 @@ mod test {
                                     module: &module,
                                     entry_point: "main1",
                                     compilation_options: Default::default(),
+                                    cache: Default::default(),
                                 },
                             )
                     }
@@ -863,6 +865,7 @@ mod test {
                                     module: &module,
                                     entry_point: "main2",
                                     compilation_options: Default::default(),
+                                    cache: Default::default(),
                                 },
                             )
                     }
