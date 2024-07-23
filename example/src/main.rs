@@ -92,7 +92,7 @@ impl State {
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
-            cache: Default::default()
+            cache: Default::default(),
         });
 
         // Create a gradient texture.
@@ -251,7 +251,7 @@ impl State {
             })
             .unwrap();
         render_pass.set_push_constants(
-            wgpu::ShaderStages::all(),
+            wgpu::ShaderStages::VERTEX_FRAGMENT,
             0,
             &push_constant_bytes.into_inner(),
         );

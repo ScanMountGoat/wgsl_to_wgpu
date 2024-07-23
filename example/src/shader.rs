@@ -259,7 +259,7 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
                 ],
                 push_constant_ranges: &[
                     wgpu::PushConstantRange {
-                        stages: wgpu::ShaderStages::all(),
+                        stages: wgpu::ShaderStages::VERTEX_FRAGMENT,
                         range: 0..64,
                     },
                 ],

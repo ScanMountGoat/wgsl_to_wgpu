@@ -1,4 +1,6 @@
-use crate::{indexed_name_to_ident, wgsl::buffer_binding_type, CreateModuleError};
+use crate::{
+    indexed_name_to_ident, quote_shader_stages, wgsl::buffer_binding_type, CreateModuleError,
+};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
@@ -164,13 +166,7 @@ fn bind_group_layout_entry(
     // TODO: Assume storage is only used for compute?
     // TODO: Support just vertex or fragment?
     // TODO: Visible from all stages?
-    let stages = match shader_stages {
-        wgpu::ShaderStages::VERTEX_FRAGMENT => quote!(wgpu::ShaderStages::VERTEX_FRAGMENT),
-        wgpu::ShaderStages::COMPUTE => quote!(wgpu::ShaderStages::COMPUTE),
-        wgpu::ShaderStages::VERTEX => quote!(wgpu::ShaderStages::VERTEX),
-        wgpu::ShaderStages::FRAGMENT => quote!(wgpu::ShaderStages::FRAGMENT),
-        _ => todo!(),
-    };
+    let stages = quote_shader_stages(shader_stages);
 
     let binding_index = Index::from(binding.binding_index as usize);
     let buffer_binding_type = buffer_binding_type(binding.address_space);

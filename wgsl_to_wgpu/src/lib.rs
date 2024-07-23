@@ -232,7 +232,7 @@ fn create_shader_module_inner(
         })
         .collect();
 
-    let push_constant_range = push_constant_range(&module);
+    let push_constant_range = push_constant_range(&module, shader_stages);
 
     let create_pipeline_layout = quote! {
         pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
@@ -264,7 +264,10 @@ fn create_shader_module_inner(
     Ok(pretty_print(&output))
 }
 
-fn push_constant_range(module: &naga::Module) -> Option<TokenStream> {
+fn push_constant_range(
+    module: &naga::Module,
+    shader_stages: wgpu::ShaderStages,
+) -> Option<TokenStream> {
     // Assume only one variable is used with var<push_constant> in WGSL.
     let push_constant_size = module.global_variables.iter().find_map(|g| {
         if g.1.space == naga::AddressSpace::PushConstant {
@@ -274,13 +277,15 @@ fn push_constant_range(module: &naga::Module) -> Option<TokenStream> {
         }
     });
 
+    let stages = quote_shader_stages(shader_stages);
+
     // Use a single push constant range for all shader stages.
     // This allows easily setting push constants in a single call with offset 0.
     push_constant_size.map(|size| {
         let size = Index::from(size as usize);
         quote! {
             wgpu::PushConstantRange {
-                stages: wgpu::ShaderStages::all(),
+                stages: #stages,
                 range: 0..#size
             }
         }
@@ -359,6 +364,16 @@ fn workgroup_size(e: &naga::EntryPoint) -> TokenStream {
     quote!(pub const #name: [u32; 3] = [#x, #y, #z];)
 }
 
+fn quote_shader_stages(shader_stages: wgpu::ShaderStages) -> TokenStream {
+    match shader_stages {
+        wgpu::ShaderStages::VERTEX_FRAGMENT => quote!(wgpu::ShaderStages::VERTEX_FRAGMENT),
+        wgpu::ShaderStages::COMPUTE => quote!(wgpu::ShaderStages::COMPUTE),
+        wgpu::ShaderStages::VERTEX => quote!(wgpu::ShaderStages::VERTEX),
+        wgpu::ShaderStages::FRAGMENT => quote!(wgpu::ShaderStages::FRAGMENT),
+        _ => todo!(),
+    }
+}
+
 // Tokenstreams can't be compared directly using PartialEq.
 // Use pretty_print to normalize the formatting and compare strings.
 // Use a colored diff output to make differences easier to see.
@@ -432,7 +447,7 @@ mod test {
                                 bind_group_layouts: &[],
                                 push_constant_ranges: &[
                                     wgpu::PushConstantRange {
-                                        stages: wgpu::ShaderStages::all(),
+                                        stages: wgpu::ShaderStages::FRAGMENT,
                                         range: 0..16,
                                     },
                                 ],

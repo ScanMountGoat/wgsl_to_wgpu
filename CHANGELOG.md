@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Fixed
-* Update dependencies for wgpu 22.0.0.
+* Fixed an issue where pipeline constants would not work on Metal due to setting unused shader stages.
 
 ## 0.8.1 - 2024-06-29
 ### Added
