@@ -90,7 +90,7 @@ pub mod compute {
 }
 pub const ENTRY_MAIN: &str = "main";
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
-    let source = std::borrow::Cow::Borrowed(include_str!("compute.wgsl"));
+    let source = std::borrow::Cow::Borrowed(include_str!("compute_shader.wgsl"));
     device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,

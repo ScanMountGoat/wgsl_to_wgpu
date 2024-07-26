@@ -3,7 +3,7 @@ use std::fmt::Write;
 use wgsl_to_wgpu::{create_shader_module, MatrixVectorTypes, WriteOptions};
 
 fn main() {
-    for name in ["shader", "compute"] {
+    for name in ["shader", "compute_shader"] {
         println!("cargo:rerun-if-changed=src/{name}.wgsl");
         let wgsl_source = std::fs::read_to_string(format!("src/{name}.wgsl")).unwrap();
 
