@@ -196,7 +196,7 @@ impl State {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let compute_pipeline = compute_shader::compute_shader::create_main_pipeline(&device);
+        let compute_pipeline = compute_shader::compute::create_main_pipeline(&device);
 
         // Uniform and storage buffers both use the same memory layout for structs.
         // Applications that create offsets into storage buffers should use encase::StorageBuffer.
