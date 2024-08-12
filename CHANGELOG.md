@@ -6,6 +6,10 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## unreleased
+### Changed
+* Changed generated bind groups and bind group layouts to use labels with the group index like "BindGroup0" or "BindGroupLayout0".
+
 ## 0.9.0 - 2024-07-27
 ### Fixed
 * Fixed an issue where push constants would not work on Metal due to setting unused shader stages.

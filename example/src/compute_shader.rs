@@ -13,7 +13,7 @@ pub mod bind_groups {
         pub uniforms: wgpu::BufferBinding<'a>,
     }
     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-        label: None,
+        label: Some("LayoutDescriptor0"),
         entries: &[
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
@@ -45,7 +45,7 @@ pub mod bind_groups {
                                 resource: wgpu::BindingResource::Buffer(bindings.uniforms),
                             },
                         ],
-                        label: None,
+                        label: Some("BindGroup0"),
                     },
                 );
             Self(bind_group)

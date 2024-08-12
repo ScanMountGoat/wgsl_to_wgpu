@@ -149,9 +149,10 @@ fn bind_group_layout_descriptor(
         .collect();
 
     let name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
+    let label = format!("LayoutDescriptor{group_no}");
     quote! {
         const #name: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-            label: None,
+            label: Some(#label),
             entries: &[
                 #(#entries),*
             ],
@@ -313,6 +314,8 @@ fn bind_group(group_no: u32, group: &GroupData, shader_stages: wgpu::ShaderStage
 
     let layout_descriptor_name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
 
+    let label = format!("BindGroup{group_no}");
+
     let group_no = Index::from(group_no as usize);
 
     quote! {
@@ -328,7 +331,7 @@ fn bind_group(group_no: u32, group: &GroupData, shader_stages: wgpu::ShaderStage
                     entries: &[
                         #(#entries),*
                     ],
-                    label: None,
+                    label: Some(#label),
                 });
                 Self(bind_group)
             }
@@ -476,7 +479,7 @@ mod tests {
                         pub dst: wgpu::BufferBinding<'a>,
                     }
                     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                        label: None,
+                        label: Some("LayoutDescriptor0"),
                         entries: &[
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
@@ -542,7 +545,7 @@ mod tests {
                                                 resource: wgpu::BindingResource::Buffer(bindings.dst),
                                             },
                                         ],
-                                        label: None,
+                                        label: Some("BindGroup0"),
                                     },
                                 );
                             Self(bind_group)
@@ -558,7 +561,7 @@ mod tests {
                         pub transforms: wgpu::BufferBinding<'a>,
                     }
                     const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                        label: None,
+                        label: Some("LayoutDescriptor1"),
                         entries: &[
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
@@ -588,7 +591,7 @@ mod tests {
                                                 resource: wgpu::BindingResource::Buffer(bindings.transforms),
                                             },
                                         ],
-                                        label: None,
+                                        label: Some("BindGroup1"),
                                     },
                                 );
                             Self(bind_group)
@@ -690,7 +693,7 @@ mod tests {
                         pub depth_texture_msaa: &'a wgpu::TextureView,
                     }
                     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                        label: None,
+                        label: Some("LayoutDescriptor0"),
                         entries: &[
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
@@ -878,7 +881,7 @@ mod tests {
                                                 ),
                                             },
                                         ],
-                                        label: None,
+                                        label: Some("BindGroup0"),
                                     },
                                 );
                             Self(bind_group)
@@ -894,7 +897,7 @@ mod tests {
                         pub transforms: wgpu::BufferBinding<'a>,
                     }
                     const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                        label: None,
+                        label: Some("LayoutDescriptor1"),
                         entries: &[
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
@@ -924,7 +927,7 @@ mod tests {
                                                 resource: wgpu::BindingResource::Buffer(bindings.transforms),
                                             },
                                         ],
-                                        label: None,
+                                        label: Some("BindGroup1"),
                                     },
                                 );
                             Self(bind_group)
@@ -987,7 +990,7 @@ mod tests {
                         pub transforms: wgpu::BufferBinding<'a>,
                     }
                     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                        label: None,
+                        label: Some("LayoutDescriptor0"),
                         entries: &[
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
@@ -1017,7 +1020,7 @@ mod tests {
                                                 resource: wgpu::BindingResource::Buffer(bindings.transforms),
                                             },
                                         ],
-                                        label: None,
+                                        label: Some("BindGroup0"),
                                     },
                                 );
                             Self(bind_group)
@@ -1075,7 +1078,7 @@ mod tests {
                         pub transforms: wgpu::BufferBinding<'a>,
                     }
                     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-                        label: None,
+                        label: Some("LayoutDescriptor0"),
                         entries: &[
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
@@ -1105,7 +1108,7 @@ mod tests {
                                                 resource: wgpu::BindingResource::Buffer(bindings.transforms),
                                             },
                                         ],
-                                        label: None,
+                                        label: Some("BindGroup0"),
                                     },
                                 );
                             Self(bind_group)
