@@ -32,6 +32,12 @@
 
 extern crate wgpu_types as wgpu;
 
+#[cfg(test)]
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
+
 use bindgroup::{bind_groups_module, get_bind_group_data};
 use consts::pipeline_overridable_constants;
 use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
@@ -261,7 +267,10 @@ fn create_shader_module_inner(
         #create_shader_module
         #create_pipeline_layout
     };
-    Ok(pretty_print(&output))
+
+    // TODO: Should this use rustfmt?
+    let file = syn::parse_file(&output.to_string()).unwrap();
+    Ok(prettyplease::unparse(&file))
 }
 
 fn push_constant_range(
@@ -292,9 +301,31 @@ fn push_constant_range(
     })
 }
 
+#[cfg(test)]
 fn pretty_print(tokens: &TokenStream) -> String {
-    let file = syn::parse_file(&tokens.to_string()).unwrap();
-    prettyplease::unparse(&file)
+    // TODO: Why does prettyplease not work in all tests?
+    format_rust_expression(tokens.to_string())
+}
+
+#[cfg(test)]
+fn format_rust_expression(value: String) -> String {
+    if let Ok(mut proc) = Command::new("rustfmt")
+        .arg("--emit=stdout")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        let stdin = proc.stdin.as_mut().unwrap();
+        stdin.write_all(value.as_bytes()).unwrap();
+
+        if let Ok(output) = proc.wait_with_output() {
+            if output.status.success() {
+                return String::from_utf8(output.stdout).unwrap().to_owned().into();
+            }
+        }
+    }
+    value.to_string()
 }
 
 fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
@@ -399,10 +430,13 @@ mod test {
             fn fs_main() {}
         "#};
 
-        let actual = create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
+        let actual = create_shader_module(source, "shader.wgsl", WriteOptions::default())
+            .unwrap()
+            .parse()
+            .unwrap();
 
-        pretty_assertions::assert_eq!(
-            indoc! {r#"
+        assert_tokens_eq!(
+            quote! {
                 pub const ENTRY_FS_MAIN: &str = "fs_main";
                 #[derive(Debug)]
                 pub struct FragmentEntry<const N: usize> {
@@ -454,7 +488,7 @@ mod test {
                             },
                         )
                 }
-            "#},
+            },
             actual
         );
     }
@@ -466,10 +500,13 @@ mod test {
             fn fs_main() {}
         "#};
 
-        let actual = create_shader_module_embedded(source, WriteOptions::default()).unwrap();
+        let actual = create_shader_module_embedded(source, WriteOptions::default())
+            .unwrap()
+            .parse()
+            .unwrap();
 
-        pretty_assertions::assert_eq!(
-            indoc! {r#"
+        assert_tokens_eq!(
+            quote! {
                 pub const ENTRY_FS_MAIN: &str = "fs_main";
                 #[derive(Debug)]
                 pub struct FragmentEntry<const N: usize> {
@@ -516,7 +553,7 @@ mod test {
                             },
                         )
                 }
-            "#},
+            },
             actual
         );
     }

@@ -227,22 +227,22 @@ mod tests {
                         ]);
                         if let Some(value) = self.b1 {
                             entries.insert("b1".to_owned(), if value { 1.0 } else { 0.0 });
-                        }
+                        };
                         if let Some(value) = self.b2 {
                             entries.insert("b2".to_owned(), if value { 1.0 } else { 0.0 });
-                        }
+                        };
                         if let Some(value) = self.f1 {
                             entries.insert("f1".to_owned(), value as f64);
-                        }
+                        };
                         if let Some(value) = self.i1 {
                             entries.insert("i1".to_owned(), value as f64);
-                        }
+                        };
                         if let Some(value) = self.i3 {
                             entries.insert("i3".to_owned(), value as f64);
-                        }
+                        };
                         if let Some(value) = self.a {
                             entries.insert("0".to_owned(), value as f64);
-                        }
+                        };
                         if let Some(value) = self.b {
                             entries.insert("35".to_owned(), value as f64);
                         }
