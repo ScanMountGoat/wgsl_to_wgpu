@@ -12,42 +12,34 @@ pub mod bind_groups {
     pub struct BindGroupLayout0<'a> {
         pub uniforms: wgpu::BufferBinding<'a>,
     }
-    const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
-        label: None,
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage {
-                        read_only: false,
-                    },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-        ],
-    };
     impl BindGroup0 {
+        pub const LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor<'static> =
+            wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            };
         pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0)
+            device.create_bind_group_layout(&Self::LAYOUT_DESCRIPTOR)
         }
         pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout0) -> Self {
-            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR0);
-            let bind_group = device
-                .create_bind_group(
-                    &wgpu::BindGroupDescriptor {
-                        layout: &bind_group_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::Buffer(bindings.uniforms),
-                            },
-                        ],
-                        label: None,
-                    },
-                );
+            let bind_group_layout = Self::get_bind_group_layout(device);
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(bindings.uniforms),
+                }],
+                label: None,
+            });
             Self(bind_group)
         }
         pub fn set<'a>(&'a self, render_pass: &mut wgpu::ComputePass<'a>) {
@@ -75,37 +67,28 @@ pub mod compute {
     pub fn create_main_pipeline(device: &wgpu::Device) -> wgpu::ComputePipeline {
         let module = super::create_shader_module(device);
         let layout = super::create_pipeline_layout(device);
-        device
-            .create_compute_pipeline(
-                &wgpu::ComputePipelineDescriptor {
-                    label: Some("Compute Pipeline main"),
-                    layout: Some(&layout),
-                    module: &module,
-                    entry_point: "main",
-                    compilation_options: Default::default(),
-                    cache: Default::default(),
-                },
-            )
+        device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute Pipeline main"),
+            layout: Some(&layout),
+            module: &module,
+            entry_point: "main",
+            compilation_options: Default::default(),
+            cache: Default::default(),
+        })
     }
 }
 pub const ENTRY_MAIN: &str = "main";
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
     let source = std::borrow::Cow::Borrowed(include_str!("compute_shader.wgsl"));
-    device
-        .create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(source),
-        })
+    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(source),
+    })
 }
 pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
-    device
-        .create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[
-                    &bind_groups::BindGroup0::get_bind_group_layout(device),
-                ],
-                push_constant_ranges: &[],
-            },
-        )
+    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[&bind_groups::BindGroup0::get_bind_group_layout(device)],
+        push_constant_ranges: &[],
+    })
 }

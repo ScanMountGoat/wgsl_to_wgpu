@@ -301,6 +301,10 @@ fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
     Ident::new(&format!("{name}{index}"), Span::call_site())
 }
 
+fn name_to_ident(name: &str) -> Ident {
+    Ident::new(name, Span::call_site())
+}
+
 fn compute_module(module: &naga::Module) -> TokenStream {
     let entry_points: Vec<_> = module
         .entry_points
