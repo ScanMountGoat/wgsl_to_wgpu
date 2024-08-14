@@ -330,7 +330,7 @@ fn pretty_print_rustfmt(tokens: TokenStream) -> String {
 
         let output = proc.wait_with_output().unwrap();
         if output.status.success() {
-            return String::from_utf8(output.stdout).unwrap().to_owned().into();
+            return String::from_utf8(output.stdout).unwrap();
         }
     }
     value.to_string()
