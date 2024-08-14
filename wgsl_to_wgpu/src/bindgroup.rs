@@ -442,17 +442,20 @@ mod tests {
         ));
     }
 
+    fn test_bind_groups(wgsl: &str, rust: &str, stages: wgpu::ShaderStages) {
+        let module = naga::front::wgsl::parse_str(wgsl).unwrap();
+        let bind_group_data = get_bind_group_data(&module).unwrap();
+        let actual = bind_groups_module(&bind_group_data, stages);
+
+        assert_tokens_eq!(rust.parse().unwrap(), actual);
+    }
+
     #[test]
     fn bind_groups_module_compute() {
-        let source = include_str!("data/bindgroup/compute.wgsl");
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let bind_group_data = get_bind_group_data(&module).unwrap();
-        let actual = bind_groups_module(&bind_group_data, wgpu::ShaderStages::COMPUTE);
-
-        assert_tokens_eq!(
-            include_str!("data/bindgroup/compute.rs").parse().unwrap(),
-            actual
+        test_bind_groups(
+            include_str!("data/bindgroup/compute.wgsl"),
+            include_str!("data/bindgroup/compute.rs"),
+            wgpu::ShaderStages::COMPUTE,
         );
     }
 
@@ -460,18 +463,10 @@ mod tests {
     fn bind_groups_module_vertex_fragment() {
         // Test different texture and sampler types.
         // TODO: Storage textures.
-        let source = include_str!("data/bindgroup/vertex_fragment.wgsl");
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let bind_group_data = get_bind_group_data(&module).unwrap();
-        let actual = bind_groups_module(&bind_group_data, wgpu::ShaderStages::VERTEX_FRAGMENT);
-
-        // TODO: Are storage buffers valid for vertex/fragment?
-        assert_tokens_eq!(
-            include_str!("data/bindgroup/vertex_fragment.rs")
-                .parse()
-                .unwrap(),
-            actual
+        test_bind_groups(
+            include_str!("data/bindgroup/vertex_fragment.wgsl"),
+            include_str!("data/bindgroup/vertex_fragment.rs"),
+            wgpu::ShaderStages::VERTEX_FRAGMENT,
         );
     }
 
@@ -479,15 +474,10 @@ mod tests {
     fn bind_groups_module_vertex() {
         // The actual content of the structs doesn't matter.
         // We only care about the groups and bindings.
-        let source = include_str!("data/bindgroup/vertex.wgsl");
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let bind_group_data = get_bind_group_data(&module).unwrap();
-        let actual = bind_groups_module(&bind_group_data, wgpu::ShaderStages::VERTEX);
-
-        assert_tokens_eq!(
-            include_str!("data/bindgroup/vertex.rs").parse().unwrap(),
-            actual
+        test_bind_groups(
+            include_str!("data/bindgroup/vertex.wgsl"),
+            include_str!("data/bindgroup/vertex.rs"),
+            wgpu::ShaderStages::VERTEX,
         );
     }
 
@@ -495,14 +485,10 @@ mod tests {
     fn bind_groups_module_fragment() {
         // The actual content of the structs doesn't matter.
         // We only care about the groups and bindings.
-        let source = include_str!("data/bindgroup/fragment.wgsl");
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-        let bind_group_data = get_bind_group_data(&module).unwrap();
-        let actual = bind_groups_module(&bind_group_data, wgpu::ShaderStages::FRAGMENT);
-
-        assert_tokens_eq!(
-            include_str!("data/bindgroup/fragment.rs").parse().unwrap(),
-            actual
+        test_bind_groups(
+            include_str!("data/bindgroup/fragment.wgsl"),
+            include_str!("data/bindgroup/fragment.rs"),
+            wgpu::ShaderStages::FRAGMENT,
         );
     }
 }
