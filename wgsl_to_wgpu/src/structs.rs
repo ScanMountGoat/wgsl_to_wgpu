@@ -7,7 +7,7 @@ use syn::{Ident, Index};
 
 use crate::{wgsl::rust_type, WriteOptions};
 
-pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream> {
+pub fn structs(module: &naga::Module, options: WriteOptions) -> TokenStream {
     // Initialize the layout calculator provided by naga.
     let mut layouter = naga::proc::Layouter::default();
     layouter.update(module.to_ctx()).unwrap();
@@ -19,7 +19,7 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
 
     // Create matching Rust structs for WGSL structs.
     // This is a UniqueArena, so each struct will only be generated once.
-    module
+    let structs = module
         .types
         .iter()
         .filter(|(h, _)| {
@@ -51,8 +51,9 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> Vec<TokenStream>
             } else {
                 None
             }
-        })
-        .collect()
+        });
+
+    quote!(#(#structs)*)
 }
 
 fn rust_struct(
@@ -250,59 +251,42 @@ mod tests {
     use super::*;
     use crate::{assert_tokens_eq, MatrixVectorTypes, WriteOptions};
 
+    fn test_structs(wgsl: &str, rust: &str, options: WriteOptions) {
+        let module = naga::front::wgsl::parse_str(wgsl).unwrap();
+        let structs = structs(&module, options);
+        assert_tokens_eq!(rust.parse().unwrap(), structs);
+    }
+
     #[test]
     fn write_all_structs_rust() {
-        let source = include_str!("data/struct/types.wgsl");
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let structs = structs(&module, WriteOptions::default());
-        let actual = quote!(#(#structs)*);
-
-        assert_tokens_eq!(
-            include_str!("data/struct/types.rust.rs").parse().unwrap(),
-            actual
+        test_structs(
+            include_str!("data/struct/types.wgsl"),
+            include_str!("data/struct/types.rust.rs"),
+            WriteOptions::default(),
         );
     }
 
     #[test]
     fn write_all_structs_glam() {
-        let source = include_str!("data/struct/types.wgsl");
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let structs = structs(
-            &module,
+        test_structs(
+            include_str!("data/struct/types.wgsl"),
+            include_str!("data/struct/types.glam.rs"),
             WriteOptions {
                 matrix_vector_types: MatrixVectorTypes::Glam,
                 ..Default::default()
             },
         );
-        let actual = quote!(#(#structs)*);
-
-        assert_tokens_eq!(
-            include_str!("data/struct/types.glam.rs").parse().unwrap(),
-            actual
-        );
     }
 
     #[test]
     fn write_all_structs_nalgebra() {
-        let source = include_str!("data/struct/types.wgsl");
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let structs = structs(
-            &module,
+        test_structs(
+            include_str!("data/struct/types.wgsl"),
+            include_str!("data/struct/types.nalgebra.rs"),
             WriteOptions {
                 matrix_vector_types: MatrixVectorTypes::Nalgebra,
                 ..Default::default()
             },
-        );
-        let actual = quote!(#(#structs)*);
-
-        assert_tokens_eq!(
-            include_str!("data/struct/types.nalgebra.rs")
-                .parse()
-                .unwrap(),
-            actual
         );
     }
 
@@ -329,7 +313,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let structs = structs(
+        let actual = structs(
             &module,
             WriteOptions {
                 derive_bytemuck_vertex: true,
@@ -340,7 +324,6 @@ mod tests {
                 rustfmt: true,
             },
         );
-        let actual = quote!(#(#structs)*);
 
         assert_tokens_eq!(
             quote! {
@@ -401,12 +384,9 @@ mod tests {
 
     #[test]
     fn write_all_structs_serde_encase_bytemuck() {
-        let source = include_str!("data/struct/serde_encase_bytemuck.wgsl");
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let structs = structs(
-            &module,
+        test_structs(
+            include_str!("data/struct/serde_encase_bytemuck.wgsl"),
+            include_str!("data/struct/serde_encase_bytemuck.rs"),
             WriteOptions {
                 derive_bytemuck_vertex: true,
                 derive_bytemuck_host_shareable: true,
@@ -415,14 +395,6 @@ mod tests {
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
             },
-        );
-        let actual = quote!(#(#structs)*);
-
-        assert_tokens_eq!(
-            include_str!("data/struct/serde_encase_bytemuck.rs")
-                .parse()
-                .unwrap(),
-            actual
         );
     }
 
@@ -452,7 +424,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let structs = structs(
+        let actual = structs(
             &module,
             WriteOptions {
                 derive_bytemuck_vertex: false,
@@ -463,7 +435,6 @@ mod tests {
                 rustfmt: true,
             },
         );
-        let actual = quote!(#(#structs)*);
 
         assert_tokens_eq!(
             quote! {
@@ -498,7 +469,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let structs = structs(
+        let actual = structs(
             &module,
             WriteOptions {
                 derive_bytemuck_vertex: true,
@@ -509,7 +480,6 @@ mod tests {
                 rustfmt: true,
             },
         );
-        let actual = quote!(#(#structs)*);
 
         assert_tokens_eq!(
             quote! {
@@ -528,12 +498,9 @@ mod tests {
     #[test]
     fn write_all_structs_bytemuck_input_layout_validation() {
         // The struct is also used with a storage buffer and should be validated.
-        let source = include_str!("data/struct/bytemuck_input_layout_validation.wgsl");
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let structs = structs(
-            &module,
+        test_structs(
+            include_str!("data/struct/bytemuck_input_layout_validation.wgsl"),
+            include_str!("data/struct/bytemuck_input_layout_validation.rs"),
             WriteOptions {
                 derive_bytemuck_vertex: true,
                 derive_bytemuck_host_shareable: true,
@@ -542,14 +509,6 @@ mod tests {
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
             },
-        );
-        let actual = quote!(#(#structs)*);
-
-        assert_tokens_eq!(
-            include_str!("data/struct/bytemuck_input_layout_validation.rs")
-                .parse()
-                .unwrap(),
-            actual
         );
     }
 
@@ -567,14 +526,13 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let structs = structs(
+        let actual = structs(
             &module,
             WriteOptions {
                 matrix_vector_types: MatrixVectorTypes::Nalgebra,
                 ..Default::default()
             },
         );
-        let actual = quote!(#(#structs)*);
 
         assert_tokens_eq!(
             quote! {
@@ -602,14 +560,13 @@ mod tests {
         "#};
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let structs = structs(
+        let actual = structs(
             &module,
             WriteOptions {
                 derive_encase_host_shareable: true,
                 ..Default::default()
             },
         );
-        let actual = quote!(#(#structs)*);
 
         assert_tokens_eq!(
             quote! {

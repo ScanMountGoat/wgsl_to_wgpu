@@ -261,7 +261,7 @@ fn create_shader_module_inner(
     let override_constants = pipeline_overridable_constants(&module);
 
     let output = quote! {
-        #(#structs)*
+        #structs
         #(#consts)*
         #override_constants
         #bind_groups_module
