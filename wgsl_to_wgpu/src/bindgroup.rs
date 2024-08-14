@@ -1,10 +1,10 @@
 use crate::{
     indexed_name_to_ident, quote_shader_stages, wgsl::buffer_binding_type, CreateModuleError,
 };
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
-use syn::{Ident, Index};
+use syn::Ident;
 
 pub struct GroupData<'a> {
     pub bindings: Vec<GroupBinding<'a>>,
@@ -169,7 +169,7 @@ fn bind_group_layout_entry(
     // TODO: Visible from all stages?
     let stages = quote_shader_stages(shader_stages);
 
-    let binding_index = Index::from(binding.binding_index as usize);
+    let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
     let buffer_binding_type = buffer_binding_type(binding.address_space);
 
     // TODO: Support more types.
@@ -272,7 +272,7 @@ fn bind_group(group_no: u32, group: &GroupData, shader_stages: wgpu::ShaderStage
         .bindings
         .iter()
         .map(|binding| {
-            let binding_index = Index::from(binding.binding_index as usize);
+            let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
             let binding_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
             let resource_type = match binding.binding_type.inner {
                 naga::TypeInner::Struct { .. } => {
@@ -316,7 +316,7 @@ fn bind_group(group_no: u32, group: &GroupData, shader_stages: wgpu::ShaderStage
 
     let label = format!("BindGroup{group_no}");
 
-    let group_no = Index::from(group_no as usize);
+    let group_no = Literal::usize_unsuffixed(group_no as usize);
 
     quote! {
         impl #bind_group_name {

@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
 use naga::{Handle, Type};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
-use syn::{Ident, Index};
+use syn::Ident;
 
 use crate::{wgsl::rust_type, WriteOptions};
 
@@ -80,7 +80,7 @@ fn rust_struct(
             let name = Ident::new(m.name.as_ref().unwrap(), Span::call_site());
             let rust_offset = quote!(std::mem::offset_of!(#struct_name, #name));
 
-            let wgsl_offset = Index::from(m.offset as usize);
+            let wgsl_offset = Literal::usize_unsuffixed(m.offset as usize);
 
             let assert_text = format!(
                 "offset of {}.{} does not match WGSL",
@@ -96,7 +96,7 @@ fn rust_struct(
     let layout = layouter[t_handle];
 
     // TODO: Does the Rust alignment matter if it's copied to a buffer anyway?
-    let struct_size = Index::from(layout.size as usize);
+    let struct_size = Literal::usize_unsuffixed(layout.size as usize);
     let assert_size_text = format!("size of {} does not match WGSL", t.name.as_ref().unwrap());
     let assert_size = quote! {
         const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);

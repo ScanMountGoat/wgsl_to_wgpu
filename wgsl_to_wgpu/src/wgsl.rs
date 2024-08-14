@@ -1,8 +1,8 @@
 use crate::MatrixVectorTypes;
 use naga::StructMember;
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
-use syn::{Ident, Index};
+use syn::{Ident};
 
 pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
     module
@@ -81,7 +81,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             stride: _,
         } => {
             let element_type = rust_type(module, &module.types[*base], format);
-            let count = Index::from(size.get() as usize);
+            let count = Literal::usize_unsuffixed(size.get() as usize);
             quote!([#element_type; #count])
         }
         naga::TypeInner::Array {
@@ -109,8 +109,8 @@ fn rust_matrix_type(rows: naga::VectorSize, columns: naga::VectorSize, width: u8
         width,
     });
     // Use Index to generate "4" instead of "4usize".
-    let rows = Index::from(rows as usize);
-    let columns = Index::from(columns as usize);
+    let rows = Literal::usize_unsuffixed(rows as usize);
+    let columns = Literal::usize_unsuffixed(columns as usize);
     quote!([[#inner_type; #columns]; #rows])
 }
 
@@ -137,14 +137,14 @@ fn nalgebra_matrix_type(
         kind: naga::ScalarKind::Float,
         width,
     });
-    let rows = Index::from(rows as usize);
-    let columns = Index::from(columns as usize);
+    let rows = Literal::usize_unsuffixed(rows as usize);
+    let columns = Literal::usize_unsuffixed(columns as usize);
     quote!(nalgebra::SMatrix<#inner_type, #rows, #columns>)
 }
 
 fn rust_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -> TokenStream {
     let inner_type = rust_scalar_type(&naga::Scalar { kind, width });
-    let size = Index::from(size as usize);
+    let size = Literal::usize_unsuffixed(size as usize);
     quote!([#inner_type; #size])
 }
 
@@ -169,7 +169,7 @@ fn glam_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -
 
 fn nalgebra_vector_type(size: naga::VectorSize, kind: naga::ScalarKind, width: u8) -> TokenStream {
     let inner_type = rust_scalar_type(&naga::Scalar { kind, width });
-    let size = Index::from(size as usize);
+    let size = Literal::usize_unsuffixed(size as usize);
     quote!(nalgebra::SVector<#inner_type, #size>)
 }
 

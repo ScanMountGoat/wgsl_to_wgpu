@@ -40,9 +40,9 @@ use std::{
 use bindgroup::{bind_groups_module, get_bind_group_data};
 use consts::pipeline_overridable_constants;
 use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
-use syn::{Ident, Index};
+use syn::Ident;
 use thiserror::Error;
 
 mod bindgroup;
@@ -300,7 +300,7 @@ fn push_constant_range(
     // Use a single push constant range for all shader stages.
     // This allows easily setting push constants in a single call with offset 0.
     push_constant_size.map(|size| {
-        let size = Index::from(size as usize);
+        let size = Literal::usize_unsuffixed(size as usize);
         quote! {
             wgpu::PushConstantRange {
                 stages: #stages,
@@ -394,12 +394,13 @@ fn create_compute_pipeline(e: &naga::EntryPoint) -> TokenStream {
 }
 
 fn workgroup_size(e: &naga::EntryPoint) -> TokenStream {
-    // Use Index to avoid specifying the type on literals.
     let name = Ident::new(
         &format!("{}_WORKGROUP_SIZE", e.name.to_uppercase()),
         Span::call_site(),
     );
-    let [x, y, z] = e.workgroup_size.map(|s| Index::from(s as usize));
+    let [x, y, z] = e
+        .workgroup_size
+        .map(|s| Literal::usize_unsuffixed(s as usize));
     quote!(pub const #name: [u32; 3] = [#x, #y, #z];)
 }
 

@@ -3,7 +3,7 @@ use naga::ShaderStage;
 use naga::{Function, Module};
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
-use syn::{Ident, Index};
+use syn::Ident;
 
 use crate::wgsl::get_vertex_input_structs;
 
@@ -79,8 +79,7 @@ pub fn vertex_states(module: &naga::Module) -> TokenStream {
                     Span::call_site(),
                 );
 
-                let n = vertex_inputs.len();
-                let n = Literal::usize_unsuffixed(n);
+                let n = Literal::usize_unsuffixed(vertex_inputs.len());
 
                 let overrides = if !module.overrides.is_empty() {
                     Some(quote!(overrides: &OverrideConstants))
@@ -158,14 +157,13 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
     vertex_inputs.iter().map(|input|  {
         let name = Ident::new(&input.name, Span::call_site());
 
-        // Use index to avoid adding prefix to literals.
-        let count = Index::from(input.fields.len());
+        let count = Literal::usize_unsuffixed(input.fields.len());
         let attributes: Vec<_> = input
             .fields
             .iter()
             .map(|(location, m)| {
                 let field_name: TokenStream = m.name.as_ref().unwrap().parse().unwrap();
-                let location = Index::from(*location as usize);
+                let location = Literal::usize_unsuffixed(*location as usize);
                 let format = crate::wgsl::vertex_format(&module.types[m.ty]);
                 // TODO: Will the debug implementation always work with the macro?
                 let format = Ident::new(&format!("{format:?}"), Span::call_site());
@@ -220,9 +218,8 @@ pub fn fragment_states(module: &naga::Module) -> TokenStream {
                     Span::call_site(),
                 );
 
-                // Use index to avoid adding prefix to literals.
                 let target_count =
-                    Index::from(fragment_target_count(module, &entry_point.function));
+                    Literal::usize_unsuffixed(fragment_target_count(module, &entry_point.function));
 
                 let overrides = if !module.overrides.is_empty() {
                     Some(quote!(overrides: &OverrideConstants))
