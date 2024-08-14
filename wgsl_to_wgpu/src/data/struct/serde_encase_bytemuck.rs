@@ -8,7 +8,7 @@
     bytemuck::Zeroable,
     encase::ShaderType,
     serde::Serialize,
-    serde::Deserialize
+    serde::Deserialize,
 )]
 pub struct Input0 {
     pub a: u32,
@@ -16,7 +16,7 @@ pub struct Input0 {
     pub c: f32,
 }
 const _: () = assert!(
-    std::mem::size_of:: <Input0>() == 12,
+    std::mem::size_of::<Input0>() == 12,
     "size of Input0 does not match WGSL"
 );
 const _: () = assert!(
@@ -41,14 +41,14 @@ const _: () = assert!(
     bytemuck::Zeroable,
     encase::ShaderType,
     serde::Serialize,
-    serde::Deserialize
+    serde::Deserialize,
 )]
 pub struct Nested {
     pub a: Input0,
     pub b: f32,
 }
 const _: () = assert!(
-    std::mem::size_of:: <Nested>() == 16,
+    std::mem::size_of::<Nested>() == 16,
     "size of Nested does not match WGSL"
 );
 const _: () = assert!(

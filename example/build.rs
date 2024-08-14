@@ -18,6 +18,7 @@ fn main() {
                 derive_bytemuck_vertex: true,
                 derive_encase_host_shareable: true,
                 matrix_vector_types: MatrixVectorTypes::Glam,
+                rustfmt: true,
                 ..Default::default()
             },
         )

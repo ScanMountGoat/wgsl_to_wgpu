@@ -32,7 +32,6 @@
 
 extern crate wgpu_types as wgpu;
 
-#[cfg(test)]
 use std::{
     io::Write,
     process::{Command, Stdio},
@@ -98,6 +97,13 @@ pub struct WriteOptions {
 
     /// The format to use for matrix and vector types.
     pub matrix_vector_types: MatrixVectorTypes,
+
+    /// Format the generated code with the `rustfmt` formatter used for `cargo fmt`.
+    /// This invokes a separate process to run the `rustfmt` executable.
+    /// For cases where `rustfmt` is not available
+    /// or the generated code is not included in the src directory,
+    /// leave this at its default value of `false`.
+    pub rustfmt: bool,
 }
 
 /// The format to use for matrix and vector types.
@@ -268,9 +274,12 @@ fn create_shader_module_inner(
         #create_pipeline_layout
     };
 
-    // TODO: Should this use rustfmt?
-    let file = syn::parse_file(&output.to_string()).unwrap();
-    Ok(prettyplease::unparse(&file))
+    // TODO: Add a test for this.
+    if options.rustfmt {
+        Ok(pretty_print_rustfmt(output))
+    } else {
+        Ok(pretty_print(output))
+    }
 }
 
 fn push_constant_range(
@@ -301,14 +310,14 @@ fn push_constant_range(
     })
 }
 
-#[cfg(test)]
-fn pretty_print(tokens: &TokenStream) -> String {
-    // TODO: Why does prettyplease not work in all tests?
-    format_rust_expression(tokens.to_string())
+fn pretty_print(output: TokenStream) -> String {
+    let file = syn::parse_file(&output.to_string()).unwrap();
+    prettyplease::unparse(&file)
 }
 
-#[cfg(test)]
-fn format_rust_expression(value: String) -> String {
+fn pretty_print_rustfmt(tokens: TokenStream) -> String {
+    let value = tokens.to_string();
+    // TODO: Return errors?
     if let Ok(mut proc) = Command::new("rustfmt")
         .arg("--emit=stdout")
         .stdin(Stdio::piped())
@@ -319,10 +328,9 @@ fn format_rust_expression(value: String) -> String {
         let stdin = proc.stdin.as_mut().unwrap();
         stdin.write_all(value.as_bytes()).unwrap();
 
-        if let Ok(output) = proc.wait_with_output() {
-            if output.status.success() {
-                return String::from_utf8(output.stdout).unwrap().to_owned().into();
-            }
+        let output = proc.wait_with_output().unwrap();
+        if output.status.success() {
+            return String::from_utf8(output.stdout).unwrap().to_owned().into();
         }
     }
     value.to_string()
@@ -412,7 +420,10 @@ fn quote_shader_stages(shader_stages: wgpu::ShaderStages) -> TokenStream {
 #[macro_export]
 macro_rules! assert_tokens_eq {
     ($a:expr, $b:expr) => {
-        pretty_assertions::assert_eq!(crate::pretty_print(&$a), crate::pretty_print(&$b))
+        pretty_assertions::assert_eq!(
+            crate::pretty_print_rustfmt($a),
+            crate::pretty_print_rustfmt($b)
+        )
     };
 }
 
