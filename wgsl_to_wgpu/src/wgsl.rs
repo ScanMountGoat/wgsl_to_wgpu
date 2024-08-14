@@ -2,7 +2,7 @@ use crate::MatrixVectorTypes;
 use naga::StructMember;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
-use syn::{Ident};
+use syn::Ident;
 
 pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
     module
