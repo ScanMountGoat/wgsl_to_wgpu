@@ -1,7 +1,5 @@
 use pretty_assertions::assert_eq;
 
-extern crate wgpu_types as wgpu;
-
 #[test]
 fn vertex_entries() {
     // Check vertex entry points and builtin attribute handling.
@@ -15,5 +13,5 @@ fn vertex_entries() {
     )
     .unwrap();
 
-    assert_eq!(actual, include_str!("output/vertex_entries.rs"));
+    assert_eq!(include_str!("output/vertex_entries.rs"), actual);
 }

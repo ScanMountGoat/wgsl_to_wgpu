@@ -13,6 +13,67 @@ pub struct Input1 {
     pub in5: [f32; 4],
     pub in6: [u32; 4],
 }
+impl Input0 {
+    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = [
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: std::mem::offset_of!(Input0, in0) as u64,
+            shader_location: 0,
+        },
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: std::mem::offset_of!(Input0, in1) as u64,
+            shader_location: 1,
+        },
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: std::mem::offset_of!(Input0, in2) as u64,
+            shader_location: 2,
+        },
+    ];
+    pub const fn vertex_buffer_layout(
+        step_mode: wgpu::VertexStepMode,
+    ) -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Input0>() as u64,
+            step_mode,
+            attributes: &Input0::VERTEX_ATTRIBUTES,
+        }
+    }
+}
+impl Input1 {
+    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: std::mem::offset_of!(Input1, in3) as u64,
+            shader_location: 3,
+        },
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: std::mem::offset_of!(Input1, in4) as u64,
+            shader_location: 4,
+        },
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: std::mem::offset_of!(Input1, in5) as u64,
+            shader_location: 5,
+        },
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Uint32x4,
+            offset: std::mem::offset_of!(Input1, in6) as u64,
+            shader_location: 6,
+        },
+    ];
+    pub const fn vertex_buffer_layout(
+        step_mode: wgpu::VertexStepMode,
+    ) -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Input1>() as u64,
+            step_mode,
+            attributes: &Input1::VERTEX_ATTRIBUTES,
+        }
+    }
+}
 pub const ENTRY_VS_MAIN_NONE: &str = "vs_main_none";
 pub const ENTRY_VS_MAIN_SINGLE: &str = "vs_main_single";
 pub const ENTRY_VS_MAIN_MULTIPLE: &str = "vs_main_multiple";
@@ -43,17 +104,23 @@ pub fn vs_main_none_entry() -> VertexEntry<0> {
         constants: Default::default(),
     }
 }
-pub fn vs_main_single_entry() -> VertexEntry<0> {
+pub fn vs_main_single_entry(input0: wgpu::VertexStepMode) -> VertexEntry<1> {
     VertexEntry {
         entry_point: ENTRY_VS_MAIN_SINGLE,
-        buffers: [],
+        buffers: [Input0::vertex_buffer_layout(input0)],
         constants: Default::default(),
     }
 }
-pub fn vs_main_multiple_entry() -> VertexEntry<0> {
+pub fn vs_main_multiple_entry(
+    input0: wgpu::VertexStepMode,
+    input1: wgpu::VertexStepMode,
+) -> VertexEntry<2> {
     VertexEntry {
         entry_point: ENTRY_VS_MAIN_MULTIPLE,
-        buffers: [],
+        buffers: [
+            Input0::vertex_buffer_layout(input0),
+            Input1::vertex_buffer_layout(input1),
+        ],
         constants: Default::default(),
     }
 }

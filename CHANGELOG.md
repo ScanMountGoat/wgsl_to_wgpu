@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 * Changed generated bind groups and bind group layouts to use labels with the group index like "BindGroup0" or "BindGroupLayout0".
 
+### Fixed
+* Fixed an issue where vertex entry code would only be generated for the first vertex entry.
+
 ## 0.9.0 - 2024-07-27
 ### Fixed
 * Fixed an issue where push constants would not work on Metal due to setting unused shader stages.

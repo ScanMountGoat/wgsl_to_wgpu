@@ -218,6 +218,7 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
     }
 }
 
+#[derive(PartialEq, Eq)]
 pub struct VertexInput {
     pub name: String,
     pub fields: Vec<(u32, StructMember)>,
@@ -226,48 +227,56 @@ pub struct VertexInput {
 // TODO: Handle errors.
 // Collect the necessary data to generate an equivalent Rust struct.
 pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
-    // TODO: Handle multiple entries?
-    module
+    let mut structs: Vec<_> = module
         .entry_points
         .iter()
-        .find(|e| e.stage == naga::ShaderStage::Vertex)
-        .map(|vertex_entry| {
-            vertex_entry
-                .function
-                .arguments
-                .iter()
-                .filter(|a| a.binding.is_none())
-                .filter_map(|argument| {
-                    let arg_type = &module.types[argument.ty];
-                    match &arg_type.inner {
-                        naga::TypeInner::Struct { members, span: _ } => {
-                            let input = VertexInput {
-                                name: arg_type.name.as_ref().unwrap().clone(),
-                                fields: members
-                                    .iter()
-                                    .filter_map(|member| {
-                                        // Skip builtins since they have no location binding.
-                                        let location = match member.binding.as_ref().unwrap() {
-                                            naga::Binding::BuiltIn(_) => None,
-                                            naga::Binding::Location { location, .. } => {
-                                                Some(*location)
-                                            }
-                                        }?;
+        .filter(|e| e.stage == naga::ShaderStage::Vertex)
+        .flat_map(|vertex_entry| vertex_entry_structs(vertex_entry, module))
+        .collect();
 
-                                        Some((location, member.clone()))
-                                    })
-                                    .collect(),
-                            };
+    // Remove structs that are used more than once.
+    structs.sort_by_key(|s| s.name.clone());
+    structs.dedup_by_key(|s| s.name.clone());
 
-                            Some(input)
-                        }
-                        // An argument has to have a binding unless it is a structure.
-                        _ => None,
-                    }
-                })
-                .collect()
+    structs
+}
+
+pub fn vertex_entry_structs(
+    vertex_entry: &naga::EntryPoint,
+    module: &naga::Module,
+) -> Vec<VertexInput> {
+    vertex_entry
+        .function
+        .arguments
+        .iter()
+        .filter(|a| a.binding.is_none())
+        .filter_map(|argument| {
+            let arg_type = &module.types[argument.ty];
+            match &arg_type.inner {
+                naga::TypeInner::Struct { members, span: _ } => {
+                    let input = VertexInput {
+                        name: arg_type.name.as_ref().unwrap().clone(),
+                        fields: members
+                            .iter()
+                            .filter_map(|member| {
+                                // Skip builtins since they have no location binding.
+                                let location = match member.binding.as_ref().unwrap() {
+                                    naga::Binding::BuiltIn(_) => None,
+                                    naga::Binding::Location { location, .. } => Some(*location),
+                                }?;
+
+                                Some((location, member.clone()))
+                            })
+                            .collect(),
+                    };
+
+                    Some(input)
+                }
+                // An argument has to have a binding unless it is a structure.
+                _ => None,
+            }
         })
-        .unwrap_or_default()
+        .collect()
 }
 
 #[cfg(test)]
