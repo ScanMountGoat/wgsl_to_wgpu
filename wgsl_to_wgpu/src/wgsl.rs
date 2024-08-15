@@ -278,10 +278,7 @@ mod tests {
 
     #[test]
     fn shader_stages_none() {
-        let source = indoc! {r#"
-
-        "#};
-
+        let source = "";
         let module = naga::front::wgsl::parse_str(source).unwrap();
         assert_eq!(wgpu::ShaderStages::NONE, shader_stages(&module));
     }
@@ -350,50 +347,5 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
         assert_eq!(wgpu::ShaderStages::all(), shader_stages(&module));
-    }
-
-    #[test]
-    fn vertex_input_structs_two_structs() {
-        let source = indoc! {r#"
-            struct VertexInput0 {
-                @location(0) in0: vec4<f32>,
-                @location(1) in1: vec4<f32>,
-                @location(2) in2: vec4<f32>,
-            };
-            
-            struct VertexInput1 {
-                @location(3) in3: vec4<f32>,
-                @location(4) in4: vec4<f32>,
-                @builtin(vertex_index) index: u32,
-                @location(5) in5: vec4<f32>,
-                @location(6) in6: vec4<u32>,
-            };
-
-            @vertex
-            fn main(
-                in0: VertexInput0,
-                in1: VertexInput1,
-                @builtin(front_facing) in2: bool,
-                @location(7) in3: vec4<f32>,
-            ) -> @builtin(position) vec4<f32> {
-                return vec4<f32>(0.0);
-            }
-        "#};
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let vertex_inputs = get_vertex_input_structs(&module);
-        // Only structures should be included.
-        assert_eq!(2, vertex_inputs.len());
-
-        assert_eq!("VertexInput0", vertex_inputs[0].name);
-        assert_eq!(3, vertex_inputs[0].fields.len());
-        assert_eq!("in1", vertex_inputs[0].fields[1].1.name.as_ref().unwrap());
-        assert_eq!(1, vertex_inputs[0].fields[1].0);
-
-        assert_eq!("VertexInput1", vertex_inputs[1].name);
-        assert_eq!(4, vertex_inputs[1].fields.len());
-        assert_eq!("in5", vertex_inputs[1].fields[2].1.name.as_ref().unwrap());
-        assert_eq!(5, vertex_inputs[1].fields[2].0);
     }
 }

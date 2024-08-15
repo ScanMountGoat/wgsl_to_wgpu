@@ -246,10 +246,10 @@ fn struct_has_rts_array_member(members: &[naga::StructMember], module: &naga::Mo
 
 #[cfg(test)]
 mod tests {
-    use indoc::indoc;
-
     use super::*;
+
     use crate::{assert_tokens_eq, MatrixVectorTypes, WriteOptions};
+    use indoc::indoc;
 
     fn test_structs(wgsl: &str, rust: &str, options: WriteOptions) {
         let module = naga::front::wgsl::parse_str(wgsl).unwrap();
@@ -292,29 +292,9 @@ mod tests {
 
     #[test]
     fn write_all_structs_encase_bytemuck() {
-        let source = indoc! {r#"
-            struct Input0 {
-                a: u32,
-                b: i32,
-                c: f32,
-            };
-
-            struct Nested {
-                a: Input0,
-                b: f32
-            }
-
-            var<uniform> a: Input0;
-            var<storage, read> b: Nested;
-
-            @fragment
-            fn main() {}
-        "#};
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let actual = structs(
-            &module,
+        test_structs(
+            include_str!("data/struct/encase_bytemuck.wgsl"),
+            include_str!("data/struct/encase_bytemuck.rs"),
             WriteOptions {
                 derive_bytemuck_vertex: true,
                 derive_bytemuck_host_shareable: true,
@@ -323,62 +303,6 @@ mod tests {
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
             },
-        );
-
-        assert_tokens_eq!(
-            quote! {
-                #[repr(C)]
-                #[derive(
-                    Debug,
-                    Copy,
-                    Clone,
-                    PartialEq,
-                    bytemuck::Pod,
-                    bytemuck::Zeroable,
-                    encase::ShaderType
-                )]
-                pub struct Input0 {
-                    pub a: u32,
-                    pub b: i32,
-                    pub c: f32,
-                }
-                const _: () = assert!(
-                    std::mem::size_of:: < Input0 > () == 12, "size of Input0 does not match WGSL"
-                );
-                const _: () = assert!(
-                    std::mem::offset_of!(Input0, a) == 0, "offset of Input0.a does not match WGSL"
-                );
-                const _: () = assert!(
-                    std::mem::offset_of!(Input0, b) == 4, "offset of Input0.b does not match WGSL"
-                );
-                const _: () = assert!(
-                    std::mem::offset_of!(Input0, c) == 8, "offset of Input0.c does not match WGSL"
-                );
-                #[repr(C)]
-                #[derive(
-                    Debug,
-                    Copy,
-                    Clone,
-                    PartialEq,
-                    bytemuck::Pod,
-                    bytemuck::Zeroable,
-                    encase::ShaderType
-                )]
-                pub struct Nested {
-                    pub a: Input0,
-                    pub b: f32,
-                }
-                const _: () = assert!(
-                    std::mem::size_of:: < Nested > () == 16, "size of Nested does not match WGSL"
-                );
-                const _: () = assert!(
-                    std::mem::offset_of!(Nested, a) == 0, "offset of Nested.a does not match WGSL"
-                );
-                const _: () = assert!(
-                    std::mem::offset_of!(Nested, b) == 12, "offset of Nested.b does not match WGSL"
-                );
-            },
-            actual
         );
     }
 
