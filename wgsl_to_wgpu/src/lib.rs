@@ -403,13 +403,24 @@ fn workgroup_size(e: &naga::EntryPoint) -> TokenStream {
     quote!(pub const #name: [u32; 3] = [#x, #y, #z];)
 }
 
-fn quote_shader_stages(shader_stages: wgpu::ShaderStages) -> TokenStream {
-    match shader_stages {
-        wgpu::ShaderStages::VERTEX_FRAGMENT => quote!(wgpu::ShaderStages::VERTEX_FRAGMENT),
-        wgpu::ShaderStages::COMPUTE => quote!(wgpu::ShaderStages::COMPUTE),
-        wgpu::ShaderStages::VERTEX => quote!(wgpu::ShaderStages::VERTEX),
-        wgpu::ShaderStages::FRAGMENT => quote!(wgpu::ShaderStages::FRAGMENT),
-        _ => todo!(),
+fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
+    if stages == wgpu::ShaderStages::all() {
+        quote!(wgpu::ShaderStages::all())
+    } else if stages == wgpu::ShaderStages::VERTEX_FRAGMENT {
+        quote!(wgpu::ShaderStages::VERTEX_FRAGMENT)
+    } else {
+        let mut components = Vec::new();
+        if stages.contains(wgpu::ShaderStages::VERTEX) {
+            components.push(quote!(wgpu::ShaderStages::VERTEX));
+        }
+        if stages.contains(wgpu::ShaderStages::FRAGMENT) {
+            components.push(quote!(wgpu::ShaderStages::FRAGMENT));
+        }
+        if stages.contains(wgpu::ShaderStages::COMPUTE) {
+            components.push(quote!(wgpu::ShaderStages::COMPUTE));
+        }
+
+        quote!(#(#components) | *)
     }
 }
 
@@ -892,6 +903,38 @@ mod test {
                 }
             },
             actual
+        );
+    }
+
+    #[test]
+    fn quote_all_shader_stages() {
+        assert_tokens_eq!(
+            quote!(wgpu::ShaderStages::VERTEX),
+            quote_shader_stages(wgpu::ShaderStages::VERTEX)
+        );
+        assert_tokens_eq!(
+            quote!(wgpu::ShaderStages::FRAGMENT),
+            quote_shader_stages(wgpu::ShaderStages::FRAGMENT)
+        );
+        assert_tokens_eq!(
+            quote!(wgpu::ShaderStages::COMPUTE),
+            quote_shader_stages(wgpu::ShaderStages::COMPUTE)
+        );
+        assert_tokens_eq!(
+            quote!(wgpu::ShaderStages::VERTEX_FRAGMENT),
+            quote_shader_stages(wgpu::ShaderStages::VERTEX_FRAGMENT)
+        );
+        assert_tokens_eq!(
+            quote!(wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::COMPUTE),
+            quote_shader_stages(wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::COMPUTE)
+        );
+        assert_tokens_eq!(
+            quote!(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE),
+            quote_shader_stages(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE)
+        );
+        assert_tokens_eq!(
+            quote!(wgpu::ShaderStages::all()),
+            quote_shader_stages(wgpu::ShaderStages::all())
         );
     }
 }

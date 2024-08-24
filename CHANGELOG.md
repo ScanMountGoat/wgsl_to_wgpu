@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 * Fixed an issue where vertex entry code would only be generated for the first vertex entry.
+* Fixed an issue where `wgpu::ShaderStages` stages would not be correctly generated for modules with both compute and vertex or fragment entries.
 
 ## 0.9.0 - 2024-07-27
 ### Fixed
