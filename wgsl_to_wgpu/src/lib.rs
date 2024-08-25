@@ -420,7 +420,11 @@ fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
             components.push(quote!(wgpu::ShaderStages::COMPUTE));
         }
 
-        quote!(#(#components) | *)
+        if let Some((first, remaining)) = components.split_first() {
+            quote!(#first #(.union(#remaining))*)
+        } else {
+            quote!(wgpu::ShaderStages::NONE)
+        }
     }
 }
 
@@ -909,6 +913,10 @@ mod test {
     #[test]
     fn quote_all_shader_stages() {
         assert_tokens_eq!(
+            quote!(wgpu::ShaderStages::NONE),
+            quote_shader_stages(wgpu::ShaderStages::NONE)
+        );
+        assert_tokens_eq!(
             quote!(wgpu::ShaderStages::VERTEX),
             quote_shader_stages(wgpu::ShaderStages::VERTEX)
         );
@@ -925,11 +933,11 @@ mod test {
             quote_shader_stages(wgpu::ShaderStages::VERTEX_FRAGMENT)
         );
         assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::COMPUTE),
+            quote!(wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::COMPUTE)),
             quote_shader_stages(wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::COMPUTE)
         );
         assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE),
+            quote!(wgpu::ShaderStages::FRAGMENT.union(wgpu::ShaderStages::COMPUTE)),
             quote_shader_stages(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE)
         );
         assert_tokens_eq!(
