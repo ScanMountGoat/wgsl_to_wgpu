@@ -29,7 +29,7 @@ pub fn bind_groups_module(
 
             let layout = bind_group_layout(*group_no, group);
             let layout_descriptor = bind_group_layout_descriptor(*group_no, group, shader_stages);
-            let group_impl = bind_group(*group_no, group, shader_stages);
+            let group_impl = bind_group(*group_no, group);
 
             quote! {
                 #[derive(Debug)]
@@ -50,20 +50,12 @@ pub fn bind_groups_module(
         })
         .collect();
 
-    // TODO: Support compute shader with vertex/fragment in the same module?
-    let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
-    let render_pass = if is_compute {
-        quote!(wgpu::ComputePass<'a>)
-    } else {
-        quote!(wgpu::RenderPass<'a>)
-    };
-
     let group_parameters: Vec<_> = bind_group_data
         .keys()
         .map(|group_no| {
             let group = indexed_name_to_ident("bind_group", *group_no);
             let group_type = indexed_name_to_ident("BindGroup", *group_no);
-            quote!(#group: &'a bind_groups::#group_type)
+            quote!(#group: &bind_groups::#group_type)
         })
         .collect();
 
@@ -77,8 +69,8 @@ pub fn bind_groups_module(
         .collect();
 
     let set_bind_groups = quote! {
-        pub fn set_bind_groups<'a>(
-            pass: &mut #render_pass,
+        pub fn set_bind_groups<P: bind_groups::SetBindGroup>(
+            pass: &mut P,
             #(#group_parameters),*
         ) {
             #(#set_groups)*
@@ -100,8 +92,38 @@ pub fn bind_groups_module(
                 }
 
                 impl<'a> BindGroups<'a> {
-                    pub fn set(&self, pass: &mut #render_pass) {
+                    pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
                         #(self.#set_groups)*
+                    }
+                }
+
+                // Support both compute and render passes.
+                pub trait SetBindGroup {
+                    fn set_bind_group(
+                        &mut self,
+                        index: u32,
+                        bind_group: &wgpu::BindGroup,
+                        offsets: &[wgpu::DynamicOffset],
+                    );
+                }
+                impl SetBindGroup for wgpu::ComputePass<'_> {
+                    fn set_bind_group(
+                        &mut self,
+                        index: u32,
+                        bind_group: &wgpu::BindGroup,
+                        offsets: &[wgpu::DynamicOffset],
+                    ) {
+                        self.set_bind_group(index, bind_group, offsets);
+                    }
+                }
+                impl SetBindGroup for wgpu::RenderPass<'_> {
+                    fn set_bind_group(
+                        &mut self,
+                        index: u32,
+                        bind_group: &wgpu::BindGroup,
+                        offsets: &[wgpu::DynamicOffset],
+                    ) {
+                        self.set_bind_group(index, bind_group, offsets);
                     }
                 }
             }
@@ -267,7 +289,7 @@ fn storage_access(access: naga::StorageAccess) -> TokenStream {
     }
 }
 
-fn bind_group(group_no: u32, group: &GroupData, shader_stages: wgpu::ShaderStages) -> TokenStream {
+fn bind_group(group_no: u32, group: &GroupData) -> TokenStream {
     let entries: Vec<_> = group
         .bindings
         .iter()
@@ -300,15 +322,6 @@ fn bind_group(group_no: u32, group: &GroupData, shader_stages: wgpu::ShaderStage
         })
         .collect();
 
-    // TODO: Support compute shader with vertex/fragment in the same module?
-    let is_compute = shader_stages == wgpu::ShaderStages::COMPUTE;
-
-    let render_pass = if is_compute {
-        quote!(wgpu::ComputePass<'a>)
-    } else {
-        quote!(wgpu::RenderPass<'a>)
-    };
-
     let bind_group_name = indexed_name_to_ident("BindGroup", group_no);
     let bind_group_layout_name = indexed_name_to_ident("BindGroupLayout", group_no);
 
@@ -336,8 +349,8 @@ fn bind_group(group_no: u32, group: &GroupData, shader_stages: wgpu::ShaderStage
                 Self(bind_group)
             }
 
-            pub fn set<'a>(&'a self, render_pass: &mut #render_pass) {
-                render_pass.set_bind_group(#group_no, &self.0, &[]);
+            pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
+                pass.set_bind_group(#group_no, &self.0, &[]);
             }
         }
     }

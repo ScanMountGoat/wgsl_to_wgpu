@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 * Changed generated bind groups and bind group layouts to use labels with the group index like "BindGroup0" or "BindGroupLayout0".
+* Changed bind group set methods to be generic over the pass type to better support mixed entry function stages.
 
 ### Fixed
 * Fixed an issue where vertex entry code would only be generated for the first vertex entry.
