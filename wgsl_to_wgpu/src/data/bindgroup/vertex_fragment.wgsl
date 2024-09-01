@@ -27,6 +27,9 @@ var color_texture_msaa: texture_multisampled_2d<f32>;
 var depth_texture_msaa: texture_depth_multisampled_2d;
 
 @group(1) @binding(0) var<uniform> transforms: Transforms;
+@group(1) @binding(1) var<uniform> scalar: f32;
+@group(1) @binding(2) var<uniform> vector: vec4<f32>;
+@group(1) @binding(3) var<uniform> matrix: mat4x4<f32>;
 
 @vertex
 fn vs_main() {}

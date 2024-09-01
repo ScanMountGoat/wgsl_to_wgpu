@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 0.10.0 - 2024-08-29
 ### Added
 * Added a `rustfmt` option for formatting the output code with the executable used for `cargo fmt`.
+* Added support for scalar, vector, and matrix bindings.
 
 ### Changed
 * Changed generated bind groups and bind group layouts to use labels with the group index like "BindGroup0" or "BindGroupLayout0".
