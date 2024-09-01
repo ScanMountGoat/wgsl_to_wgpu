@@ -548,7 +548,9 @@ mod test {
                 f: vec4<f32>
             };
             @group(0) @binding(0) var<uniform> a: A;
-            @group(1) @binding(0) var<uniform> b: A;
+            @group(1) @binding(0) var<uniform> b: f32;
+            @group(2) @binding(0) var<uniform> c: vec4<f32>;
+            @group(3) @binding(0) var<uniform> d: mat4x4<f32>;
 
             @vertex
             fn vs_main() {}
