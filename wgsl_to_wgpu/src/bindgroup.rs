@@ -137,14 +137,18 @@ fn bind_group_layout(group_no: u32, group: &GroupData) -> TokenStream {
         .bindings
         .iter()
         .map(|binding| {
-            let field_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
+            let binding_name = binding.name.as_ref().unwrap();
+            let field_name = Ident::new(binding_name, Span::call_site());
             // TODO: Support more types.
             let field_type = match binding.binding_type.inner {
-                naga::TypeInner::Struct { .. } => quote!(wgpu::BufferBinding<'a>),
+                naga::TypeInner::Struct { .. }
+                | naga::TypeInner::Array { .. }
+                | naga::TypeInner::Scalar { .. }
+                | naga::TypeInner::Vector { .. }
+                | naga::TypeInner::Matrix { .. } => quote!(wgpu::BufferBinding<'a>),
                 naga::TypeInner::Image { .. } => quote!(&'a wgpu::TextureView),
                 naga::TypeInner::Sampler { .. } => quote!(&'a wgpu::Sampler),
-                naga::TypeInner::Array { .. } => quote!(wgpu::BufferBinding<'a>),
-                _ => panic!("Unsupported type for binding fields."),
+                ref inner => panic!("Unsupported type `{inner:?}` of '{binding_name}'."),
             };
             quote!(pub #field_name: #field_type)
         })
@@ -196,14 +200,11 @@ fn bind_group_layout_entry(
 
     // TODO: Support more types.
     let binding_type = match binding.binding_type.inner {
-        naga::TypeInner::Struct { .. } => {
-            quote!(wgpu::BindingType::Buffer {
-                ty: #buffer_binding_type,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            })
-        }
-        naga::TypeInner::Array { .. } => {
+        naga::TypeInner::Struct { .. }
+        | naga::TypeInner::Array { .. }
+        | naga::TypeInner::Scalar { .. }
+        | naga::TypeInner::Vector { .. }
+        | naga::TypeInner::Matrix { .. } => {
             quote!(wgpu::BindingType::Buffer {
                 ty: #buffer_binding_type,
                 has_dynamic_offset: false,
@@ -265,7 +266,9 @@ fn bind_group_layout_entry(
             quote!(wgpu::BindingType::Sampler(#sampler_type))
         }
         // TODO: Better error handling.
-        _ => panic!("Failed to generate BindingType."),
+        ref inner => {
+            panic!("Failed to generate BindingType for `{inner:?}` at index {binding_index}.",)
+        }
     };
 
     quote! {
@@ -295,22 +298,26 @@ fn bind_group(group_no: u32, group: &GroupData) -> TokenStream {
         .iter()
         .map(|binding| {
             let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
-            let binding_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
+            let binding_name = binding.name.as_ref().unwrap();
+            let field_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
             let resource_type = match binding.binding_type.inner {
-                naga::TypeInner::Struct { .. } => {
-                    quote!(wgpu::BindingResource::Buffer(bindings.#binding_name))
-                }
-                naga::TypeInner::Array { .. } => {
-                    quote!(wgpu::BindingResource::Buffer(bindings.#binding_name))
+                naga::TypeInner::Struct { .. }
+                | naga::TypeInner::Array { .. }
+                | naga::TypeInner::Scalar { .. }
+                | naga::TypeInner::Vector { .. }
+                | naga::TypeInner::Matrix { .. } => {
+                    quote!(wgpu::BindingResource::Buffer(bindings.#field_name))
                 }
                 naga::TypeInner::Image { .. } => {
-                    quote!(wgpu::BindingResource::TextureView(bindings.#binding_name))
+                    quote!(wgpu::BindingResource::TextureView(bindings.#field_name))
                 }
                 naga::TypeInner::Sampler { .. } => {
-                    quote!(wgpu::BindingResource::Sampler(bindings.#binding_name))
+                    quote!(wgpu::BindingResource::Sampler(bindings.#field_name))
                 }
                 // TODO: Better error handling.
-                _ => panic!("Failed to generate BindingType."),
+                ref inner => panic!(
+                    "Failed to generate BindingType for `{inner:?}` of '{binding_name}' at index {binding_index}.",
+                ),
             };
 
             quote! {
