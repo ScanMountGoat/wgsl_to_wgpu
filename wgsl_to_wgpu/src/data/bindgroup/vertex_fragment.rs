@@ -14,6 +14,8 @@ pub mod bind_groups {
         pub storage_tex_read_write: &'a wgpu::TextureView,
         pub color_texture_msaa: &'a wgpu::TextureView,
         pub depth_texture_msaa: &'a wgpu::TextureView,
+        pub color_texture_array_2d: &'a wgpu::TextureView,
+        pub color_texture_array_cube: &'a wgpu::TextureView,
     }
     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
         label: Some("LayoutDescriptor0"),
@@ -120,6 +122,26 @@ pub mod bind_groups {
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 11,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2Array,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 12,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::CubeArray,
+                    multisampled: false,
+                },
+                count: None,
+            },
         ],
     };
     impl BindGroup0 {
@@ -176,6 +198,18 @@ pub mod bind_groups {
                     wgpu::BindGroupEntry {
                         binding: 10,
                         resource: wgpu::BindingResource::TextureView(bindings.depth_texture_msaa),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 11,
+                        resource: wgpu::BindingResource::TextureView(
+                            bindings.color_texture_array_2d,
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 12,
+                        resource: wgpu::BindingResource::TextureView(
+                            bindings.color_texture_array_cube,
+                        ),
                     },
                 ],
                 label: Some("BindGroup0"),

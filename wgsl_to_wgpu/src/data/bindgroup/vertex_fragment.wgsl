@@ -26,6 +26,11 @@ var color_texture_msaa: texture_multisampled_2d<f32>;
 @group(0) @binding(10)
 var depth_texture_msaa: texture_depth_multisampled_2d;
 
+@group(0) @binding(11)
+var color_texture_array_2d: texture_2d_array<f32>;
+@group(0) @binding(12)
+var color_texture_array_cube: texture_cube_array<f32>;
+
 @group(1) @binding(0) var<uniform> transforms: Transforms;
 @group(1) @binding(1) var<uniform> scalar: f32;
 @group(1) @binding(2) var<uniform> vector: vec4<f32>;
