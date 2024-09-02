@@ -211,12 +211,20 @@ fn bind_group_layout_entry(
                 min_binding_size: None,
             })
         }
-        naga::TypeInner::Image { dim, class, .. } => {
-            let view_dim = match dim {
-                naga::ImageDimension::D1 => quote!(wgpu::TextureViewDimension::D1),
-                naga::ImageDimension::D2 => quote!(wgpu::TextureViewDimension::D2),
-                naga::ImageDimension::D3 => quote!(wgpu::TextureViewDimension::D3),
-                naga::ImageDimension::Cube => quote!(wgpu::TextureViewDimension::Cube),
+        naga::TypeInner::Image {
+            dim,
+            arrayed,
+            class,
+            ..
+        } => {
+            let view_dim = match (dim, arrayed) {
+                (naga::ImageDimension::D1, false) => quote!(wgpu::TextureViewDimension::D1),
+                (naga::ImageDimension::D2, false) => quote!(wgpu::TextureViewDimension::D2),
+                (naga::ImageDimension::D2, true) => quote!(wgpu::TextureViewDimension::D2Array),
+                (naga::ImageDimension::D3, false) => quote!(wgpu::TextureViewDimension::D3),
+                (naga::ImageDimension::Cube, false) => quote!(wgpu::TextureViewDimension::Cube),
+                (naga::ImageDimension::Cube, true) => quote!(wgpu::TextureViewDimension::CubeArray),
+                _ => panic!("Unsupported image dimension {dim:?}, arrayed = {arrayed}"),
             };
 
             match class {
