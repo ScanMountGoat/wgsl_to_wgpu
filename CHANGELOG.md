@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## unreleased
 ### Added
 * Added support for scalar, vector, and matrix bindings.
+* Added support for texture arrays.
 
 ## 0.10.0 - 2024-08-29
 ### Added
