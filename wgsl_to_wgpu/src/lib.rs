@@ -212,11 +212,12 @@ fn create_shader_module_inner(
     let bind_group_data = get_bind_group_data(&module)?;
 
     let global_stages = wgsl::global_shader_stages(&module);
+    let entry_stages = wgsl::entry_stages(&module);
 
     // Write all the structs, including uniforms and entry function inputs.
     let structs = structs::structs(&module, options);
     let consts = consts::consts(&module);
-    let bind_groups_module = bind_groups_module(&bind_group_data, &global_stages);
+    let bind_groups_module = bind_groups_module(&bind_group_data, &global_stages, entry_stages);
     let vertex_module = vertex_struct_methods(&module);
     let compute_module = compute_module(&module);
     let entry_point_constants = entry_point_constants(&module);
@@ -246,7 +247,7 @@ fn create_shader_module_inner(
         })
         .collect();
 
-    let push_constant_range = push_constant_range(&module, &global_stages);
+    let push_constant_range = push_constant_range(&module, &global_stages, entry_stages);
 
     let create_pipeline_layout = quote! {
         pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
@@ -286,6 +287,7 @@ fn create_shader_module_inner(
 fn push_constant_range(
     module: &naga::Module,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
+    entry_stages: wgpu::ShaderStages,
 ) -> Option<TokenStream> {
     // Assume only one variable is used with var<push_constant> in WGSL.
     let (_, global) = module
@@ -295,12 +297,13 @@ fn push_constant_range(
 
     let push_constant_size = module.types[global.ty].inner.size(module.to_ctx());
 
-    // Set visibility to all stages that access this binding
+    // Set visibility to all stages that access this binding.
+    // Use all entry points as a safe fallback.
     let shader_stages = global
         .name
         .as_ref()
         .and_then(|n| global_stages.get(n).copied())
-        .unwrap_or(wgpu::ShaderStages::NONE);
+        .unwrap_or(entry_stages);
 
     let stages = quote_shader_stages(shader_stages);
 
@@ -514,7 +517,7 @@ mod test {
                                 bind_group_layouts: &[],
                                 push_constant_ranges: &[
                                     wgpu::PushConstantRange {
-                                        stages: wgpu::ShaderStages::NONE,
+                                        stages: wgpu::ShaderStages::FRAGMENT,
                                         range: 0..16,
                                     },
                                 ],

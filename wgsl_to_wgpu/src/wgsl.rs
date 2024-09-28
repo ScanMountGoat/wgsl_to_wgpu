@@ -12,15 +12,27 @@ pub fn global_shader_stages(module: &naga::Module) -> BTreeMap<String, wgpu::Sha
     let mut global_stages = BTreeMap::new();
 
     for entry in &module.entry_points {
-        let stage = match entry.stage {
-            naga::ShaderStage::Vertex => wgpu::ShaderStages::VERTEX,
-            naga::ShaderStage::Fragment => wgpu::ShaderStages::FRAGMENT,
-            naga::ShaderStage::Compute => wgpu::ShaderStages::COMPUTE,
-        };
+        let stage = naga_stages(entry.stage);
         update_stages(module, &entry.function, &mut global_stages, stage);
     }
 
     global_stages
+}
+
+fn naga_stages(stage: naga::ShaderStage) -> wgpu::ShaderStages {
+    match stage {
+        naga::ShaderStage::Vertex => wgpu::ShaderStages::VERTEX,
+        naga::ShaderStage::Fragment => wgpu::ShaderStages::FRAGMENT,
+        naga::ShaderStage::Compute => wgpu::ShaderStages::COMPUTE,
+    }
+}
+
+pub fn entry_stages(module: &naga::Module) -> wgpu::ShaderStages {
+    module
+        .entry_points
+        .iter()
+        .map(|entry| naga_stages(entry.stage))
+        .collect()
 }
 
 fn update_stages(
@@ -30,6 +42,7 @@ fn update_stages(
     stage: wgpu::ShaderStages,
 ) {
     // Search the function body to find used globals.
+    // TODO: This doesn't handle function calls properly?
     for (_, e) in function.expressions.iter() {
         match e {
             naga::Expression::GlobalVariable(g) => {
@@ -322,7 +335,7 @@ mod tests {
     fn shader_stages_none() {
         let source = "";
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
+        assert_eq!(wgpu::ShaderStages::NONE, entry_stages(&module));
     }
 
     #[test]
@@ -333,7 +346,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
+        assert_eq!(wgpu::ShaderStages::VERTEX, entry_stages(&module));
     }
 
     #[test]
@@ -344,7 +357,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
+        assert_eq!(wgpu::ShaderStages::FRAGMENT, entry_stages(&module));
     }
 
     #[test]
@@ -358,7 +371,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
+        assert_eq!(wgpu::ShaderStages::VERTEX_FRAGMENT, entry_stages(&module));
     }
 
     #[test]
@@ -370,7 +383,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
+        assert_eq!(wgpu::ShaderStages::COMPUTE, entry_stages(&module));
     }
 
     #[test]
@@ -388,6 +401,8 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
+        assert_eq!(wgpu::ShaderStages::all(), entry_stages(&module));
     }
+
+    // TODO: test global stages
 }

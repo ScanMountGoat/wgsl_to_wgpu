@@ -21,6 +21,7 @@ pub struct GroupBinding<'a> {
 pub fn bind_groups_module(
     bind_group_data: &BTreeMap<u32, GroupData>,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
+    entry_stages: wgpu::ShaderStages,
 ) -> TokenStream {
     let bind_groups: Vec<_> = bind_group_data
         .iter()
@@ -28,7 +29,8 @@ pub fn bind_groups_module(
             let group_name = indexed_name_to_ident("BindGroup", *group_no);
 
             let layout = bind_group_layout(*group_no, group);
-            let layout_descriptor = bind_group_layout_descriptor(*group_no, group, global_stages);
+            let layout_descriptor =
+                bind_group_layout_descriptor(*group_no, group, global_stages, entry_stages);
             let group_impl = bind_group(*group_no, group);
 
             quote! {
@@ -167,11 +169,12 @@ fn bind_group_layout_descriptor(
     group_no: u32,
     group: &GroupData,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
+    entry_stages: wgpu::ShaderStages,
 ) -> TokenStream {
     let entries: Vec<_> = group
         .bindings
         .iter()
-        .map(|binding| bind_group_layout_entry(binding, global_stages))
+        .map(|binding| bind_group_layout_entry(binding, global_stages, entry_stages))
         .collect();
 
     let name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
@@ -189,14 +192,16 @@ fn bind_group_layout_descriptor(
 fn bind_group_layout_entry(
     binding: &GroupBinding,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
+    entry_stages: wgpu::ShaderStages,
 ) -> TokenStream {
     // Set visibility to all stages that access this binding.
     // This can avoid unneeded binding calls on some backends.
+    // Use all entry points as a safe fallback.
     let shader_stages = binding
         .name
         .as_ref()
         .and_then(|n| global_stages.get(n).copied())
-        .unwrap_or(wgpu::ShaderStages::NONE);
+        .unwrap_or(entry_stages);
 
     let stages = quote_shader_stages(shader_stages);
 
@@ -477,10 +482,13 @@ mod tests {
 
     fn test_bind_groups(wgsl: &str, rust: &str) {
         let module = naga::front::wgsl::parse_str(wgsl).unwrap();
-        let bind_group_data = get_bind_group_data(&module).unwrap();
-        let global_stages = wgsl::global_shader_stages(&module);
-        let actual = bind_groups_module(&bind_group_data, &global_stages);
 
+        let bind_group_data = get_bind_group_data(&module).unwrap();
+
+        let global_stages = wgsl::global_shader_stages(&module);
+        let entry_stages = wgsl::entry_stages(&module);
+
+        let actual = bind_groups_module(&bind_group_data, &global_stages, entry_stages);
         assert_tokens_eq!(rust.parse().unwrap(), actual);
     }
 
