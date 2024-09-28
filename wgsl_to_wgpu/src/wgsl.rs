@@ -1,19 +1,52 @@
+use std::collections::BTreeMap;
+
 use crate::MatrixVectorTypes;
 use naga::StructMember;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-pub fn shader_stages(module: &naga::Module) -> wgpu::ShaderStages {
-    module
-        .entry_points
-        .iter()
-        .map(|entry| match entry.stage {
+pub fn global_shader_stages(module: &naga::Module) -> BTreeMap<String, wgpu::ShaderStages> {
+    // Collect the shader stages for all entries that access a global variable.
+    // This is referred to as being "statically accessed" in the WGSL specification.
+    let mut global_stages = BTreeMap::new();
+
+    for entry in &module.entry_points {
+        let stage = match entry.stage {
             naga::ShaderStage::Vertex => wgpu::ShaderStages::VERTEX,
             naga::ShaderStage::Fragment => wgpu::ShaderStages::FRAGMENT,
             naga::ShaderStage::Compute => wgpu::ShaderStages::COMPUTE,
-        })
-        .collect()
+        };
+        update_stages(module, &entry.function, &mut global_stages, stage);
+    }
+
+    global_stages
+}
+
+fn update_stages(
+    module: &naga::Module,
+    function: &naga::Function,
+    global_stages: &mut BTreeMap<String, wgpu::ShaderStages>,
+    stage: wgpu::ShaderStages,
+) {
+    // Search the function body to find used globals.
+    for (_, e) in function.expressions.iter() {
+        match e {
+            naga::Expression::GlobalVariable(g) => {
+                let global = &module.global_variables[*g];
+                if let Some(name) = &global.name {
+                    let stages = global_stages
+                        .entry(name.clone())
+                        .or_insert(wgpu::ShaderStages::NONE);
+                    *stages = stages.union(stage);
+                }
+            }
+            naga::Expression::CallResult(f) => {
+                update_stages(module, &module.functions[*f], global_stages, stage);
+            }
+            _ => (),
+        }
+    }
 }
 
 pub fn rust_scalar_type(scalar: &naga::Scalar) -> TokenStream {
@@ -289,7 +322,7 @@ mod tests {
     fn shader_stages_none() {
         let source = "";
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(wgpu::ShaderStages::NONE, shader_stages(&module));
+        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
     }
 
     #[test]
@@ -300,7 +333,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(wgpu::ShaderStages::VERTEX, shader_stages(&module));
+        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
     }
 
     #[test]
@@ -311,7 +344,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(wgpu::ShaderStages::FRAGMENT, shader_stages(&module));
+        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
     }
 
     #[test]
@@ -325,7 +358,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(wgpu::ShaderStages::VERTEX_FRAGMENT, shader_stages(&module));
+        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
     }
 
     #[test]
@@ -337,7 +370,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(wgpu::ShaderStages::COMPUTE, shader_stages(&module));
+        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
     }
 
     #[test]
@@ -355,6 +388,6 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(wgpu::ShaderStages::all(), shader_stages(&module));
+        assert_eq!(BTreeMap::new(), global_shader_stages(&module));
     }
 }

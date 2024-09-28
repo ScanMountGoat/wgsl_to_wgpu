@@ -20,7 +20,7 @@ pub struct GroupBinding<'a> {
 // TODO: Take an iterator instead?
 pub fn bind_groups_module(
     bind_group_data: &BTreeMap<u32, GroupData>,
-    shader_stages: wgpu::ShaderStages,
+    global_stages: &BTreeMap<String, wgpu::ShaderStages>,
 ) -> TokenStream {
     let bind_groups: Vec<_> = bind_group_data
         .iter()
@@ -28,7 +28,7 @@ pub fn bind_groups_module(
             let group_name = indexed_name_to_ident("BindGroup", *group_no);
 
             let layout = bind_group_layout(*group_no, group);
-            let layout_descriptor = bind_group_layout_descriptor(*group_no, group, shader_stages);
+            let layout_descriptor = bind_group_layout_descriptor(*group_no, group, global_stages);
             let group_impl = bind_group(*group_no, group);
 
             quote! {
@@ -166,12 +166,12 @@ fn bind_group_layout(group_no: u32, group: &GroupData) -> TokenStream {
 fn bind_group_layout_descriptor(
     group_no: u32,
     group: &GroupData,
-    shader_stages: wgpu::ShaderStages,
+    global_stages: &BTreeMap<String, wgpu::ShaderStages>,
 ) -> TokenStream {
     let entries: Vec<_> = group
         .bindings
         .iter()
-        .map(|binding| bind_group_layout_entry(binding, shader_stages))
+        .map(|binding| bind_group_layout_entry(binding, global_stages))
         .collect();
 
     let name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
@@ -188,11 +188,16 @@ fn bind_group_layout_descriptor(
 
 fn bind_group_layout_entry(
     binding: &GroupBinding,
-    shader_stages: wgpu::ShaderStages,
+    global_stages: &BTreeMap<String, wgpu::ShaderStages>,
 ) -> TokenStream {
-    // TODO: Assume storage is only used for compute?
-    // TODO: Support just vertex or fragment?
-    // TODO: Visible from all stages?
+    // Set visibility to all stages that access this binding.
+    // This can avoid unneeded binding calls on some backends.
+    let shader_stages = binding
+        .name
+        .as_ref()
+        .and_then(|n| global_stages.get(n).copied())
+        .unwrap_or(wgpu::ShaderStages::NONE);
+
     let stages = quote_shader_stages(shader_stages);
 
     let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
@@ -418,7 +423,7 @@ pub fn get_bind_group_data(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assert_tokens_eq;
+    use crate::{assert_tokens_eq, wgsl};
     use indoc::indoc;
 
     #[test]
@@ -470,10 +475,11 @@ mod tests {
         ));
     }
 
-    fn test_bind_groups(wgsl: &str, rust: &str, stages: wgpu::ShaderStages) {
+    fn test_bind_groups(wgsl: &str, rust: &str) {
         let module = naga::front::wgsl::parse_str(wgsl).unwrap();
         let bind_group_data = get_bind_group_data(&module).unwrap();
-        let actual = bind_groups_module(&bind_group_data, stages);
+        let global_stages = wgsl::global_shader_stages(&module);
+        let actual = bind_groups_module(&bind_group_data, &global_stages);
 
         assert_tokens_eq!(rust.parse().unwrap(), actual);
     }
@@ -483,7 +489,6 @@ mod tests {
         test_bind_groups(
             include_str!("data/bindgroup/compute.wgsl"),
             include_str!("data/bindgroup/compute.rs"),
-            wgpu::ShaderStages::COMPUTE,
         );
     }
 
@@ -494,7 +499,6 @@ mod tests {
         test_bind_groups(
             include_str!("data/bindgroup/vertex_fragment.wgsl"),
             include_str!("data/bindgroup/vertex_fragment.rs"),
-            wgpu::ShaderStages::VERTEX_FRAGMENT,
         );
     }
 
@@ -505,7 +509,6 @@ mod tests {
         test_bind_groups(
             include_str!("data/bindgroup/vertex.wgsl"),
             include_str!("data/bindgroup/vertex.rs"),
-            wgpu::ShaderStages::VERTEX,
         );
     }
 
@@ -516,7 +519,6 @@ mod tests {
         test_bind_groups(
             include_str!("data/bindgroup/fragment.wgsl"),
             include_str!("data/bindgroup/fragment.rs"),
-            wgpu::ShaderStages::FRAGMENT,
         );
     }
 }

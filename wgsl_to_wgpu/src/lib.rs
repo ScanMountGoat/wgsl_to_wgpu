@@ -33,6 +33,7 @@
 extern crate wgpu_types as wgpu;
 
 use std::{
+    collections::BTreeMap,
     io::Write,
     process::{Command, Stdio},
 };
@@ -209,12 +210,13 @@ fn create_shader_module_inner(
     let module = naga::front::wgsl::parse_str(wgsl_source).unwrap();
 
     let bind_group_data = get_bind_group_data(&module)?;
-    let shader_stages = wgsl::shader_stages(&module);
+
+    let global_stages = wgsl::global_shader_stages(&module);
 
     // Write all the structs, including uniforms and entry function inputs.
     let structs = structs::structs(&module, options);
     let consts = consts::consts(&module);
-    let bind_groups_module = bind_groups_module(&bind_group_data, shader_stages);
+    let bind_groups_module = bind_groups_module(&bind_group_data, &global_stages);
     let vertex_module = vertex_struct_methods(&module);
     let compute_module = compute_module(&module);
     let entry_point_constants = entry_point_constants(&module);
@@ -244,7 +246,7 @@ fn create_shader_module_inner(
         })
         .collect();
 
-    let push_constant_range = push_constant_range(&module, shader_stages);
+    let push_constant_range = push_constant_range(&module, &global_stages);
 
     let create_pipeline_layout = quote! {
         pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
@@ -283,28 +285,32 @@ fn create_shader_module_inner(
 
 fn push_constant_range(
     module: &naga::Module,
-    shader_stages: wgpu::ShaderStages,
+    global_stages: &BTreeMap<String, wgpu::ShaderStages>,
 ) -> Option<TokenStream> {
     // Assume only one variable is used with var<push_constant> in WGSL.
-    let push_constant_size = module.global_variables.iter().find_map(|g| {
-        if g.1.space == naga::AddressSpace::PushConstant {
-            Some(module.types[g.1.ty].inner.size(module.to_ctx()))
-        } else {
-            None
-        }
-    });
+    let (_, global) = module
+        .global_variables
+        .iter()
+        .find(|(_, g)| g.space == naga::AddressSpace::PushConstant)?;
+
+    let push_constant_size = module.types[global.ty].inner.size(module.to_ctx());
+
+    // Set visibility to all stages that access this binding
+    let shader_stages = global
+        .name
+        .as_ref()
+        .and_then(|n| global_stages.get(n).copied())
+        .unwrap_or(wgpu::ShaderStages::NONE);
 
     let stages = quote_shader_stages(shader_stages);
 
     // Use a single push constant range for all shader stages.
     // This allows easily setting push constants in a single call with offset 0.
-    push_constant_size.map(|size| {
-        let size = Literal::usize_unsuffixed(size as usize);
-        quote! {
-            wgpu::PushConstantRange {
-                stages: #stages,
-                range: 0..#size
-            }
+    let size = Literal::usize_unsuffixed(push_constant_size as usize);
+    Some(quote! {
+        wgpu::PushConstantRange {
+            stages: #stages,
+            range: 0..#size
         }
     })
 }
@@ -508,7 +514,7 @@ mod test {
                                 bind_group_layouts: &[],
                                 push_constant_ranges: &[
                                     wgpu::PushConstantRange {
-                                        stages: wgpu::ShaderStages::FRAGMENT,
+                                        stages: wgpu::ShaderStages::NONE,
                                         range: 0..16,
                                     },
                                 ],

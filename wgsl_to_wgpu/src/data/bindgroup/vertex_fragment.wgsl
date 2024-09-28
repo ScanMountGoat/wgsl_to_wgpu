@@ -1,4 +1,6 @@
-struct Transforms {};
+struct Transforms {
+    value: vec4<f32>
+};
 
 @group(0) @binding(0)
 var color_texture1: texture_2d<u32>;
@@ -36,8 +38,27 @@ var color_texture_array_cube: texture_cube_array<f32>;
 @group(1) @binding(2) var<uniform> vector: vec4<f32>;
 @group(1) @binding(3) var<uniform> matrix: mat4x4<f32>;
 
+fn use_vars() {
+    var x = transforms.value.x;
+    x = scalar;
+    x = vector.x;
+    x = matrix[0][0];
+    x = textureLoad(color_texture1, vec2(0), 0);
+    x = textureLoad(color_texture2, vec2(0), 0);
+    x = textureSample(color_texture3, color_sampler, vec2(0.0)).x;
+    x = textureSampleCompare(depth_texture, comparison_sampler, vec2(0.0), 0.0);
+    x = textureLoad(storage_tex_read, vec2(0));
+    x = textureLoad(storage_tex_read_write, vec2(0));
+    x = textureLoad(color_texture_array_2d, vec2(0), 0, 0);
+    x = textureLoad(color_texture_array_cube, vec3(0), 0, 0);
+}
+
 @vertex
-fn vs_main() {}
+fn vs_main() {
+    use_vars();
+}
 
 @fragment
-fn fs_main() {}
+fn fs_main() {
+    use_vars();
+}
