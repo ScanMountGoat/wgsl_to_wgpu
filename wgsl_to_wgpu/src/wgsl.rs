@@ -404,5 +404,71 @@ mod tests {
         assert_eq!(wgpu::ShaderStages::all(), entry_stages(&module));
     }
 
-    // TODO: test global stages
+    #[test]
+    fn global_stages_all() {
+        let source = indoc! {r#"
+            var<uniform> a: f32;
+            var<uniform> b: f32;
+            var<uniform> c: f32;
+            var<uniform> d: f32;
+            var<uniform> e: f32;
+
+            @vertex
+            fn vs_main()  {
+                let x = a;
+                let y = d;
+            }
+
+            @fragment
+            fn fs_main()  {
+                let x = b;
+                let y = d;
+            }
+
+            @compute
+            @workgroup_size(64)
+            fn cs_main()  {
+                let x = c;
+                let y = d;
+            }
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert_eq!(
+            BTreeMap::from([
+                ("a".to_string(), wgpu::ShaderStages::VERTEX),
+                ("b".to_string(), wgpu::ShaderStages::FRAGMENT),
+                ("c".to_string(), wgpu::ShaderStages::COMPUTE),
+                ("d".to_string(), wgpu::ShaderStages::all()),
+            ]),
+            global_shader_stages(&module)
+        );
+    }
+
+    #[test]
+    fn global_stages_recursive() {
+        let source = indoc! {r#"
+            var<uniform> a: f32;
+            var<uniform> b: f32;
+
+            fn inner() -> f32 {
+                return b;
+            }
+
+            @fragment
+            fn fs_main()  {
+                let x = a;
+                let y = inner();
+            }
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        assert_eq!(
+            BTreeMap::from([
+                ("a".to_string(), wgpu::ShaderStages::FRAGMENT),
+                ("b".to_string(), wgpu::ShaderStages::FRAGMENT),
+            ]),
+            global_shader_stages(&module)
+        );
+    }
 }

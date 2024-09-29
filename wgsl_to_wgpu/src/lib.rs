@@ -217,7 +217,7 @@ fn create_shader_module_inner(
     // Write all the structs, including uniforms and entry function inputs.
     let structs = structs::structs(&module, options);
     let consts = consts::consts(&module);
-    let bind_groups_module = bind_groups_module(&bind_group_data, &global_stages, entry_stages);
+    let bind_groups_module = bind_groups_module(&bind_group_data, &global_stages);
     let vertex_module = vertex_struct_methods(&module);
     let compute_module = compute_module(&module);
     let entry_point_constants = entry_point_constants(&module);

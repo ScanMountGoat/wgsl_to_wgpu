@@ -84,7 +84,7 @@ pub mod bind_groups {
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 7,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                visibility: wgpu::ShaderStages::NONE,
                 ty: wgpu::BindingType::StorageTexture {
                     access: wgpu::StorageTextureAccess::WriteOnly,
                     format: wgpu::TextureFormat::Rg32Sint,
@@ -104,7 +104,7 @@ pub mod bind_groups {
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 9,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                visibility: wgpu::ShaderStages::NONE,
                 ty: wgpu::BindingType::Texture {
                     sample_type: wgpu::TextureSampleType::Float { filterable: true },
                     view_dimension: wgpu::TextureViewDimension::D2,
@@ -114,7 +114,7 @@ pub mod bind_groups {
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 10,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                visibility: wgpu::ShaderStages::NONE,
                 ty: wgpu::BindingType::Texture {
                     sample_type: wgpu::TextureSampleType::Depth,
                     view_dimension: wgpu::TextureViewDimension::D2,

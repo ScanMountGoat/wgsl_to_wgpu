@@ -38,7 +38,7 @@ var color_texture_array_cube: texture_cube_array<f32>;
 @group(1) @binding(2) var<uniform> vector: vec4<f32>;
 @group(1) @binding(3) var<uniform> matrix: mat4x4<f32>;
 
-fn use_vars() {
+fn use_vars() -> f32 {
     var x = transforms.value.x;
     x = scalar;
     x = vector.x;
@@ -51,14 +51,15 @@ fn use_vars() {
     x = textureLoad(storage_tex_read_write, vec2(0));
     x = textureLoad(color_texture_array_2d, vec2(0), 0, 0);
     x = textureLoad(color_texture_array_cube, vec3(0), 0, 0);
+    return x;
 }
 
 @vertex
-fn vs_main() {
-    use_vars();
+fn vs_main() -> f32 {
+    return use_vars();
 }
 
 @fragment
-fn fs_main() {
-    use_vars();
+fn fs_main() -> f32 {
+    return use_vars();
 }
