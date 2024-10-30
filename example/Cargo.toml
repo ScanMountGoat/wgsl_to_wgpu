@@ -7,9 +7,9 @@ edition = "2021"
 winit = "0.30"
 wgpu = "23.0.0"
 futures = "0.3"
-bytemuck = { version = "1.16", features = ["derive"] }
-encase = { version = "0.9.0", features = ["glam"] }
-glam = { version = "0.28.0", features = ["bytemuck"] }
+bytemuck = { version = "1.19", features = ["derive"] }
+encase = { version = "0.10.0", features = ["glam"] }
+glam = { version = "0.29.1", features = ["bytemuck"] }
 
 [build-dependencies]
 wgsl_to_wgpu = { path = "../wgsl_to_wgpu" }
