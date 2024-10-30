@@ -89,7 +89,7 @@ pub fn vertex_state<'a, const N: usize>(
 ) -> wgpu::VertexState<'a> {
     wgpu::VertexState {
         module,
-        entry_point: entry.entry_point,
+        entry_point: Some(entry.entry_point),
         buffers: &entry.buffers,
         compilation_options: wgpu::PipelineCompilationOptions {
             constants: &entry.constants,

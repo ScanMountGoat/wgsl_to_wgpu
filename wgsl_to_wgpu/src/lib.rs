@@ -393,7 +393,7 @@ fn create_compute_pipeline(e: &naga::EntryPoint) -> TokenStream {
                 label: Some(#label),
                 layout: Some(&layout),
                 module: &module,
-                entry_point: #entry_point,
+                entry_point: Some(#entry_point),
                 compilation_options: Default::default(),
                 cache: Default::default(),
             })
@@ -486,7 +486,7 @@ mod test {
                 ) -> wgpu::FragmentState<'a> {
                     wgpu::FragmentState {
                         module,
-                        entry_point: entry.entry_point,
+                        entry_point: Some(entry.entry_point),
                         targets: &entry.targets,
                         compilation_options: wgpu::PipelineCompilationOptions {
                             constants: &entry.constants,
@@ -893,7 +893,7 @@ mod test {
                                     label: Some("Compute Pipeline main1"),
                                     layout: Some(&layout),
                                     module: &module,
-                                    entry_point: "main1",
+                                    entry_point: Some("main1"),
                                     compilation_options: Default::default(),
                                     cache: Default::default(),
                                 },
@@ -909,7 +909,7 @@ mod test {
                                     label: Some("Compute Pipeline main2"),
                                     layout: Some(&layout),
                                     module: &module,
-                                    entry_point: "main2",
+                                    entry_point: Some("main2"),
                                     compilation_options: Default::default(),
                                     cache: Default::default(),
                                 },

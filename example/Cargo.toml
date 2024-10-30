@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 winit = "0.30"
-wgpu = "22.0.0"
+wgpu = "23.0.0"
 futures = "0.3"
 bytemuck = { version = "1.16", features = ["derive"] }
 encase = { version = "0.9.0", features = ["glam"] }

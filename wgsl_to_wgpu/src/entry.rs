@@ -133,7 +133,7 @@ pub fn vertex_states(module: &naga::Module) -> TokenStream {
             ) -> wgpu::VertexState<'a> {
                 wgpu::VertexState {
                     module,
-                    entry_point: entry.entry_point,
+                    entry_point: Some(entry.entry_point),
                     buffers: &entry.buffers,
                     compilation_options: wgpu::PipelineCompilationOptions {
                         constants: &entry.constants,
@@ -268,7 +268,7 @@ pub fn fragment_states(module: &naga::Module) -> TokenStream {
             ) -> wgpu::FragmentState<'a> {
                 wgpu::FragmentState {
                     module,
-                    entry_point: entry.entry_point,
+                    entry_point: Some(entry.entry_point),
                     targets: &entry.targets,
                     compilation_options: wgpu::PipelineCompilationOptions {
                         constants: &entry.constants,
@@ -345,7 +345,7 @@ mod test {
                 ) -> wgpu::FragmentState<'a> {
                     wgpu::FragmentState {
                         module,
-                        entry_point: entry.entry_point,
+                        entry_point: Some(entry.entry_point),
                         targets: &entry.targets,
                         compilation_options: wgpu::PipelineCompilationOptions {
                             constants: &entry.constants,
@@ -421,7 +421,7 @@ mod test {
                 ) -> wgpu::FragmentState<'a> {
                     wgpu::FragmentState {
                         module,
-                        entry_point: entry.entry_point,
+                        entry_point: Some(entry.entry_point),
                         targets: &entry.targets,
                         compilation_options: wgpu::PipelineCompilationOptions {
                             constants: &entry.constants,
