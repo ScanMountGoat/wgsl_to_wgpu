@@ -230,8 +230,9 @@ fn create_shader_module_inner(
         .unwrap_or_else(|| quote!(#wgsl_source));
 
     let create_shader_module = quote! {
+        pub const SOURCE: &str = #included_source;
         pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
-            let source = std::borrow::Cow::Borrowed(#included_source);
+            let source = std::borrow::Cow::Borrowed(SOURCE);
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(source)
