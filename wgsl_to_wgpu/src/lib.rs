@@ -502,8 +502,9 @@ mod test {
                         constants: Default::default(),
                     }
                 }
+                pub const SOURCE: &str = include_str!("shader.wgsl");
                 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
-                    let source = std::borrow::Cow::Borrowed(include_str!("shader.wgsl"));
+                    let source = std::borrow::Cow::Borrowed(SOURCE);
                     device
                         .create_shader_module(wgpu::ShaderModuleDescriptor {
                             label: None,
