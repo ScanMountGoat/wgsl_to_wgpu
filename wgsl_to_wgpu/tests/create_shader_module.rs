@@ -15,3 +15,20 @@ fn vertex_entries() {
 
     assert_eq!(include_str!("output/vertex_entries.rs"), actual);
 }
+
+#[test]
+fn shader_stage_collection() {
+    let actual = wgsl_to_wgpu::create_shader_module(
+        include_str!("wgsl/shader_stage_collection.wgsl"),
+        "shader.wgsl",
+        wgsl_to_wgpu::WriteOptions {
+            rustfmt: true,
+            derive_encase_host_shareable: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let bad_fragment = actual.find("visibility: wgpu::ShaderStages::NONE");
+    assert_eq!(bad_fragment, None, "Shader was {}", actual);
+}
