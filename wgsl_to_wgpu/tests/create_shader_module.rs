@@ -18,6 +18,7 @@ fn vertex_entries() {
 
 #[test]
 fn shader_stage_collection() {
+    // Check the visibility: wgpu::ShaderStages::COMPUTE
     let actual = wgsl_to_wgpu::create_shader_module(
         include_str!("wgsl/shader_stage_collection.wgsl"),
         "shader.wgsl",
@@ -29,6 +30,5 @@ fn shader_stage_collection() {
     )
     .unwrap();
 
-    let bad_fragment = actual.find("visibility: wgpu::ShaderStages::NONE");
-    assert_eq!(bad_fragment, None, "Shader was {}", actual);
+    assert_eq!(include_str!("output/shader_stage_collection.rs"), actual);
 }
