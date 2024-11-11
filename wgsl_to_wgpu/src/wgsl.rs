@@ -35,14 +35,50 @@ pub fn entry_stages(module: &naga::Module) -> wgpu::ShaderStages {
         .collect()
 }
 
+fn update_stages_blocks(
+    module: &naga::Module,
+    block: &naga::Block,
+    global_stages: &mut BTreeMap<String, wgpu::ShaderStages>,
+    stage: wgpu::ShaderStages,
+) {
+    for statement in block.iter() {
+        match statement {
+            naga::Statement::Block(block) => {
+                update_stages_blocks(module, block, global_stages, stage);
+            }
+            naga::Statement::If { accept, reject, .. } => {
+                update_stages_blocks(module, accept, global_stages, stage);
+                update_stages_blocks(module, reject, global_stages, stage);
+            }
+            naga::Statement::Switch { cases, .. } => {
+                for c in cases {
+                    update_stages_blocks(module, &c.body, global_stages, stage);
+                }
+            }
+            naga::Statement::Loop {
+                body, continuing, ..
+            } => {
+                update_stages_blocks(module, body, global_stages, stage);
+                update_stages_blocks(module, continuing, global_stages, stage);
+            }
+            naga::Statement::Call { function, .. } => {
+                update_stages(module, &module.functions[*function], global_stages, stage);
+            }
+            _ => (),
+        }
+    }
+}
+
 fn update_stages(
     module: &naga::Module,
     function: &naga::Function,
     global_stages: &mut BTreeMap<String, wgpu::ShaderStages>,
     stage: wgpu::ShaderStages,
 ) {
+    // Search the function body to find function call statements
+    update_stages_blocks(module, &function.body, global_stages, stage);
+
     // Search the function body to find used globals.
-    // TODO: This doesn't handle function calls properly?
     for (_, e) in function.expressions.iter() {
         match e {
             naga::Expression::GlobalVariable(g) => {
@@ -55,6 +91,7 @@ fn update_stages(
                 }
             }
             naga::Expression::CallResult(f) => {
+                // Function call expressions
                 update_stages(module, &module.functions[*f], global_stages, stage);
             }
             _ => (),
