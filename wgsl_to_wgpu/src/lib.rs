@@ -248,7 +248,8 @@ fn create_shader_module_inner(
         })
         .collect();
 
-    let push_constant_range = push_constant_range(&module, &global_stages, entry_stages);
+    let (push_constant_range, push_constant_stages) =
+        push_constant_range_stages(&module, &global_stages, entry_stages).unzip();
 
     let create_pipeline_layout = quote! {
         pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
@@ -264,6 +265,12 @@ fn create_shader_module_inner(
 
     let override_constants = pipeline_overridable_constants(&module);
 
+    let push_constant_stages = push_constant_stages.map(|stages| {
+        quote! {
+            pub const PUSH_CONSTANT_STAGES: wgpu::ShaderStages = #stages;
+        }
+    });
+
     let output = quote! {
         #structs
         #(#consts)*
@@ -275,6 +282,7 @@ fn create_shader_module_inner(
         #vertex_states
         #fragment_states
         #create_shader_module
+        #push_constant_stages
         #create_pipeline_layout
     };
 
@@ -285,11 +293,11 @@ fn create_shader_module_inner(
     }
 }
 
-fn push_constant_range(
+fn push_constant_range_stages(
     module: &naga::Module,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
     entry_stages: wgpu::ShaderStages,
-) -> Option<TokenStream> {
+) -> Option<(TokenStream, TokenStream)> {
     // Assume only one variable is used with var<push_constant> in WGSL.
     let (_, global) = module
         .global_variables
@@ -311,12 +319,15 @@ fn push_constant_range(
     // Use a single push constant range for all shader stages.
     // This allows easily setting push constants in a single call with offset 0.
     let size = Literal::usize_unsuffixed(push_constant_size as usize);
-    Some(quote! {
-        wgpu::PushConstantRange {
-            stages: #stages,
-            range: 0..#size
-        }
-    })
+    Some((
+        quote! {
+            wgpu::PushConstantRange {
+                stages: PUSH_CONSTANT_STAGES,
+                range: 0..#size
+            }
+        },
+        stages,
+    ))
 }
 
 fn pretty_print(output: TokenStream) -> String {
@@ -511,6 +522,7 @@ mod test {
                             source: wgpu::ShaderSource::Wgsl(source),
                         })
                 }
+                pub const PUSH_CONSTANT_STAGES: wgpu::ShaderStages = wgpu::ShaderStages::FRAGMENT;
                 pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
                     device
                         .create_pipeline_layout(
@@ -519,7 +531,7 @@ mod test {
                                 bind_group_layouts: &[],
                                 push_constant_ranges: &[
                                     wgpu::PushConstantRange {
-                                        stages: wgpu::ShaderStages::FRAGMENT,
+                                        stages: PUSH_CONSTANT_STAGES,
                                         range: 0..16,
                                     },
                                 ],

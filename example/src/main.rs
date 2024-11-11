@@ -277,9 +277,8 @@ impl State {
                 color_matrix: glam::Mat4::IDENTITY,
             })
             .unwrap();
-        // TODO: Expose accessed stages for push constants in generated code.
         render_pass.set_push_constants(
-            wgpu::ShaderStages::FRAGMENT,
+            shader::PUSH_CONSTANT_STAGES,
             0,
             &push_constant_bytes.into_inner(),
         );
