@@ -6,6 +6,13 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.11.1 - 2024-11-11
+### Changed
+* Exposed shader source string as a public constant in generated code.
+
+### Fixed
+* Fixed an issue where shader stage visibility would not correctly account for function calls.
+
 ## 0.11.0 - 2024-10-31
 ### Changed
 * Changed visibility for bind groups and push constants to only include stages that actually use the resource in WGSL code.
