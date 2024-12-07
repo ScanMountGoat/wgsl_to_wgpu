@@ -49,7 +49,7 @@ pub mod bind_groups {
     pub struct BindGroups<'a> {
         pub bind_group0: &'a BindGroup0,
     }
-    impl<'a> BindGroups<'a> {
+    impl BindGroups<'_> {
         pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
             self.bind_group0.set(pass);
         }

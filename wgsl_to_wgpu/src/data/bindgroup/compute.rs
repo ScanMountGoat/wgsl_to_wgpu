@@ -116,7 +116,7 @@ pub mod bind_groups {
         pub bind_group0: &'a BindGroup0,
         pub bind_group1: &'a BindGroup1,
     }
-    impl<'a> BindGroups<'a> {
+    impl BindGroups<'_> {
         pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
             self.bind_group0.set(pass);
             self.bind_group1.set(pass);

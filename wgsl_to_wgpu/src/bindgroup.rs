@@ -90,7 +90,7 @@ pub fn bind_groups_module(
                     #(#bind_group_fields),*
                 }
 
-                impl<'a> BindGroups<'a> {
+                impl BindGroups<'_> {
                     pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
                         #(self.#set_groups)*
                     }
