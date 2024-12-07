@@ -35,12 +35,14 @@ extern crate wgpu_types as wgpu;
 use std::{
     collections::BTreeMap,
     io::Write,
+    path::Path,
     process::{Command, Stdio},
 };
 
 use bindgroup::{bind_groups_module, get_bind_group_data};
 use consts::pipeline_overridable_constants;
 use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
+use naga::{valid::ValidationFlags, WithSpan};
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
@@ -52,8 +54,11 @@ mod entry;
 mod structs;
 mod wgsl;
 
-/// Errors while generating Rust source for a WGSl shader module.
-#[derive(Debug, PartialEq, Eq, Error)]
+pub use naga::valid::Capabilities as WgslCapabilities;
+
+/// Errors while generating Rust source for a WGSL shader module.
+#[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum CreateModuleError {
     /// Bind group sets must be consecutive and start from 0.
     /// See `bind_group_layouts` for
@@ -64,6 +69,74 @@ pub enum CreateModuleError {
     /// Each binding resource must be associated with exactly one binding index.
     #[error("duplicate binding found with index `{binding}`")]
     DuplicateBinding { binding: u32 },
+
+    /// The shader source could not be parsed.
+    #[error("failed to parse: {error}")]
+    ParseError {
+        error: naga::front::wgsl::ParseError,
+    },
+
+    /// The shader source could not be validated.
+    #[error("failed to validate: {error}")]
+    ValidationError {
+        error: WithSpan<naga::valid::ValidationError>,
+    },
+}
+
+impl CreateModuleError {
+    /// Writes a diagnostic error to stderr.
+    pub fn emit_to_stderr(&self, wgsl_source: &str) {
+        match self {
+            CreateModuleError::ParseError { error } => error.emit_to_stderr(wgsl_source),
+            CreateModuleError::ValidationError { error } => error.emit_to_stderr(wgsl_source),
+            other => {
+                eprintln!("{}", other)
+            }
+        }
+    }
+
+    /// Writes a diagnostic error to stderr, including a source path.
+    pub fn emit_to_stderr_with_path(&self, wgsl_source: &str, path: impl AsRef<Path>) {
+        let path = path.as_ref();
+        match self {
+            CreateModuleError::ParseError { error } => {
+                error.emit_to_stderr_with_path(wgsl_source, path)
+            }
+            CreateModuleError::ValidationError { error } => {
+                error.emit_to_stderr_with_path(wgsl_source, &path.to_string_lossy())
+            }
+            other => {
+                eprintln!("{}: {}", path.to_string_lossy(), other)
+            }
+        }
+    }
+
+    /// Creates a diagnostic string from the error.
+    pub fn emit_to_string(&self, wgsl_source: &str) -> String {
+        match self {
+            CreateModuleError::ParseError { error } => error.emit_to_string(wgsl_source),
+            CreateModuleError::ValidationError { error } => error.emit_to_string(wgsl_source),
+            other => {
+                format!("{}", other)
+            }
+        }
+    }
+
+    /// Creates a diagnostic string from the error, including a source path.
+    pub fn emit_to_string_with_path(&self, wgsl_source: &str, path: impl AsRef<Path>) -> String {
+        let path = path.as_ref();
+        match self {
+            CreateModuleError::ParseError { error } => {
+                error.emit_to_string_with_path(wgsl_source, path)
+            }
+            CreateModuleError::ValidationError { error } => {
+                error.emit_to_string_with_path(wgsl_source, &path.to_string_lossy())
+            }
+            other => {
+                format!("{}: {}", path.to_string_lossy(), other)
+            }
+        }
+    }
 }
 
 /// Options for configuring the generated bindings to work with additional dependencies.
@@ -105,6 +178,24 @@ pub struct WriteOptions {
     /// or the generated code is not included in the src directory,
     /// leave this at its default value of `false`.
     pub rustfmt: bool,
+
+    /// Perform semantic validation on the code.
+    pub validate: Option<ValidationOptions>,
+}
+
+/// Options for semantic validation.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ValidationOptions {
+    /// The IR capabilities to support.
+    pub capabilities: WgslCapabilities,
+}
+
+impl Default for ValidationOptions {
+    fn default() -> Self {
+        Self {
+            capabilities: WgslCapabilities::all(),
+        }
+    }
 }
 
 /// The format to use for matrix and vector types.
@@ -138,23 +229,30 @@ impl Default for MatrixVectorTypes {
 /**
 ```rust no_run
 // build.rs
-fn main() {
-    println!("cargo:rerun-if-changed=src/shader.wgsl");
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let wgsl_file = "src/shader.wgsl";
+    println!("cargo:rerun-if-changed={wgsl_file}");
 
     // Read the shader source file.
-    let wgsl_source = std::fs::read_to_string("src/shader.wgsl").unwrap();
+    let wgsl_source = std::fs::read_to_string(wgsl_file)?;
 
     // Configure the output based on the dependencies for the project.
     let options = wgsl_to_wgpu::WriteOptions {
         derive_bytemuck_vertex: true,
         derive_encase_host_shareable: true,
         matrix_vector_types: wgsl_to_wgpu::MatrixVectorTypes::Glam,
+        validate: Some(Default::default()),
         ..Default::default()
     };
 
     // Generate the bindings.
-    let text = wgsl_to_wgpu::create_shader_module(&wgsl_source, "shader.wgsl", options).unwrap();
-    std::fs::write("src/shader.rs", text.as_bytes()).unwrap();
+    let text = wgsl_to_wgpu::create_shader_module(&wgsl_source, "shader.wgsl", options)
+        .inspect_err(|error| error.emit_to_stderr_with_path(&wgsl_source, wgsl_file))
+        // Don't print out same error twice
+        .map_err(|_| "Failed to validate shader")?;
+
+    std::fs::write("src/shader.rs", text.as_bytes())?;
+    Ok(())
 }
 ```
  */
@@ -177,7 +275,7 @@ pub fn create_shader_module(
 ```rust no_run
 // build.rs
 # fn generate_wgsl_source_string() -> String { String::new() }
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>>{
     // Generate the shader at build time.
     let wgsl_source = generate_wgsl_source_string();
 
@@ -186,12 +284,19 @@ fn main() {
         derive_bytemuck_vertex: true,
         derive_encase_host_shareable: true,
         matrix_vector_types: wgsl_to_wgpu::MatrixVectorTypes::Glam,
+        validate: Some(wgsl_to_wgpu::ValidationOptions {
+            capabilities: wgsl_to_wgpu::WgslCapabilities::all(),
+        }),
         ..Default::default()
     };
 
     // Generate the bindings.
-    let text = wgsl_to_wgpu::create_shader_module_embedded(&wgsl_source, options).unwrap();
-    std::fs::write("src/shader.rs", text.as_bytes()).unwrap();
+    let text = wgsl_to_wgpu::create_shader_module_embedded(&wgsl_source, options)
+        .inspect_err(|error| error.emit_to_stderr(&wgsl_source))
+        // Don't print out same error twice
+        .map_err(|_| "Failed to validate shader")?;
+    std::fs::write("src/shader.rs", text.as_bytes())?;
+    Ok(())
 }
 ```
  */
@@ -207,7 +312,14 @@ fn create_shader_module_inner(
     wgsl_include_path: Option<&str>,
     options: WriteOptions,
 ) -> Result<String, CreateModuleError> {
-    let module = naga::front::wgsl::parse_str(wgsl_source).unwrap();
+    let module = naga::front::wgsl::parse_str(wgsl_source)
+        .map_err(|error| CreateModuleError::ParseError { error })?;
+
+    if let Some(options) = options.validate.as_ref() {
+        naga::valid::Validator::new(ValidationFlags::all(), options.capabilities)
+            .validate(&module)
+            .map_err(|error| CreateModuleError::ValidationError { error })?;
+    }
 
     let bind_group_data = get_bind_group_data(&module)?;
 
@@ -969,5 +1081,48 @@ mod test {
             quote!(wgpu::ShaderStages::all()),
             quote_shader_stages(wgpu::ShaderStages::all())
         );
+    }
+
+    #[test]
+    fn create_shader_module_parse_error() {
+        let source = indoc! {r#"
+            var<push_constant> consts: vec4<f32>;
+
+            @fragment
+            fn fs_main() }
+        "#};
+
+        let result = create_shader_module(source, "shader.wgsl", WriteOptions::default());
+
+        assert!(
+            matches!(result, Err(CreateModuleError::ParseError { .. })),
+            "{result:?} is ParseError"
+        )
+    }
+
+    #[test]
+    fn create_shader_module_semantic_error() {
+        let source = indoc! {r#"
+            var<push_constant> consts: vec4<f32>;
+
+            @fragment
+            fn fs_main() {
+                consts.x = 1;
+            }
+        "#};
+
+        let result = create_shader_module(
+            source,
+            "shader.wgsl",
+            WriteOptions {
+                validate: Some(Default::default()),
+                ..Default::default()
+            },
+        );
+
+        assert!(
+            matches!(result, Err(CreateModuleError::ValidationError { .. }),),
+            "{result:?} is ValidationError"
+        )
     }
 }

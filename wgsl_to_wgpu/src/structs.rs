@@ -302,6 +302,7 @@ mod tests {
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
+                ..Default::default()
             },
         );
     }
@@ -318,6 +319,7 @@ mod tests {
                 derive_serde: true,
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
+                ..Default::default()
             },
         );
     }
@@ -357,6 +359,7 @@ mod tests {
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
+                ..Default::default()
             },
         );
 
@@ -402,6 +405,7 @@ mod tests {
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
+                ..Default::default()
             },
         );
 
@@ -432,6 +436,7 @@ mod tests {
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
+                ..Default::default()
             },
         );
     }
