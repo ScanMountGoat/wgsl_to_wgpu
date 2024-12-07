@@ -6,6 +6,14 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## unreleased
+### Added
+* Added option to write options for performing naga shader validation.
+* Added `emit_to_stderr` and `emit_to_stderr_with_path` methods to `CreateModuleError` for printing colored and formatted shader errors. 
+
+### Changed
+* Changed `create_shader_module` and `create_shader_module_embedded` to return naga parse errors instead of panic.
+
 ## 0.11.1 - 2024-11-11
 ### Changed
 * Exposed shader source string as a public constant in generated code.
