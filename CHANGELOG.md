@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## unreleased
 ### Added
 * Added option to write options for performing naga shader validation.
-* Added `emit_to_stderr` and `emit_to_stderr_with_path` methods to `CreateModuleError` for printing colored and formatted shader errors. 
+* Added `emit_to_stderr` and `emit_to_stderr_with_path` methods to `CreateModuleError` for printing colored and formatted shader errors.
+* Added PUSH_CONSTANT_STAGES constant to generated code.
 
 ### Changed
 * Changed `create_shader_module` and `create_shader_module_embedded` to return naga parse errors instead of panic.

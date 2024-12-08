@@ -54,7 +54,7 @@ WGPU will still validate the size of the buffer binding at runtime.
 - Vertex attributes using floating point types in WGSL like `vec2<f32>` are assumed to use float inputs instead of normalized attributes like unorm or snorm integers.
 - All textures are assumed to be filterable and all samplers are assumed to be filtering. This may lead to compatibility issues. This can usually be resolved by requesting the native only feature TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES.
 - It's possible to achieve slightly better performance than the generated code in some cases like avoiding redundant bind group bindings. This should be addressed by using some handwritten code where appropriate.
-- Pipelines only define a single push constant range shared by all stages for simplicity. Set the data using a single call with offset 0 and the appropriate used stages like `wgpu::ShaderStages::VERTEX_FRAGMENT`.
+- Pipelines only define a single push constant range for simplicity. Set the data using a single call with offset 0 and the accessed stages in the generated `PUSH_CONSTANT_STAGES` constant.
 
 ## Publishing Crates
 Rust expects build scripts to not modify files outside of OUT_DIR. The provided example project outputs the generated bindings to the `src/` directory for documentation purposes. 
