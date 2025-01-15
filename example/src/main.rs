@@ -30,7 +30,7 @@ struct State {
 impl State {
     async fn new(window: Window) -> Self {
         let window = Arc::new(window);
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });

@@ -43,14 +43,14 @@ fn use_vars() -> f32 {
     x = scalar;
     x = vector.x;
     x = matrix[0][0];
-    x = textureLoad(color_texture1, vec2(0), 0);
-    x = textureLoad(color_texture2, vec2(0), 0);
+    x = f32(textureLoad(color_texture1, vec2(0), 0).x);
+    x = f32(textureLoad(color_texture2, vec2(0), 0).x);
     x = textureSample(color_texture3, color_sampler, vec2(0.0)).x;
     x = textureSampleCompare(depth_texture, comparison_sampler, vec2(0.0), 0.0);
-    x = textureLoad(storage_tex_read, vec2(0));
-    x = textureLoad(storage_tex_read_write, vec2(0));
-    x = textureLoad(color_texture_array_2d, vec2(0), 0, 0);
-    x = textureLoad(color_texture_array_cube, vec3(0), 0, 0);
+    x = textureLoad(storage_tex_read, vec2(0)).x;
+    x = f32(textureLoad(storage_tex_read_write, vec2(0)).x);
+    x = textureLoad(color_texture_array_2d, vec2(0), 0, 0).x;
+    x = f32(textureLoad(color_texture_array_cube, vec3(0), 0, 0).x);
     return x;
 }
 

@@ -183,6 +183,10 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
         naga::TypeInner::BindingArray { base: _, size: _ } => todo!(),
         naga::TypeInner::AccelerationStructure => todo!(),
         naga::TypeInner::RayQuery => todo!(),
+        naga::TypeInner::Array {
+            size: naga::ArraySize::Pending(_),
+            ..
+        } => todo!(),
     }
 }
 
