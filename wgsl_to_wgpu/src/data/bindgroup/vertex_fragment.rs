@@ -347,6 +347,16 @@ pub mod bind_groups {
             self.set_bind_group(index, bind_group, offsets);
         }
     }
+    impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
+        fn set_bind_group(
+            &mut self,
+            index: u32,
+            bind_group: &wgpu::BindGroup,
+            offsets: &[wgpu::DynamicOffset],
+        ) {
+            self.set_bind_group(index, bind_group, offsets);
+        }
+    }
 }
 pub fn set_bind_groups<P: bind_groups::SetBindGroup>(
     pass: &mut P,
