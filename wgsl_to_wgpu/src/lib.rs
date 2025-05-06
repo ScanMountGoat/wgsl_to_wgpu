@@ -462,7 +462,8 @@ fn pretty_print_rustfmt(tokens: TokenStream) -> String {
 
         let output = proc.wait_with_output().unwrap();
         if output.status.success() {
-            return String::from_utf8(output.stdout).unwrap();
+            // Don't modify line endings.
+            return String::from_utf8(output.stdout).unwrap().replace("\r", "");
         }
     }
     value.to_string()

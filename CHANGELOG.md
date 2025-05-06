@@ -6,6 +6,10 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## unreleased
+### Changed
+* Changed `rustfmt` option to use LF instead of CRLF line endings on Windows to match the default LF line endings with the option disabled.
+
 ## 0.13.1 - 2025-03-09
 ### Added
 * Added support for `wgpu::RenderBundleEncoder` to `bind_groups::BindGroups::set` method.
