@@ -2,15 +2,19 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{wgsl::rust_type, MatrixVectorTypes};
+use crate::{wgsl::rust_type, MatrixVectorTypes, TypePath};
 
-pub fn consts(module: &naga::Module) -> Vec<TokenStream> {
+pub fn consts<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>
+where
+    F: Fn(&str) -> TypePath,
+{
     // Create matching Rust constants for WGSl constants.
     module
         .constants
         .iter()
-        .filter_map(|(_, t)| -> Option<TokenStream> {
-            let name = Ident::new(t.name.as_ref()?, Span::call_site());
+        .filter_map(|(_, t)| {
+            let path = demangle(t.name.as_ref()?);
+            let name = Ident::new(&path.name, Span::call_site());
 
             // TODO: Add support for f64 and f16 once naga supports them.
             let type_and_value = match &module.global_expressions[t.init] {
@@ -28,7 +32,7 @@ pub fn consts(module: &naga::Module) -> Vec<TokenStream> {
                 _ => None,
             }?;
 
-            Some(quote!( pub const #name: #type_and_value;))
+            Some((path, quote!( pub const #name: #type_and_value;)))
         })
         .collect()
 }
@@ -139,7 +143,7 @@ fn override_key(o: &naga::Override) -> String {
 mod tests {
     use super::*;
 
-    use crate::assert_tokens_eq;
+    use crate::{assert_tokens_eq, demangle_identity};
     use indoc::indoc;
 
     #[test]
@@ -161,7 +165,8 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let consts = consts(&module);
+        let consts = consts(&module, demangle_identity);
+        let consts = consts.iter().map(|(_, c)| c);
         let actual = quote!(#(#consts)*);
 
         assert_tokens_eq!(

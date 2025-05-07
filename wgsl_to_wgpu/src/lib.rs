@@ -312,10 +312,13 @@ pub fn create_shader_module_embedded(
     create_shader_module_inner(wgsl_source, None, options, demangle_identity)
 }
 
-// TODO: docs
-#[derive(PartialEq, Eq)]
+/// A full qualified path like `a::b::Item` split into `["a", "b"]` and `Item`.
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypePath {
+    /// The parent components like `["a", "b"]` in `a::b::Item`.
+    /// The root module should have no parents.
     pub parents: Vec<String>,
+    /// The name of the item like "Item" for `a::b::Item`.
     pub name: String,
 }
 
@@ -326,7 +329,11 @@ fn demangle_identity(name: &str) -> TypePath {
     }
 }
 
-// TODO: docs
+/// Generates Rust modules for a WGSL shader embedded as a string literal
+/// with modules determined by `demangle`.
+///
+/// # Examples
+// TODO: examples
 pub fn create_shader_modules<F>(
     wgsl_source: &str,
     options: WriteOptions,
@@ -363,9 +370,6 @@ fn create_shader_module_inner<F>(
 where
     F: Fn(&str) -> TypePath + Clone,
 {
-    // TODO: group items into modules instead?
-    // init modules -> add module(s) -> generate string(s)
-
     let module = naga::front::wgsl::parse_str(wgsl_source)
         .map_err(|error| CreateModuleError::ParseError { error })?;
 
@@ -375,27 +379,20 @@ where
             .map_err(|error| CreateModuleError::ValidationError { error })?;
     }
 
-    let bind_group_data = get_bind_group_data(&module)?;
+    let bind_group_data = get_bind_group_data(&module, demangle.clone())?;
 
     let global_stages = wgsl::global_shader_stages(&module);
     let entry_stages = wgsl::entry_stages(&module);
 
     // Collect tokens for each item.
     let structs = structs::structs(&module, options, demangle.clone());
-    let consts = consts::consts(&module);
+    let consts = consts::consts(&module, demangle.clone());
     let bind_groups_module = bind_groups_module(&bind_group_data, &global_stages);
     let vertex_methods = vertex_struct_methods(&module, demangle.clone());
     let compute_module = compute_module(&module);
     let entry_point_constants = entry_point_constants(&module);
     let vertex_states = vertex_states(&module, demangle);
     let fragment_states = fragment_states(&module);
-
-    // Place items into appropriate modules.
-    let mut root = Module::default();
-    root = add_module_items(structs, root);
-    root = add_module_items(vertex_methods, root);
-
-    let structs = root.to_tokens();
 
     // Use a string literal if no include path is provided.
     let included_source = wgsl_include_path
@@ -444,19 +441,33 @@ where
         }
     });
 
-    let output = quote! {
-        #structs
-        #(#consts)*
-        #override_constants
-        #bind_groups_module
-        #compute_module
-        #entry_point_constants
-        #vertex_states
-        #fragment_states
-        #create_shader_module
-        #push_constant_stages
-        #create_pipeline_layout
-    };
+    // Place items into appropriate modules.
+    let mut root = Module::default();
+    root = add_module_items(consts, root);
+    root = add_module_items(structs, root);
+    root = add_module_items(vertex_methods, root);
+
+    // Place items generated for this module in the root module.
+    let root_items = vec![(
+        TypePath {
+            parents: Vec::new(),
+            name: String::new(),
+        },
+        quote! {
+            #override_constants
+            #bind_groups_module
+            #compute_module
+            #entry_point_constants
+            #vertex_states
+            #fragment_states
+            #create_shader_module
+            #push_constant_stages
+            #create_pipeline_layout
+        },
+    )];
+    root = add_module_items(root_items, root);
+
+    let output = root.to_tokens();
 
     if options.rustfmt {
         Ok(pretty_print_rustfmt(output))
