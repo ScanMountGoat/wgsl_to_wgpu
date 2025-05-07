@@ -261,7 +261,12 @@ pub fn create_shader_module(
     wgsl_include_path: &str,
     options: WriteOptions,
 ) -> Result<String, CreateModuleError> {
-    create_shader_module_inner(wgsl_source, Some(wgsl_include_path), options)
+    create_shader_module_inner(
+        wgsl_source,
+        Some(wgsl_include_path),
+        options,
+        demangle_identity,
+    )
 }
 
 // TODO: Show how to convert a naga module back to wgsl.
@@ -304,14 +309,63 @@ pub fn create_shader_module_embedded(
     wgsl_source: &str,
     options: WriteOptions,
 ) -> Result<String, CreateModuleError> {
-    create_shader_module_inner(wgsl_source, None, options)
+    create_shader_module_inner(wgsl_source, None, options, demangle_identity)
 }
 
-fn create_shader_module_inner(
+// TODO: docs
+#[derive(PartialEq, Eq)]
+pub struct TypePath {
+    pub parents: Vec<String>,
+    pub name: String,
+}
+
+fn demangle_identity(name: &str) -> TypePath {
+    TypePath {
+        parents: Vec::new(),
+        name: name.to_string(),
+    }
+}
+
+// TODO: docs
+pub fn create_shader_modules<F>(
+    wgsl_source: &str,
+    options: WriteOptions,
+    demangle: F,
+) -> Result<String, CreateModuleError>
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
+    // TODO: how to handle multiple generated shaders sharing modules?
+    create_shader_module_inner(wgsl_source, None, options, demangle)
+}
+
+#[derive(Debug, Default)]
+struct Module {
+    name: String,
+    items: Vec<TokenStream>,
+    submodules: Vec<Module>,
+}
+
+impl Module {
+    fn to_tokens(&self) -> TokenStream {
+        let mut structs = quote!();
+        add_module(self, &mut structs);
+        structs
+    }
+}
+
+fn create_shader_module_inner<F>(
     wgsl_source: &str,
     wgsl_include_path: Option<&str>,
     options: WriteOptions,
-) -> Result<String, CreateModuleError> {
+    demangle: F,
+) -> Result<String, CreateModuleError>
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
+    // TODO: group items into modules instead?
+    // init modules -> add module(s) -> generate string(s)
+
     let module = naga::front::wgsl::parse_str(wgsl_source)
         .map_err(|error| CreateModuleError::ParseError { error })?;
 
@@ -326,15 +380,22 @@ fn create_shader_module_inner(
     let global_stages = wgsl::global_shader_stages(&module);
     let entry_stages = wgsl::entry_stages(&module);
 
-    // Write all the structs, including uniforms and entry function inputs.
-    let structs = structs::structs(&module, options);
+    // Collect tokens for each item.
+    let structs = structs::structs(&module, options, demangle.clone());
     let consts = consts::consts(&module);
     let bind_groups_module = bind_groups_module(&bind_group_data, &global_stages);
-    let vertex_module = vertex_struct_methods(&module);
+    let vertex_methods = vertex_struct_methods(&module, demangle.clone());
     let compute_module = compute_module(&module);
     let entry_point_constants = entry_point_constants(&module);
-    let vertex_states = vertex_states(&module);
+    let vertex_states = vertex_states(&module, demangle);
     let fragment_states = fragment_states(&module);
+
+    // Place items into appropriate modules.
+    let mut root = Module::default();
+    root = add_module_items(structs, root);
+    root = add_module_items(vertex_methods, root);
+
+    let structs = root.to_tokens();
 
     // Use a string literal if no include path is provided.
     let included_source = wgsl_include_path
@@ -388,7 +449,6 @@ fn create_shader_module_inner(
         #(#consts)*
         #override_constants
         #bind_groups_module
-        #vertex_module
         #compute_module
         #entry_point_constants
         #vertex_states
@@ -402,6 +462,46 @@ fn create_shader_module_inner(
         Ok(pretty_print_rustfmt(output))
     } else {
         Ok(pretty_print(output))
+    }
+}
+
+fn add_module_items(structs: Vec<(TypePath, TokenStream)>, mut root: Module) -> Module {
+    for (item, tokens) in structs {
+        let mut module = &mut root;
+        for name in item.parents {
+            if !module.submodules.iter().any(|m| m.name == name) {
+                module.submodules.push(Module {
+                    name: name.clone(),
+                    items: Vec::new(),
+                    submodules: Vec::new(),
+                });
+            }
+            module = module
+                .submodules
+                .iter_mut()
+                .find(|m| m.name == name)
+                .unwrap();
+        }
+        module.items.push(tokens.clone());
+    }
+    root
+}
+
+fn add_module(root: &Module, structs: &mut TokenStream) {
+    for item in &root.items {
+        *structs = quote!(#structs #item);
+    }
+    for m in &root.submodules {
+        let mut submodule = quote!();
+        add_module(m, &mut submodule);
+
+        let name = Ident::new(&m.name, Span::call_site());
+        *structs = quote! {
+            #structs
+            mod #name {
+                #submodule
+            }
+        }
     }
 }
 
@@ -736,6 +836,12 @@ mod test {
         ));
     }
 
+    fn items_to_tokens(items: Vec<(TypePath, TokenStream)>) -> TokenStream {
+        let mut root = Module::default();
+        root = add_module_items(items, root);
+        root.to_tokens()
+    }
+
     #[test]
     fn write_vertex_module_empty() {
         let source = indoc! {r#"
@@ -744,9 +850,9 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = vertex_struct_methods(&module);
+        let actual = vertex_struct_methods(&module, demangle_identity);
 
-        assert_tokens_eq!(quote!(), actual);
+        assert_tokens_eq!(quote!(), items_to_tokens(actual));
     }
 
     #[test]
@@ -764,7 +870,7 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = vertex_struct_methods(&module);
+        let actual = vertex_struct_methods(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {
@@ -802,7 +908,7 @@ mod test {
                     }
                 }
             },
-            actual
+            items_to_tokens(actual)
         );
     }
 
@@ -821,7 +927,7 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = vertex_struct_methods(&module);
+        let actual = vertex_struct_methods(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {
@@ -859,7 +965,7 @@ mod test {
                     }
                 }
             },
-            actual
+            items_to_tokens(actual)
         );
     }
 
@@ -879,7 +985,7 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = vertex_struct_methods(&module);
+        let actual = vertex_struct_methods(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {
@@ -917,7 +1023,7 @@ mod test {
                     }
                 }
             },
-            actual
+            items_to_tokens(actual)
         );
     }
 
@@ -936,7 +1042,7 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = vertex_struct_methods(&module);
+        let actual = vertex_struct_methods(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {
@@ -974,7 +1080,7 @@ mod test {
                     }
                 }
             },
-            actual
+            items_to_tokens(actual)
         );
     }
 

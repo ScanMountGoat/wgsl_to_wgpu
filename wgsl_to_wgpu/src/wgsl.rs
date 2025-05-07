@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::MatrixVectorTypes;
+use crate::{MatrixVectorTypes, TypePath};
 use naga::StructMember;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
@@ -307,31 +307,38 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
 
 #[derive(PartialEq, Eq)]
 pub struct VertexInput {
-    pub name: String,
+    pub name: TypePath,
     pub fields: Vec<(u32, StructMember)>,
 }
 
 // TODO: Handle errors.
 // Collect the necessary data to generate an equivalent Rust struct.
-pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
+pub fn get_vertex_input_structs<F>(module: &naga::Module, demangle: F) -> Vec<VertexInput>
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let mut structs: Vec<_> = module
         .entry_points
         .iter()
         .filter(|e| e.stage == naga::ShaderStage::Vertex)
-        .flat_map(|vertex_entry| vertex_entry_structs(vertex_entry, module))
+        .flat_map(|vertex_entry| vertex_entry_structs(vertex_entry, module, demangle.clone()))
         .collect();
 
     // Remove structs that are used more than once.
-    structs.sort_by_key(|s| s.name.clone());
-    structs.dedup_by_key(|s| s.name.clone());
+    structs.sort_by_key(|s| s.name.name.clone());
+    structs.dedup_by_key(|s| s.name.name.clone());
 
     structs
 }
 
-pub fn vertex_entry_structs(
+pub fn vertex_entry_structs<F>(
     vertex_entry: &naga::EntryPoint,
     module: &naga::Module,
-) -> Vec<VertexInput> {
+    demangle: F,
+) -> Vec<VertexInput>
+where
+    F: Fn(&str) -> TypePath,
+{
     vertex_entry
         .function
         .arguments
@@ -342,7 +349,7 @@ pub fn vertex_entry_structs(
             match &arg_type.inner {
                 naga::TypeInner::Struct { members, span: _ } => {
                     let input = VertexInput {
-                        name: arg_type.name.as_ref().unwrap().clone(),
+                        name: demangle(arg_type.name.as_ref()?),
                         fields: members
                             .iter()
                             .filter_map(|member| {
