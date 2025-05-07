@@ -136,7 +136,15 @@ pub fn buffer_binding_type(storage: naga::AddressSpace) -> TokenStream {
     }
 }
 
-pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTypes) -> TokenStream {
+pub fn rust_type<F>(
+    module: &naga::Module,
+    ty: &naga::Type,
+    format: MatrixVectorTypes,
+    demangle: F,
+) -> TokenStream
+where
+    F: Fn(&str) -> TypePath,
+{
     match &ty.inner {
         naga::TypeInner::Scalar(scalar) => rust_scalar_type(scalar),
         naga::TypeInner::Vector { size, scalar } => match format {
@@ -163,7 +171,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             size: naga::ArraySize::Constant(size),
             stride: _,
         } => {
-            let element_type = rust_type(module, &module.types[*base], format);
+            let element_type = rust_type(module, &module.types[*base], format, demangle);
             let count = Literal::usize_unsuffixed(size.get() as usize);
             quote!([#element_type; #count])
         }
@@ -177,7 +185,9 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             members: _,
             span: _,
         } => {
-            let name = Ident::new(ty.name.as_ref().unwrap(), Span::call_site());
+            // TODO: Fix references to types in other modules.
+            let path = demangle(ty.name.as_ref().unwrap());
+            let name = Ident::new(&path.name, Span::call_site());
             quote!(#name)
         }
         naga::TypeInner::BindingArray { base: _, size: _ } => todo!(),

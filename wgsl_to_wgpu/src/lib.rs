@@ -391,7 +391,7 @@ where
     let vertex_methods = vertex_struct_methods(&module, demangle.clone());
     let compute_module = compute_module(&module);
     let entry_point_constants = entry_point_constants(&module);
-    let vertex_states = vertex_states(&module, demangle);
+    let vertex_states = vertex_states(&module, demangle.clone());
     let fragment_states = fragment_states(&module);
 
     // Use a string literal if no include path is provided.
@@ -433,7 +433,7 @@ where
         }
     };
 
-    let override_constants = pipeline_overridable_constants(&module);
+    let override_constants = pipeline_overridable_constants(&module, demangle);
 
     let push_constant_stages = push_constant_stages.map(|stages| {
         quote! {

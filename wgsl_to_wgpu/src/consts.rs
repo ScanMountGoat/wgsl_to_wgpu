@@ -37,7 +37,10 @@ where
         .collect()
 }
 
-pub fn pipeline_overridable_constants(module: &naga::Module) -> TokenStream {
+pub fn pipeline_overridable_constants<F>(module: &naga::Module, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let overrides: Vec<_> = module.overrides.iter().map(|(_, o)| o).collect();
 
     let fields: Vec<_> = overrides
@@ -45,7 +48,12 @@ pub fn pipeline_overridable_constants(module: &naga::Module) -> TokenStream {
         .map(|o| {
             let name = Ident::new(o.name.as_ref().unwrap(), Span::call_site());
             // TODO: Do we only need to handle scalar types here?
-            let ty = rust_type(module, &module.types[o.ty], MatrixVectorTypes::Rust);
+            let ty = rust_type(
+                module,
+                &module.types[o.ty],
+                MatrixVectorTypes::Rust,
+                demangle.clone(),
+            );
 
             if o.init.is_some() {
                 quote!(pub #name: Option<#ty>)
@@ -206,7 +214,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let actual = pipeline_overridable_constants(&module);
+        let actual = pipeline_overridable_constants(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {
@@ -267,7 +275,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pipeline_overridable_constants(&module);
+        let actual = pipeline_overridable_constants(&module, demangle_identity);
         assert_tokens_eq!(quote!(), actual);
     }
 }

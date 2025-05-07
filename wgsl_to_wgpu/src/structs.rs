@@ -13,7 +13,7 @@ pub fn structs<F>(
     demangle: F,
 ) -> Vec<(TypePath, TokenStream)>
 where
-    F: Fn(&str) -> TypePath,
+    F: Fn(&str) -> TypePath + Clone,
 {
     // Initialize the layout calculator provided by naga.
     let mut layouter = naga::proc::Layouter::default();
@@ -55,6 +55,7 @@ where
                     module,
                     options,
                     &global_variable_types,
+                    demangle.clone(),
                 );
                 Some((path, s))
             } else {
@@ -64,7 +65,8 @@ where
         .collect()
 }
 
-fn rust_struct(
+#[allow(clippy::too_many_arguments)]
+fn rust_struct<F>(
     name: &str,
     members: &[naga::StructMember],
     layouter: &naga::proc::Layouter,
@@ -72,7 +74,11 @@ fn rust_struct(
     module: &naga::Module,
     options: WriteOptions,
     global_variable_types: &HashSet<Handle<Type>>,
-) -> TokenStream {
+    demangle: F,
+) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let struct_name = Ident::new(name, Span::call_site());
 
     // Skip builtins since they don't require user specified data.
@@ -111,7 +117,7 @@ fn rust_struct(
     };
 
     let has_rts_array = struct_has_rts_array_member(&members, module);
-    let members = struct_members(&members, module, options);
+    let members = struct_members(&members, module, options, demangle);
     let mut derives = Vec::new();
 
     derives.push(quote!(Debug));
@@ -205,11 +211,15 @@ fn add_types_recursive(
     }
 }
 
-fn struct_members(
+fn struct_members<F>(
     members: &[naga::StructMember],
     module: &naga::Module,
     options: WriteOptions,
-) -> Vec<TokenStream> {
+    demangle: F,
+) -> Vec<TokenStream>
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     members
         .iter()
         .enumerate()
@@ -226,14 +236,19 @@ fn struct_members(
                 if index != members.len() - 1 {
                     panic!("Only the last field of a struct can be a runtime-sized array");
                 }
-                let element_type =
-                    rust_type(module, &module.types[*base], options.matrix_vector_types);
+                let element_type = rust_type(
+                    module,
+                    &module.types[*base],
+                    options.matrix_vector_types,
+                    demangle.clone(),
+                );
                 quote!(
                     #[size(runtime)]
                     pub #member_name: Vec<#element_type>
                 )
             } else {
-                let member_type = rust_type(module, ty, options.matrix_vector_types);
+                let member_type =
+                    rust_type(module, ty, options.matrix_vector_types, demangle.clone());
                 quote!(pub #member_name: #member_type)
             }
         })
