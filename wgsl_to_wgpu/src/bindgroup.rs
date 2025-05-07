@@ -1,5 +1,6 @@
 use crate::{
     indexed_name_to_ident, quote_shader_stages, wgsl::buffer_binding_type, CreateModuleError,
+    TypePath,
 };
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
@@ -11,7 +12,7 @@ pub struct GroupData<'a> {
 }
 
 pub struct GroupBinding<'a> {
-    pub name: Option<String>,
+    pub name: String,
     pub binding_index: u32,
     pub binding_type: &'a naga::Type,
     pub address_space: naga::AddressSpace,
@@ -148,7 +149,7 @@ fn bind_group_layout(module: &naga::Module, group_no: u32, group: &GroupData) ->
         .bindings
         .iter()
         .map(|binding| {
-            let binding_name = binding.name.as_ref().unwrap();
+            let binding_name = &binding.name;
             let field_name = Ident::new(binding_name, Span::call_site());
             let field_type = binding_field_type(module, &binding.binding_type.inner, binding_name);
             quote!(pub #field_name: #field_type)
@@ -220,10 +221,9 @@ fn bind_group_layout_entry(
 ) -> TokenStream {
     // Set visibility to all stages that access this binding.
     // This can avoid unneeded binding calls on some backends.
-    let shader_stages = binding
-        .name
-        .as_ref()
-        .and_then(|n| global_stages.get(n).copied())
+    let shader_stages = global_stages
+        .get(&binding.name)
+        .copied()
         .unwrap_or(wgpu::ShaderStages::NONE);
 
     let stages = quote_shader_stages(shader_stages);
@@ -375,8 +375,8 @@ fn bind_group(module: &naga::Module, group_no: u32, group: &GroupData) -> TokenS
         .iter()
         .map(|binding| {
             let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
-            let binding_name = binding.name.as_ref().unwrap();
-            let field_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
+            let binding_name = &binding.name;
+            let field_name = Ident::new(&binding.name, Span::call_site());
             let resource_type =
                 resource_ty(module, binding, &binding_index, binding_name, field_name);
 
@@ -485,9 +485,13 @@ fn resource_array_ty(
     }
 }
 
-pub fn get_bind_group_data(
+pub fn get_bind_group_data<F>(
     module: &naga::Module,
-) -> Result<BTreeMap<u32, GroupData>, CreateModuleError> {
+    demangle: F,
+) -> Result<BTreeMap<u32, GroupData>, CreateModuleError>
+where
+    F: Fn(&str) -> TypePath,
+{
     // Use a BTree to sort type and field names by group index.
     // This isn't strictly necessary but makes the generated code cleaner.
     let mut groups = BTreeMap::new();
@@ -500,8 +504,16 @@ pub fn get_bind_group_data(
             });
             let binding_type = &module.types[module.global_variables[global_handle.0].ty];
 
+            let path = demangle(global.name.as_ref().unwrap());
+
+            // The same binding name can be used in multiple modules.
+            // Convert the full path to avoid struct fields with the same name.
+            let mut components = path.parents;
+            components.push(path.name);
+            let name = components.join("_");
+
             let group_binding = GroupBinding {
-                name: global.name.clone(),
+                name,
                 binding_index: binding.binding,
                 binding_type,
                 address_space: global.space,
@@ -532,7 +544,7 @@ pub fn get_bind_group_data(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{assert_tokens_eq, wgsl};
+    use crate::{assert_tokens_eq, demangle_identity, wgsl};
     use indoc::indoc;
 
     #[test]
@@ -547,7 +559,12 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(3, get_bind_group_data(&module).unwrap().len());
+        assert_eq!(
+            3,
+            get_bind_group_data(&module, demangle_identity)
+                .unwrap()
+                .len()
+        );
     }
 
     #[test]
@@ -561,7 +578,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
         assert!(matches!(
-            get_bind_group_data(&module),
+            get_bind_group_data(&module, demangle_identity),
             Err(CreateModuleError::NonConsecutiveBindGroups)
         ));
     }
@@ -579,7 +596,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
         assert!(matches!(
-            get_bind_group_data(&module),
+            get_bind_group_data(&module, demangle_identity),
             Err(CreateModuleError::NonConsecutiveBindGroups)
         ));
     }
@@ -587,7 +604,7 @@ mod tests {
     fn test_bind_groups(wgsl: &str, rust: &str) {
         let module = naga::front::wgsl::parse_str(wgsl).unwrap();
 
-        let bind_group_data = get_bind_group_data(&module).unwrap();
+        let bind_group_data = get_bind_group_data(&module, demangle_identity).unwrap();
 
         let global_stages = wgsl::global_shader_stages(&module);
 

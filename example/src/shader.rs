@@ -15,6 +15,22 @@ pub struct Uniforms {
 pub struct PushConstants {
     pub color_matrix: glam::Mat4,
 }
+impl VertexInput {
+    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = [wgpu::VertexAttribute {
+        format: wgpu::VertexFormat::Float32x3,
+        offset: std::mem::offset_of!(VertexInput, position) as u64,
+        shader_location: 0,
+    }];
+    pub const fn vertex_buffer_layout(
+        step_mode: wgpu::VertexStepMode,
+    ) -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<VertexInput>() as u64,
+            step_mode,
+            attributes: &VertexInput::VERTEX_ATTRIBUTES,
+        }
+    }
+}
 pub struct OverrideConstants {
     pub force_black: bool,
     pub scale: Option<f32>,
@@ -179,22 +195,6 @@ pub fn set_bind_groups<P: bind_groups::SetBindGroup>(
 ) {
     bind_group0.set(pass);
     bind_group1.set(pass);
-}
-impl VertexInput {
-    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 1] = [wgpu::VertexAttribute {
-        format: wgpu::VertexFormat::Float32x3,
-        offset: std::mem::offset_of!(VertexInput, position) as u64,
-        shader_location: 0,
-    }];
-    pub const fn vertex_buffer_layout(
-        step_mode: wgpu::VertexStepMode,
-    ) -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<VertexInput>() as u64,
-            step_mode,
-            attributes: &VertexInput::VERTEX_ATTRIBUTES,
-        }
-    }
 }
 pub const ENTRY_VS_MAIN: &str = "vs_main";
 pub const ENTRY_FS_MAIN: &str = "fs_main";
