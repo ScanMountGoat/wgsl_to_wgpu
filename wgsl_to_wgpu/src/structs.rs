@@ -48,7 +48,7 @@ where
             if let naga::TypeInner::Struct { members, .. } = &t.inner {
                 let path = demangle(t.name.as_ref()?);
                 let s = rust_struct(
-                    &path.name,
+                    &path,
                     members,
                     &layouter,
                     t_handle,
@@ -67,7 +67,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 fn rust_struct<F>(
-    name: &str,
+    path: &TypePath,
     members: &[naga::StructMember],
     layouter: &naga::proc::Layouter,
     t_handle: naga::Handle<naga::Type>,
@@ -79,6 +79,7 @@ fn rust_struct<F>(
 where
     F: Fn(&str) -> TypePath + Clone,
 {
+    let name = &path.name;
     let struct_name = Ident::new(name, Span::call_site());
 
     // Skip builtins since they don't require user specified data.
@@ -117,7 +118,7 @@ where
     };
 
     let has_rts_array = struct_has_rts_array_member(&members, module);
-    let members = struct_members(&members, module, options, demangle);
+    let members = struct_members(path, &members, module, options, demangle);
     let mut derives = Vec::new();
 
     derives.push(quote!(Debug));
@@ -212,6 +213,7 @@ fn add_types_recursive(
 }
 
 fn struct_members<F>(
+    path: &TypePath,
     members: &[naga::StructMember],
     module: &naga::Module,
     options: WriteOptions,
@@ -237,6 +239,7 @@ where
                     panic!("Only the last field of a struct can be a runtime-sized array");
                 }
                 let element_type = rust_type(
+                    path,
                     module,
                     &module.types[*base],
                     options.matrix_vector_types,
@@ -247,8 +250,13 @@ where
                     pub #member_name: Vec<#element_type>
                 )
             } else {
-                let member_type =
-                    rust_type(module, ty, options.matrix_vector_types, demangle.clone());
+                let member_type = rust_type(
+                    path,
+                    module,
+                    ty,
+                    options.matrix_vector_types,
+                    demangle.clone(),
+                );
                 quote!(pub #member_name: #member_type)
             }
         })

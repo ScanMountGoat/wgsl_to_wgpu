@@ -1,10 +1,9 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use crate::{MatrixVectorTypes, TypePath};
 use naga::StructMember;
-use proc_macro2::{Literal, Span, TokenStream};
+use proc_macro2::{Literal, TokenStream};
 use quote::quote;
-use syn::Ident;
 
 pub fn global_shader_stages(module: &naga::Module) -> BTreeMap<String, wgpu::ShaderStages> {
     // Collect the shader stages for all entries that access a global variable.
@@ -137,6 +136,7 @@ pub fn buffer_binding_type(storage: naga::AddressSpace) -> TokenStream {
 }
 
 pub fn rust_type<F>(
+    path: &TypePath,
     module: &naga::Module,
     ty: &naga::Type,
     format: MatrixVectorTypes,
@@ -171,7 +171,7 @@ where
             size: naga::ArraySize::Constant(size),
             stride: _,
         } => {
-            let element_type = rust_type(module, &module.types[*base], format, demangle);
+            let element_type = rust_type(path, module, &module.types[*base], format, demangle);
             let count = Literal::usize_unsuffixed(size.get() as usize);
             quote!([#element_type; #count])
         }
@@ -185,9 +185,12 @@ where
             members: _,
             span: _,
         } => {
-            // TODO: Fix references to types in other modules.
-            let path = demangle(ty.name.as_ref().unwrap());
-            let name = Ident::new(&path.name, Span::call_site());
+            let member_path = demangle(ty.name.as_ref().unwrap());
+
+            // Use relative paths since we don't know the generated code's root path.
+            let name = relative_type_path(path, member_path);
+
+            let name: syn::Path = syn::parse_str(&name).unwrap();
             quote!(#name)
         }
         naga::TypeInner::BindingArray { base: _, size: _ } => todo!(),
@@ -198,6 +201,27 @@ where
             ..
         } => todo!(),
     }
+}
+
+fn relative_type_path(base: &TypePath, target: TypePath) -> String {
+    let base_path: PathBuf = base.parents.iter().collect();
+    let target_path: PathBuf = target.parents.iter().collect();
+    let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
+
+    // TODO: Implement this from scratch with tests?
+    let mut components: Vec<_> = relative_path
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Prefix(_) => None,
+            std::path::Component::RootDir => None,
+            std::path::Component::CurDir => None,
+            std::path::Component::ParentDir => Some("super".to_string()),
+            std::path::Component::Normal(s) => Some(s.to_str()?.to_string()),
+        })
+        .collect();
+    components.push(target.name);
+
+    components.join("::")
 }
 
 fn rust_matrix_type(rows: naga::VectorSize, columns: naga::VectorSize, width: u8) -> TokenStream {

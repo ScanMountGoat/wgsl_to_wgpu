@@ -49,6 +49,10 @@ where
             let name = Ident::new(o.name.as_ref().unwrap(), Span::call_site());
             // TODO: Do we only need to handle scalar types here?
             let ty = rust_type(
+                &TypePath {
+                    parents: Vec::new(),
+                    name: String::new(),
+                },
                 module,
                 &module.types[o.ty],
                 MatrixVectorTypes::Rust,
