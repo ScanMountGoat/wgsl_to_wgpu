@@ -90,7 +90,7 @@ impl CreateModuleError {
             CreateModuleError::ParseError { error } => error.emit_to_stderr(wgsl_source),
             CreateModuleError::ValidationError { error } => error.emit_to_stderr(wgsl_source),
             other => {
-                eprintln!("{}", other)
+                eprintln!("{other}")
             }
         }
     }
@@ -117,7 +117,7 @@ impl CreateModuleError {
             CreateModuleError::ParseError { error } => error.emit_to_string(wgsl_source),
             CreateModuleError::ValidationError { error } => error.emit_to_string(wgsl_source),
             other => {
-                format!("{}", other)
+                format!("{other}")
             }
         }
     }
@@ -603,7 +603,7 @@ mod test {
                 pub struct FragmentEntry<const N: usize> {
                     pub entry_point: &'static str,
                     pub targets: [Option<wgpu::ColorTargetState>; N],
-                    pub constants: std::collections::HashMap<String, f64>,
+                    pub constants: Vec<(&'static str, f64)>,
                 }
                 pub fn fragment_state<'a, const N: usize>(
                     module: &'a wgpu::ShaderModule,
@@ -868,9 +868,9 @@ mod test {
         let source = indoc! {r#"
             struct VertexInput0 {
                 @location(0) a: i32,
-                @location(1) a: vec2<i32>,
-                @location(2) a: vec3<i32>,
-                @location(3) a: vec4<i32>,
+                @location(1) b: vec2<i32>,
+                @location(2) c: vec3<i32>,
+                @location(3) d: vec4<i32>,
 
             };
 
@@ -892,17 +892,17 @@ mod test {
                         },
                         wgpu::VertexAttribute {
                             format: wgpu::VertexFormat::Sint32x2,
-                            offset: std::mem::offset_of!(VertexInput0, a) as u64,
+                            offset: std::mem::offset_of!(VertexInput0, b) as u64,
                             shader_location: 1,
                         },
                         wgpu::VertexAttribute {
                             format: wgpu::VertexFormat::Sint32x3,
-                            offset: std::mem::offset_of!(VertexInput0, a) as u64,
+                            offset: std::mem::offset_of!(VertexInput0, c) as u64,
                             shader_location: 2,
                         },
                         wgpu::VertexAttribute {
                             format: wgpu::VertexFormat::Sint32x4,
-                            offset: std::mem::offset_of!(VertexInput0, a) as u64,
+                            offset: std::mem::offset_of!(VertexInput0, d) as u64,
                             shader_location: 3,
                         },
                     ];

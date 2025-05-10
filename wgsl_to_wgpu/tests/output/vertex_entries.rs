@@ -81,7 +81,7 @@ pub const ENTRY_VS_MAIN_MULTIPLE: &str = "vs_main_multiple";
 pub struct VertexEntry<const N: usize> {
     pub entry_point: &'static str,
     pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-    pub constants: std::collections::HashMap<String, f64>,
+    pub constants: Vec<(&'static str, f64)>,
 }
 pub fn vertex_state<'a, const N: usize>(
     module: &'a wgpu::ShaderModule,

@@ -20,13 +20,10 @@ pub struct OverrideConstants {
     pub scale: Option<f32>,
 }
 impl OverrideConstants {
-    pub fn constants(&self) -> std::collections::HashMap<String, f64> {
-        let mut entries = std::collections::HashMap::from([(
-            "force_black".to_owned(),
-            if self.force_black { 1.0 } else { 0.0 },
-        )]);
+    pub fn constants(&self) -> Vec<(&'static str, f64)> {
+        let mut entries = vec![("force_black", if self.force_black { 1.0 } else { 0.0 })];
         if let Some(value) = self.scale {
-            entries.insert("scale".to_owned(), value as f64);
+            entries.push(("scale", value as f64));
         }
         entries
     }
@@ -205,7 +202,7 @@ pub const ENTRY_FS_MAIN: &str = "fs_main";
 pub struct VertexEntry<const N: usize> {
     pub entry_point: &'static str,
     pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-    pub constants: std::collections::HashMap<String, f64>,
+    pub constants: Vec<(&'static str, f64)>,
 }
 pub fn vertex_state<'a, const N: usize>(
     module: &'a wgpu::ShaderModule,
@@ -235,7 +232,7 @@ pub fn vs_main_entry(
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
     pub targets: [Option<wgpu::ColorTargetState>; N],
-    pub constants: std::collections::HashMap<String, f64>,
+    pub constants: Vec<(&'static str, f64)>,
 }
 pub fn fragment_state<'a, const N: usize>(
     module: &'a wgpu::ShaderModule,

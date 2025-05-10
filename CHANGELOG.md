@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## unreleased
 ### Changed
+* Updated wgpu to latest.
 * Changed `rustfmt` option to use LF instead of CRLF line endings on Windows to match the default LF line endings with the option disabled.
 
 ## 0.13.1 - 2025-03-09

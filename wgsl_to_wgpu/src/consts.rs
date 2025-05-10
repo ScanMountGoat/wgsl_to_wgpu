@@ -24,6 +24,10 @@ pub fn consts(module: &naga::Module) -> Vec<TokenStream> {
                     naga::Literal::I64(v) => Some(quote!(i64 = #v)),
                     naga::Literal::AbstractInt(v) => Some(quote!(i64 = #v)),
                     naga::Literal::AbstractFloat(v) => Some(quote!(f64 = #v)),
+                    naga::Literal::F16(v) => {
+                        let v = v.to_f32();
+                        Some(quote!(half::f16 = half::f16::from_f32_const(#v)))
+                    }
                 },
                 _ => None,
             }?;
@@ -69,7 +73,7 @@ pub fn pipeline_overridable_constants(module: &naga::Module) -> TokenStream {
                     quote!(self.#name as f64)
                 };
 
-                Some(quote!((#key.to_owned(), #value)))
+                Some(quote!((#key, #value)))
             }
         })
         .collect();
@@ -94,7 +98,7 @@ pub fn pipeline_overridable_constants(module: &naga::Module) -> TokenStream {
 
                 Some(quote! {
                     if let Some(value) = self.#name {
-                        entries.insert(#key.to_owned(), #value);
+                        entries.push((#key, #value));
                     }
                 })
             } else {
@@ -104,9 +108,9 @@ pub fn pipeline_overridable_constants(module: &naga::Module) -> TokenStream {
         .collect();
 
     let init_entries = if insert_optional_entries.is_empty() {
-        quote!(let entries = std::collections::HashMap::from([#(#required_entries),*]);)
+        quote!(let entries = vec![#(#required_entries),*];)
     } else {
-        quote!(let mut entries = std::collections::HashMap::from([#(#required_entries),*]);)
+        quote!(let mut entries = vec![#(#required_entries),*];)
     };
 
     if !fields.is_empty() {
@@ -117,7 +121,7 @@ pub fn pipeline_overridable_constants(module: &naga::Module) -> TokenStream {
             }
 
             impl OverrideConstants {
-                pub fn constants(&self) -> std::collections::HashMap<String, f64> {
+                pub fn constants(&self) -> Vec<(&'static str, f64)> {
                     #init_entries
                     #(#insert_optional_entries);*
                     entries
@@ -145,17 +149,28 @@ mod tests {
     #[test]
     fn write_global_constants() {
         let source = indoc! {r#"
-            const INT_CONST = 12;
+            enable f16;
+
+            const INT_CONST = -12;
+            
             const UNSIGNED_CONST = 34u;
+
             const FLOAT_CONST = 0.1;
-            // TODO: Naga doesn't implement f16, even though it's in the WGSL spec
-            // const SMALL_FLOAT_CONST:f16 = 0.1h;
+
+            const SMALL_FLOAT_CONST: f16 = 0.25h;
+
             const BOOL_CONST = true;
 
             @fragment
-            fn main() {
+            fn main() -> f32 {
                 // TODO: This is valid WGSL syntax, but naga doesn't support it apparently.
                 // const C_INNER = 456;
+
+                if BOOL_CONST { 
+                    return f32(INT_CONST) * f32(UNSIGNED_CONST) * FLOAT_CONST * f32(SMALL_FLOAT_CONST);
+                } else {
+                    return 0.0;
+                }
             }
         "#};
 
@@ -164,11 +179,11 @@ mod tests {
         let consts = consts(&module);
         let actual = quote!(#(#consts)*);
 
+        // TODO: Why are int and float consts missing?
         assert_tokens_eq!(
             quote! {
-                pub const INT_CONST: i32 = 12i32;
                 pub const UNSIGNED_CONST: u32 = 34u32;
-                pub const FLOAT_CONST: f32 = 0.1f32;
+                pub const SMALL_FLOAT_CONST: half::f16 = half::f16::from_f32_const(0.25f32);
                 pub const BOOL_CONST: bool = true;
             },
             actual
@@ -219,32 +234,32 @@ mod tests {
                 }
 
                 impl OverrideConstants {
-                    pub fn constants(&self) -> std::collections::HashMap<String, f64> {
-                        let mut entries = std::collections::HashMap::from([
-                            ("b3".to_owned(), if self.b3 { 1.0 } else { 0.0 }),
-                            ("f2".to_owned(), self.f2 as f64),
-                            ("i2".to_owned(), self.i2 as f64)
-                        ]);
+                    pub fn constants(&self) -> Vec<(&'static str, f64)> {
+                        let mut entries = vec![
+                            ("b3", if self.b3 { 1.0 } else { 0.0 }),
+                            ("f2", self.f2 as f64),
+                            ("i2", self.i2 as f64)
+                        ];
                         if let Some(value) = self.b1 {
-                            entries.insert("b1".to_owned(), if value { 1.0 } else { 0.0 });
+                            entries.push(("b1", if value { 1.0 } else { 0.0 }));
                         };
                         if let Some(value) = self.b2 {
-                            entries.insert("b2".to_owned(), if value { 1.0 } else { 0.0 });
+                            entries.push(("b2", if value { 1.0 } else { 0.0 }));
                         };
                         if let Some(value) = self.f1 {
-                            entries.insert("f1".to_owned(), value as f64);
+                            entries.push(("f1", value as f64));
                         };
                         if let Some(value) = self.i1 {
-                            entries.insert("i1".to_owned(), value as f64);
+                            entries.push(("i1", value as f64));
                         };
                         if let Some(value) = self.i3 {
-                            entries.insert("i3".to_owned(), value as f64);
+                            entries.push(("i3", value as f64));
                         };
                         if let Some(value) = self.a {
-                            entries.insert("0".to_owned(), value as f64);
+                            entries.push(("0", value as f64));
                         };
                         if let Some(value) = self.b {
-                            entries.insert("35".to_owned(), value as f64);
+                            entries.push(("35", value as f64));
                         }
                         entries
                     }

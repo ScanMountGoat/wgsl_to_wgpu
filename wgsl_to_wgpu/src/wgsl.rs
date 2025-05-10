@@ -24,6 +24,8 @@ fn naga_stages(stage: naga::ShaderStage) -> wgpu::ShaderStages {
         naga::ShaderStage::Vertex => wgpu::ShaderStages::VERTEX,
         naga::ShaderStage::Fragment => wgpu::ShaderStages::FRAGMENT,
         naga::ShaderStage::Compute => wgpu::ShaderStages::COMPUTE,
+        naga::ShaderStage::Task => wgpu::ShaderStages::TASK,
+        naga::ShaderStage::Mesh => wgpu::ShaderStages::MESH,
     }
 }
 
@@ -181,8 +183,8 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             quote!(#name)
         }
         naga::TypeInner::BindingArray { base: _, size: _ } => todo!(),
-        naga::TypeInner::AccelerationStructure => todo!(),
-        naga::TypeInner::RayQuery => todo!(),
+        naga::TypeInner::AccelerationStructure { .. } => todo!(),
+        naga::TypeInner::RayQuery { .. } => todo!(),
         naga::TypeInner::Array {
             size: naga::ArraySize::Pending(_),
             ..
@@ -442,7 +444,10 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        assert_eq!(wgpu::ShaderStages::all(), entry_stages(&module));
+        assert_eq!(
+            wgpu::ShaderStages::VERTEX_FRAGMENT | wgpu::ShaderStages::COMPUTE,
+            entry_stages(&module)
+        );
     }
 
     #[test]
@@ -480,7 +485,10 @@ mod tests {
                 ("a".to_string(), wgpu::ShaderStages::VERTEX),
                 ("b".to_string(), wgpu::ShaderStages::FRAGMENT),
                 ("c".to_string(), wgpu::ShaderStages::COMPUTE),
-                ("d".to_string(), wgpu::ShaderStages::all()),
+                (
+                    "d".to_string(),
+                    wgpu::ShaderStages::VERTEX_FRAGMENT | wgpu::ShaderStages::COMPUTE
+                ),
             ]),
             global_shader_stages(&module)
         );

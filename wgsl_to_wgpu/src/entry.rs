@@ -124,7 +124,7 @@ pub fn vertex_states(module: &naga::Module) -> TokenStream {
             pub struct VertexEntry<const N: usize> {
                 pub entry_point: &'static str,
                 pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-                pub constants: std::collections::HashMap<String, f64>,
+                pub constants: Vec<(&'static str, f64)>,
             }
 
             pub fn vertex_state<'a, const N: usize>(
@@ -259,7 +259,7 @@ pub fn fragment_states(module: &naga::Module) -> TokenStream {
             pub struct FragmentEntry<const N: usize> {
                 pub entry_point: &'static str,
                 pub targets: [Option<wgpu::ColorTargetState>; N],
-                pub constants: std::collections::HashMap<String, f64>,
+                pub constants: Vec<(&'static str, f64)>,
             }
 
             pub fn fragment_state<'a, const N: usize>(
@@ -337,7 +337,7 @@ mod test {
                 pub struct FragmentEntry<const N: usize> {
                     pub entry_point: &'static str,
                     pub targets: [Option<wgpu::ColorTargetState>; N],
-                    pub constants: std::collections::HashMap<String, f64>,
+                    pub constants: Vec<(&'static str, f64)>,
                 }
                 pub fn fragment_state<'a, const N: usize>(
                     module: &'a wgpu::ShaderModule,
@@ -413,7 +413,7 @@ mod test {
                 pub struct FragmentEntry<const N: usize> {
                     pub entry_point: &'static str,
                     pub targets: [Option<wgpu::ColorTargetState>; N],
-                    pub constants: std::collections::HashMap<String, f64>,
+                    pub constants: Vec<(&'static str, f64)>,
                 }
                 pub fn fragment_state<'a, const N: usize>(
                     module: &'a wgpu::ShaderModule,
