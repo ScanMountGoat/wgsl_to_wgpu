@@ -110,11 +110,12 @@ pub fn rust_scalar_type(scalar: &naga::Scalar) -> TokenStream {
         (naga::ScalarKind::Uint, 2) => quote!(u16),
         (naga::ScalarKind::Sint, 4) => quote!(i32),
         (naga::ScalarKind::Uint, 4) => quote!(u32),
+        (naga::ScalarKind::Float, 2) => quote!(half::f16),
         (naga::ScalarKind::Float, 4) => quote!(f32),
         (naga::ScalarKind::Float, 8) => quote!(f64),
         // TODO: Do booleans have a width?
         (naga::ScalarKind::Bool, _) => quote!(bool),
-        _ => todo!(),
+        _ => panic!("Unsupported scalar type {scalar:?}"),
     }
 }
 
@@ -268,6 +269,7 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
         naga::TypeInner::Scalar(scalar) => match (scalar.kind, scalar.width) {
             (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32,
             (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32,
+            (naga::ScalarKind::Float, 2) => wgpu::VertexFormat::Float16,
             (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32,
             (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64,
             _ => todo!(),
@@ -280,6 +282,7 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
                 (naga::ScalarKind::Uint, 2) => wgpu::VertexFormat::Uint16x2,
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x2,
                 (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x2,
+                (naga::ScalarKind::Float, 2) => wgpu::VertexFormat::Float16x2,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x2,
                 (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x2,
                 _ => todo!(),
@@ -298,6 +301,7 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
                 (naga::ScalarKind::Uint, 2) => wgpu::VertexFormat::Uint16x4,
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x4,
                 (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x4,
+                (naga::ScalarKind::Float, 2) => wgpu::VertexFormat::Float16x4,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x4,
                 (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x4,
                 _ => todo!(),

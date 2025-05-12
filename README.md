@@ -15,6 +15,7 @@ wgsl_to_wgpu facilitates a shader focused workflow where edits to WGSL code are 
 - const validation of the [WGSL memory layout](#memory-layout) for generated structs when using bytemuck
 - pipeline-overrideable constants
 - push constants
+- `f16` support using [half](https://crates.io/crates/half).
 
 ## Usage
 Add the following lines to the `Cargo.toml` and fill in the appropriate versions for `wgsl_to_wgpu`.

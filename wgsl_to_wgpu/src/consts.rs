@@ -12,7 +12,7 @@ pub fn consts(module: &naga::Module) -> Vec<TokenStream> {
         .filter_map(|(_, t)| -> Option<TokenStream> {
             let name = Ident::new(t.name.as_ref()?, Span::call_site());
 
-            // TODO: Add support for f64 and f16 once naga supports them.
+            // TODO: Add support for f64 once naga supports it.
             let type_and_value = match &module.global_expressions[t.init] {
                 naga::Expression::Literal(literal) => match literal {
                     naga::Literal::F64(v) => Some(quote!(f32 = #v)),

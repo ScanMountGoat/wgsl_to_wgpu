@@ -864,6 +864,59 @@ mod test {
     }
 
     #[test]
+    fn write_vertex_module_single_input_float16() {
+        let source = indoc! {r#"
+            enable f16;
+
+            struct VertexInput0 {
+                @location(0) a: f16,
+                @location(1) b: vec2<f16>,
+                @location(2) c: vec4<f16>,
+            };
+
+            @vertex
+            fn main(in0: VertexInput0) {}
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+        let actual = vertex_struct_methods(&module);
+
+        assert_tokens_eq!(
+            quote! {
+                impl VertexInput0 {
+                    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = [
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float16,
+                            offset: std::mem::offset_of!(VertexInput0, a) as u64,
+                            shader_location: 0,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float16x2,
+                            offset: std::mem::offset_of!(VertexInput0, b) as u64,
+                            shader_location: 1,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float16x4,
+                            offset: std::mem::offset_of!(VertexInput0, c) as u64,
+                            shader_location: 2,
+                        },
+                    ];
+                    pub const fn vertex_buffer_layout(
+                        step_mode: wgpu::VertexStepMode,
+                    ) -> wgpu::VertexBufferLayout<'static> {
+                        wgpu::VertexBufferLayout {
+                            array_stride: std::mem::size_of::<VertexInput0>() as u64,
+                            step_mode,
+                            attributes: &VertexInput0::VERTEX_ATTRIBUTES,
+                        }
+                    }
+                }
+            },
+            actual
+        );
+    }
+
+    #[test]
     fn write_vertex_module_single_input_sint32() {
         let source = indoc! {r#"
             struct VertexInput0 {

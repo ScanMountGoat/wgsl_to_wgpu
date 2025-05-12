@@ -4,6 +4,7 @@ pub struct Scalars {
     pub a: u32,
     pub b: i32,
     pub c: f32,
+    pub d: half::f16,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -71,4 +72,23 @@ pub struct StaticArrays {
 pub struct Nested {
     pub a: MatricesF32,
     pub b: MatricesF64,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsF16 {
+    pub a: nalgebra::SVector<half::f16, 2>,
+    pub b: nalgebra::SVector<half::f16, 4>,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MatricesF16 {
+    pub a: nalgebra::SMatrix<half::f16, 4, 4>,
+    pub b: nalgebra::SMatrix<half::f16, 3, 4>,
+    pub c: nalgebra::SMatrix<half::f16, 2, 4>,
+    pub d: nalgebra::SMatrix<half::f16, 4, 3>,
+    pub e: nalgebra::SMatrix<half::f16, 3, 3>,
+    pub f: nalgebra::SMatrix<half::f16, 2, 3>,
+    pub g: nalgebra::SMatrix<half::f16, 4, 2>,
+    pub h: nalgebra::SMatrix<half::f16, 3, 2>,
+    pub i: nalgebra::SMatrix<half::f16, 2, 2>,
 }

@@ -1,7 +1,10 @@
+enable f16;
+
 struct Scalars {
     a: u32,
     b: i32,
     c: f32,
+    d: f16
 };
 var<uniform> a: Scalars;
 
@@ -71,6 +74,25 @@ struct Nested {
     b: MatricesF64
 }
 var<uniform> i: Nested;
+
+struct VectorsF16 {
+    a: vec2<f16>,
+    b: vec4<f16>,
+};
+var<uniform> j: VectorsF16;
+
+struct MatricesF16 {
+    a: mat4x4<f16>,
+    b: mat4x3<f16>,
+    c: mat4x2<f16>,
+    d: mat3x4<f16>,
+    e: mat3x3<f16>,
+    f: mat3x2<f16>,
+    g: mat2x4<f16>,
+    h: mat2x3<f16>,
+    i: mat2x2<f16>,
+};
+var<uniform> k: MatricesF16;
 
 @fragment
 fn main() {}

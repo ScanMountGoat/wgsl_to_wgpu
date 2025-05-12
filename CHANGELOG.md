@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## unreleased
 ### Added
 * Added support for texture view array and sampler array bindings.
+* Added support for the WGSL half precision `f16` extension.
 
 ### Changed
 * Updated wgpu to latest.
