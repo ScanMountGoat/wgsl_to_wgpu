@@ -16,6 +16,8 @@ pub mod bind_groups {
         pub depth_texture_msaa: &'a wgpu::TextureView,
         pub color_texture_array_2d: &'a wgpu::TextureView,
         pub color_texture_array_cube: &'a wgpu::TextureView,
+        pub texture_binding_array: [&'a wgpu::TextureView; 2],
+        pub sampler_binding_array: [&'a wgpu::Sampler; 3],
     }
     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
         label: Some("LayoutDescriptor0"),
@@ -142,6 +144,22 @@ pub mod bind_groups {
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 13,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: Some(2),
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 14,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: Some(3),
+            },
         ],
     };
     impl BindGroup0 {
@@ -209,6 +227,18 @@ pub mod bind_groups {
                         binding: 12,
                         resource: wgpu::BindingResource::TextureView(
                             bindings.color_texture_array_cube,
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 13,
+                        resource: wgpu::BindingResource::TextureViewArray(
+                            bindings.texture_binding_array,
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 14,
+                        resource: wgpu::BindingResource::SamplerArray(
+                            bindings.sampler_binding_array,
                         ),
                     },
                 ],

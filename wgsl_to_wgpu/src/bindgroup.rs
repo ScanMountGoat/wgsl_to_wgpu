@@ -18,6 +18,7 @@ pub struct GroupBinding<'a> {
 }
 
 pub fn bind_groups_module(
+    module: &naga::Module,
     bind_group_data: &BTreeMap<u32, GroupData>,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
 ) -> TokenStream {
@@ -26,9 +27,10 @@ pub fn bind_groups_module(
         .map(|(group_no, group)| {
             let group_name = indexed_name_to_ident("BindGroup", *group_no);
 
-            let layout = bind_group_layout(*group_no, group);
-            let layout_descriptor = bind_group_layout_descriptor(*group_no, group, global_stages);
-            let group_impl = bind_group(*group_no, group);
+            let layout = bind_group_layout(module, *group_no, group);
+            let layout_descriptor =
+                bind_group_layout_descriptor(module, *group_no, group, global_stages);
+            let group_impl = bind_group(module, *group_no, group);
 
             quote! {
                 #[derive(Debug)]
@@ -141,24 +143,14 @@ pub fn bind_groups_module(
     }
 }
 
-fn bind_group_layout(group_no: u32, group: &GroupData) -> TokenStream {
+fn bind_group_layout(module: &naga::Module, group_no: u32, group: &GroupData) -> TokenStream {
     let fields: Vec<_> = group
         .bindings
         .iter()
         .map(|binding| {
             let binding_name = binding.name.as_ref().unwrap();
             let field_name = Ident::new(binding_name, Span::call_site());
-            // TODO: Support more types.
-            let field_type = match binding.binding_type.inner {
-                naga::TypeInner::Struct { .. }
-                | naga::TypeInner::Array { .. }
-                | naga::TypeInner::Scalar { .. }
-                | naga::TypeInner::Vector { .. }
-                | naga::TypeInner::Matrix { .. } => quote!(wgpu::BufferBinding<'a>),
-                naga::TypeInner::Image { .. } => quote!(&'a wgpu::TextureView),
-                naga::TypeInner::Sampler { .. } => quote!(&'a wgpu::Sampler),
-                ref inner => panic!("Unsupported type `{inner:?}` of '{binding_name}'."),
-            };
+            let field_type = binding_field_type(module, &binding.binding_type.inner, binding_name);
             quote!(pub #field_name: #field_type)
         })
         .collect();
@@ -172,7 +164,33 @@ fn bind_group_layout(group_no: u32, group: &GroupData) -> TokenStream {
     }
 }
 
+fn binding_field_type(
+    module: &naga::Module,
+    ty: &naga::TypeInner,
+    binding_name: &String,
+) -> TokenStream {
+    match ty {
+        naga::TypeInner::Struct { .. }
+        | naga::TypeInner::Array { .. }
+        | naga::TypeInner::Scalar { .. }
+        | naga::TypeInner::Vector { .. }
+        | naga::TypeInner::Matrix { .. } => quote!(wgpu::BufferBinding<'a>),
+        naga::TypeInner::Image { .. } => quote!(&'a wgpu::TextureView),
+        naga::TypeInner::Sampler { .. } => quote!(&'a wgpu::Sampler),
+        naga::TypeInner::BindingArray {
+            base,
+            size: naga::ArraySize::Constant(size),
+        } => {
+            let base = binding_field_type(module, &module.types[*base].inner, binding_name);
+            let count = Literal::usize_unsuffixed(size.get() as usize);
+            quote!([#base; #count])
+        }
+        ref inner => panic!("Unsupported type `{inner:?}` of '{binding_name}'."),
+    }
+}
+
 fn bind_group_layout_descriptor(
+    module: &naga::Module,
     group_no: u32,
     group: &GroupData,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
@@ -180,7 +198,7 @@ fn bind_group_layout_descriptor(
     let entries: Vec<_> = group
         .bindings
         .iter()
-        .map(|binding| bind_group_layout_entry(binding, global_stages))
+        .map(|binding| bind_group_layout_entry(module, binding, global_stages))
         .collect();
 
     let name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
@@ -196,6 +214,7 @@ fn bind_group_layout_descriptor(
 }
 
 fn bind_group_layout_entry(
+    module: &naga::Module,
     binding: &GroupBinding,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
 ) -> TokenStream {
@@ -212,19 +231,43 @@ fn bind_group_layout_entry(
     let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
     let buffer_binding_type = buffer_binding_type(binding.address_space);
 
-    // TODO: Support more types.
-    let binding_type = match binding.binding_type.inner {
+    let (binding_type, count) = binding_ty_count(
+        module,
+        &binding.binding_type.inner,
+        &binding_index,
+        buffer_binding_type,
+    );
+    let count = count.map(|c| quote!(Some(#c))).unwrap_or(quote!(None));
+
+    quote! {
+        wgpu::BindGroupLayoutEntry {
+            binding: #binding_index,
+            visibility: #stages,
+            ty: #binding_type,
+            count: #count,
+        }
+    }
+}
+
+fn binding_ty_count(
+    module: &naga::Module,
+    ty: &naga::TypeInner,
+    binding_index: &Literal,
+    buffer_binding_type: TokenStream,
+) -> (TokenStream, Option<TokenStream>) {
+    match ty {
         naga::TypeInner::Struct { .. }
         | naga::TypeInner::Array { .. }
         | naga::TypeInner::Scalar { .. }
         | naga::TypeInner::Vector { .. }
-        | naga::TypeInner::Matrix { .. } => {
+        | naga::TypeInner::Matrix { .. } => (
             quote!(wgpu::BindingType::Buffer {
                 ty: #buffer_binding_type,
                 has_dynamic_offset: false,
                 min_binding_size: None,
-            })
-        }
+            }),
+            None,
+        ),
         naga::TypeInner::Image {
             dim,
             arrayed,
@@ -252,53 +295,65 @@ fn bind_group_layout_entry(
                         }
                         _ => todo!(),
                     };
-                    quote!(wgpu::BindingType::Texture {
-                        sample_type: #sample_type,
-                        view_dimension: #view_dim,
-                        multisampled: #multi,
-                    })
+                    (
+                        quote!(wgpu::BindingType::Texture {
+                            sample_type: #sample_type,
+                            view_dimension: #view_dim,
+                            multisampled: #multi,
+                        }),
+                        None,
+                    )
                 }
-                naga::ImageClass::Depth { multi } => {
+                naga::ImageClass::Depth { multi } => (
                     quote!(wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Depth,
                         view_dimension: #view_dim,
                         multisampled: #multi,
-                    })
-                }
+                    }),
+                    None,
+                ),
                 naga::ImageClass::Storage { format, access } => {
                     // TODO: Will the debug implementation always work with the macro?
                     // Assume texture format variants are the same as storage formats.
                     let format = syn::Ident::new(&format!("{format:?}"), Span::call_site());
-                    let storage_access = storage_access(access);
+                    let storage_access = storage_access(*access);
 
-                    quote!(wgpu::BindingType::StorageTexture {
-                        access: #storage_access,
-                        format: wgpu::TextureFormat::#format,
-                        view_dimension: #view_dim,
-                    })
+                    (
+                        quote!(wgpu::BindingType::StorageTexture {
+                            access: #storage_access,
+                            format: wgpu::TextureFormat::#format,
+                            view_dimension: #view_dim,
+                        }),
+                        None,
+                    )
                 }
             }
         }
         naga::TypeInner::Sampler { comparison } => {
-            let sampler_type = if comparison {
+            let sampler_type = if *comparison {
                 quote!(wgpu::SamplerBindingType::Comparison)
             } else {
                 quote!(wgpu::SamplerBindingType::Filtering)
             };
-            quote!(wgpu::BindingType::Sampler(#sampler_type))
+            (quote!(wgpu::BindingType::Sampler(#sampler_type)), None)
+        }
+        naga::TypeInner::BindingArray {
+            base,
+            size: naga::ArraySize::Constant(size),
+        } => {
+            // Assume that counts for arrays aren't applied recursively.
+            let (base, _) = binding_ty_count(
+                module,
+                &module.types[*base].inner,
+                binding_index,
+                buffer_binding_type,
+            );
+            let count = Literal::usize_unsuffixed(size.get() as usize);
+            (base, Some(quote!(#count)))
         }
         // TODO: Better error handling.
         ref inner => {
-            panic!("Failed to generate BindingType for `{inner:?}` at index {binding_index}.",)
-        }
-    };
-
-    quote! {
-        wgpu::BindGroupLayoutEntry {
-            binding: #binding_index,
-            visibility: #stages,
-            ty: #binding_type,
-            count: None,
+            panic!("Failed to generate BindingType for `{inner:?}` at index {binding_index}.")
         }
     }
 }
@@ -314,7 +369,7 @@ fn storage_access(access: naga::StorageAccess) -> TokenStream {
     }
 }
 
-fn bind_group(group_no: u32, group: &GroupData) -> TokenStream {
+fn bind_group(module: &naga::Module, group_no: u32, group: &GroupData) -> TokenStream {
     let entries: Vec<_> = group
         .bindings
         .iter()
@@ -322,25 +377,8 @@ fn bind_group(group_no: u32, group: &GroupData) -> TokenStream {
             let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
             let binding_name = binding.name.as_ref().unwrap();
             let field_name = Ident::new(binding.name.as_ref().unwrap(), Span::call_site());
-            let resource_type = match binding.binding_type.inner {
-                naga::TypeInner::Struct { .. }
-                | naga::TypeInner::Array { .. }
-                | naga::TypeInner::Scalar { .. }
-                | naga::TypeInner::Vector { .. }
-                | naga::TypeInner::Matrix { .. } => {
-                    quote!(wgpu::BindingResource::Buffer(bindings.#field_name))
-                }
-                naga::TypeInner::Image { .. } => {
-                    quote!(wgpu::BindingResource::TextureView(bindings.#field_name))
-                }
-                naga::TypeInner::Sampler { .. } => {
-                    quote!(wgpu::BindingResource::Sampler(bindings.#field_name))
-                }
-                // TODO: Better error handling.
-                ref inner => panic!(
-                    "Failed to generate BindingType for `{inner:?}` of '{binding_name}' at index {binding_index}.",
-                ),
-            };
+            let resource_type =
+                resource_ty(module, binding, &binding_index, binding_name, field_name);
 
             quote! {
                 wgpu::BindGroupEntry {
@@ -382,6 +420,68 @@ fn bind_group(group_no: u32, group: &GroupData) -> TokenStream {
                 pass.set_bind_group(#group_no, &self.0, &[]);
             }
         }
+    }
+}
+
+fn resource_ty(
+    module: &naga::Module,
+    binding: &GroupBinding<'_>,
+    binding_index: &Literal,
+    binding_name: &String,
+    field_name: Ident,
+) -> TokenStream {
+    match &binding.binding_type.inner {
+        naga::TypeInner::Struct { .. }
+        | naga::TypeInner::Array { .. }
+        | naga::TypeInner::Scalar { .. }
+        | naga::TypeInner::Vector { .. }
+        | naga::TypeInner::Matrix { .. } => {
+            quote!(wgpu::BindingResource::Buffer(bindings.#field_name))
+        }
+        naga::TypeInner::Image { .. } => {
+            quote!(wgpu::BindingResource::TextureView(bindings.#field_name))
+        }
+        naga::TypeInner::Sampler { .. } => {
+            quote!(wgpu::BindingResource::Sampler(bindings.#field_name))
+        }
+        naga::TypeInner::BindingArray {
+            base,
+            ..
+        } => {
+            resource_array_ty(&module.types[*base].inner, binding_index, binding_name, field_name)
+        }
+        // TODO: Better error handling.
+        inner => panic!(
+            "Failed to generate BindingType for `{inner:?}` for '{binding_name}' at index {binding_index}.",
+        ),
+    }
+}
+
+fn resource_array_ty(
+    ty: &naga::TypeInner,
+    binding_index: &Literal,
+    binding_name: &String,
+    field_name: Ident,
+) -> TokenStream {
+    match ty {
+        naga::TypeInner::Struct { .. }
+            | naga::TypeInner::Array { .. }
+            | naga::TypeInner::Scalar { .. }
+            | naga::TypeInner::Vector { .. }
+            | naga::TypeInner::Matrix { .. } => {
+                // TODO: How to trigger this case in tests?
+                quote!(wgpu::BindingResource::BufferArray(bindings.#field_name))
+            }
+            naga::TypeInner::Image { .. } => {
+                quote!(wgpu::BindingResource::TextureViewArray(bindings.#field_name))
+            }
+            naga::TypeInner::Sampler { .. } => {
+                quote!(wgpu::BindingResource::SamplerArray(bindings.#field_name))
+            }
+            // TODO: Better error handling.
+            inner => panic!(
+                "Failed to generate binding array type for `{inner:?}` for '{binding_name}' at index {binding_index}.",
+            ),
     }
 }
 
@@ -491,7 +591,8 @@ mod tests {
 
         let global_stages = wgsl::global_shader_stages(&module);
 
-        let actual = bind_groups_module(&bind_group_data, &global_stages);
+        let actual = bind_groups_module(&module, &bind_group_data, &global_stages);
+
         assert_tokens_eq!(rust.parse().unwrap(), actual);
     }
 

@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## unreleased
+### Added
+* Added support for texture view array and sampler array bindings.
+
 ### Changed
 * Updated wgpu to latest.
 * Changed `rustfmt` option to use LF instead of CRLF line endings on Windows to match the default LF line endings with the option disabled.

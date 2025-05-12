@@ -33,6 +33,12 @@ var color_texture_array_2d: texture_2d_array<f32>;
 @group(0) @binding(12)
 var color_texture_array_cube: texture_cube_array<f32>;
 
+@group(0) @binding(13)
+var texture_binding_array: binding_array<texture_2d<f32>, 2>;
+
+@group(0) @binding(14)
+var sampler_binding_array: binding_array<sampler, 3>;
+
 @group(1) @binding(0) var<uniform> transforms: Transforms;
 @group(1) @binding(1) var<uniform> scalar: f32;
 @group(1) @binding(2) var<uniform> vector: vec4<f32>;
@@ -51,6 +57,7 @@ fn use_vars() -> f32 {
     x = f32(textureLoad(storage_tex_read_write, vec2(0)).x);
     x = textureLoad(color_texture_array_2d, vec2(0), 0, 0).x;
     x = f32(textureLoad(color_texture_array_cube, vec3(0), 0, 0).x);
+    x = textureSample(texture_binding_array[0], sampler_binding_array[0], vec2(0.0)).x;
     return x;
 }
 
