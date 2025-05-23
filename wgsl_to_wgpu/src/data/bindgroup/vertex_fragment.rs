@@ -338,15 +338,54 @@ pub mod bind_groups {
             pass.set_bind_group(1, &self.0, &[]);
         }
     }
+    #[derive(Debug)]
+    pub struct BindGroup2(wgpu::BindGroup);
+    #[derive(Debug)]
+    pub struct BindGroupLayout2<'a> {
+        pub acc_struct: &'a wgpu::Tlas,
+    }
+    const LAYOUT_DESCRIPTOR2: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+        label: Some("LayoutDescriptor2"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::NONE,
+            ty: wgpu::BindingType::AccelerationStructure {
+                vertex_return: false,
+            },
+            count: None,
+        }],
+    };
+    impl BindGroup2 {
+        pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR2)
+        }
+        pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayout2) -> Self {
+            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR2);
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::AccelerationStructure(bindings.acc_struct),
+                }],
+                label: Some("BindGroup2"),
+            });
+            Self(bind_group)
+        }
+        pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
+            pass.set_bind_group(2, &self.0, &[]);
+        }
+    }
     #[derive(Debug, Copy, Clone)]
     pub struct BindGroups<'a> {
         pub bind_group0: &'a BindGroup0,
         pub bind_group1: &'a BindGroup1,
+        pub bind_group2: &'a BindGroup2,
     }
     impl BindGroups<'_> {
         pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
             self.bind_group0.set(pass);
             self.bind_group1.set(pass);
+            self.bind_group2.set(pass);
         }
     }
     pub trait SetBindGroup {
@@ -392,7 +431,9 @@ pub fn set_bind_groups<P: bind_groups::SetBindGroup>(
     pass: &mut P,
     bind_group0: &bind_groups::BindGroup0,
     bind_group1: &bind_groups::BindGroup1,
+    bind_group2: &bind_groups::BindGroup2,
 ) {
     bind_group0.set(pass);
     bind_group1.set(pass);
+    bind_group2.set(pass);
 }

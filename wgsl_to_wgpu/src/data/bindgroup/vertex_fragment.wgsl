@@ -44,6 +44,8 @@ var sampler_binding_array: binding_array<sampler, 3>;
 @group(1) @binding(2) var<uniform> vector: vec4<f32>;
 @group(1) @binding(3) var<uniform> matrix: mat4x4<f32>;
 
+@group(2) @binding(0) var acc_struct: acceleration_structure;
+
 fn use_vars() -> f32 {
     var x = transforms.value.x;
     x = scalar;

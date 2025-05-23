@@ -185,6 +185,7 @@ fn binding_field_type(
             let count = Literal::usize_unsuffixed(size.get() as usize);
             quote!([#base; #count])
         }
+        naga::TypeInner::AccelerationStructure { .. } => quote!(&'a wgpu::Tlas),
         ref inner => panic!("Unsupported type `{inner:?}` of '{binding_name}'."),
     }
 }
@@ -351,6 +352,10 @@ fn binding_ty_count(
             let count = Literal::usize_unsuffixed(size.get() as usize);
             (base, Some(quote!(#count)))
         }
+        naga::TypeInner::AccelerationStructure { vertex_return } => (
+            quote!(wgpu::BindingType::AccelerationStructure { vertex_return: #vertex_return }),
+            None,
+        ),
         // TODO: Better error handling.
         ref inner => {
             panic!("Failed to generate BindingType for `{inner:?}` at index {binding_index}.")
@@ -449,6 +454,9 @@ fn resource_ty(
             ..
         } => {
             resource_array_ty(&module.types[*base].inner, binding_index, binding_name, field_name)
+        }
+        naga::TypeInner::AccelerationStructure { .. } => {
+            quote!(wgpu::BindingResource::AccelerationStructure(bindings.#field_name))
         }
         // TODO: Better error handling.
         inner => panic!(
