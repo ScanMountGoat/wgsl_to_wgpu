@@ -348,16 +348,48 @@ where
 
 #[derive(Debug, Default)]
 struct Module {
-    name: String,
     items: Vec<TokenStream>,
-    submodules: Vec<Module>,
+    submodules: BTreeMap<String, Module>,
 }
 
 impl Module {
     fn to_tokens(&self) -> TokenStream {
-        let mut structs = quote!();
-        add_module(self, &mut structs);
-        structs
+        let mut tokens = quote!();
+
+        for item in &self.items {
+            tokens = quote!(#tokens #item);
+        }
+        for (name, m) in &self.submodules {
+            let submodule = m.to_tokens();
+
+            let name = Ident::new(name, Span::call_site());
+            tokens = quote! {
+                #tokens
+                mod #name {
+                    #submodule
+                }
+            }
+        }
+
+        tokens
+    }
+
+    fn add_module_items(&mut self, structs: &[(TypePath, TokenStream)]) {
+        for (item, tokens) in structs {
+            let module = self.get_module(&item.parents);
+            module.items.push(tokens.clone());
+        }
+    }
+
+    fn get_module<'a>(&'a mut self, parents: &[String]) -> &'a mut Module {
+        if let Some((name, remaining)) = parents.split_first() {
+            self.submodules
+                .entry(name.clone())
+                .or_default()
+                .get_module(remaining)
+        } else {
+            self
+        }
     }
 }
 
@@ -443,9 +475,9 @@ where
 
     // Place items into appropriate modules.
     let mut root = Module::default();
-    root = add_module_items(consts, root);
-    root = add_module_items(structs, root);
-    root = add_module_items(vertex_methods, root);
+    root.add_module_items(&consts);
+    root.add_module_items(&structs);
+    root.add_module_items(&vertex_methods);
 
     // Place items generated for this module in the root module.
     let root_items = vec![(
@@ -465,7 +497,7 @@ where
             #create_pipeline_layout
         },
     )];
-    root = add_module_items(root_items, root);
+    root.add_module_items(&root_items);
 
     let output = root.to_tokens();
 
@@ -473,46 +505,6 @@ where
         Ok(pretty_print_rustfmt(output))
     } else {
         Ok(pretty_print(output))
-    }
-}
-
-fn add_module_items(structs: Vec<(TypePath, TokenStream)>, mut root: Module) -> Module {
-    for (item, tokens) in structs {
-        let mut module = &mut root;
-        for name in item.parents {
-            if !module.submodules.iter().any(|m| m.name == name) {
-                module.submodules.push(Module {
-                    name: name.clone(),
-                    items: Vec::new(),
-                    submodules: Vec::new(),
-                });
-            }
-            module = module
-                .submodules
-                .iter_mut()
-                .find(|m| m.name == name)
-                .unwrap();
-        }
-        module.items.push(tokens.clone());
-    }
-    root
-}
-
-fn add_module(root: &Module, structs: &mut TokenStream) {
-    for item in &root.items {
-        *structs = quote!(#structs #item);
-    }
-    for m in &root.submodules {
-        let mut submodule = quote!();
-        add_module(m, &mut submodule);
-
-        let name = Ident::new(&m.name, Span::call_site());
-        *structs = quote! {
-            #structs
-            mod #name {
-                #submodule
-            }
-        }
     }
 }
 
@@ -849,7 +841,7 @@ mod test {
 
     fn items_to_tokens(items: Vec<(TypePath, TokenStream)>) -> TokenStream {
         let mut root = Module::default();
-        root = add_module_items(items, root);
+        root.add_module_items(&items);
         root.to_tokens()
     }
 
