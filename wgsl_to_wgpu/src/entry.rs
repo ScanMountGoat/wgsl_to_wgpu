@@ -204,7 +204,11 @@ where
             }
         };
 
-        (input.name, tokens)
+        // Don't conflict with the name used for the struct itself.
+        (TypePath {
+            parents: input.name.parents,
+            name: format!("{}.methods", input.name.name)
+        }, tokens)
     }).collect()
 }
 

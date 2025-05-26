@@ -261,12 +261,18 @@ pub fn create_shader_module(
     wgsl_include_path: &str,
     options: WriteOptions,
 ) -> Result<String, CreateModuleError> {
-    create_shader_module_inner(
+    let mut root = Module::default();
+    root.add_shader_module(
         wgsl_source,
         Some(wgsl_include_path),
         options,
+        TypePath {
+            parents: Vec::new(),
+            name: String::new(),
+        },
         demangle_identity,
-    )
+    )?;
+    Ok(root.to_generated_bindings(options))
 }
 
 // TODO: Show how to convert a naga module back to wgsl.
@@ -309,11 +315,24 @@ pub fn create_shader_module_embedded(
     wgsl_source: &str,
     options: WriteOptions,
 ) -> Result<String, CreateModuleError> {
-    create_shader_module_inner(wgsl_source, None, options, demangle_identity)
+    let mut root = Module::default();
+    root.add_shader_module(
+        wgsl_source,
+        None,
+        options,
+        TypePath {
+            parents: Vec::new(),
+            name: String::new(),
+        },
+        demangle_identity,
+    )?;
+
+    let output = root.to_generated_bindings(options);
+    Ok(output)
 }
 
 /// A full qualified path like `a::b::Item` split into `["a", "b"]` and `Item`.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct TypePath {
     /// The parent components like `["a", "b"]` in `a::b::Item`.
     /// The root module should have no parents.
@@ -343,12 +362,25 @@ where
     F: Fn(&str) -> TypePath + Clone,
 {
     // TODO: how to handle multiple generated shaders sharing modules?
-    create_shader_module_inner(wgsl_source, None, options, demangle)
+    let mut root = Module::default();
+    root.add_shader_module(
+        wgsl_source,
+        None,
+        options,
+        TypePath {
+            parents: Vec::new(),
+            name: String::new(),
+        },
+        demangle,
+    )?;
+
+    let output = root.to_generated_bindings(options);
+    Ok(output)
 }
 
 #[derive(Debug, Default)]
-struct Module {
-    items: Vec<TokenStream>,
+pub struct Module {
+    items: BTreeMap<TypePath, TokenStream>,
     submodules: BTreeMap<String, Module>,
 }
 
@@ -356,7 +388,7 @@ impl Module {
     fn to_tokens(&self) -> TokenStream {
         let mut tokens = quote!();
 
-        for item in &self.items {
+        for item in self.items.values() {
             tokens = quote!(#tokens #item);
         }
         for (name, m) in &self.submodules {
@@ -374,10 +406,19 @@ impl Module {
         tokens
     }
 
+    pub fn to_generated_bindings(&self, options: WriteOptions) -> String {
+        let output = self.to_tokens();
+        if options.rustfmt {
+            pretty_print_rustfmt(output)
+        } else {
+            pretty_print(output)
+        }
+    }
+
     fn add_module_items(&mut self, structs: &[(TypePath, TokenStream)]) {
         for (item, tokens) in structs {
             let module = self.get_module(&item.parents);
-            module.items.push(tokens.clone());
+            module.items.insert(item.clone(), tokens.clone());
         }
     }
 
@@ -391,120 +432,112 @@ impl Module {
             self
         }
     }
-}
 
-fn create_shader_module_inner<F>(
-    wgsl_source: &str,
-    wgsl_include_path: Option<&str>,
-    options: WriteOptions,
-    demangle: F,
-) -> Result<String, CreateModuleError>
-where
-    F: Fn(&str) -> TypePath + Clone,
-{
-    let module = naga::front::wgsl::parse_str(wgsl_source)
-        .map_err(|error| CreateModuleError::ParseError { error })?;
+    pub fn add_shader_module<F>(
+        &mut self,
+        wgsl_source: &str,
+        wgsl_include_path: Option<&str>,
+        options: WriteOptions,
+        root_path: TypePath,
+        demangle: F,
+    ) -> Result<(), CreateModuleError>
+    where
+        F: Fn(&str) -> TypePath + Clone,
+    {
+        let module = naga::front::wgsl::parse_str(wgsl_source)
+            .map_err(|error| CreateModuleError::ParseError { error })?;
 
-    if let Some(options) = options.validate.as_ref() {
-        naga::valid::Validator::new(ValidationFlags::all(), options.capabilities)
-            .validate(&module)
-            .map_err(|error| CreateModuleError::ValidationError { error })?;
-    }
+        if let Some(options) = options.validate.as_ref() {
+            naga::valid::Validator::new(ValidationFlags::all(), options.capabilities)
+                .validate(&module)
+                .map_err(|error| CreateModuleError::ValidationError { error })?;
+        }
 
-    let bind_group_data = get_bind_group_data(&module, demangle.clone())?;
+        let bind_group_data = get_bind_group_data(&module, demangle.clone())?;
 
-    let global_stages = wgsl::global_shader_stages(&module);
-    let entry_stages = wgsl::entry_stages(&module);
+        let global_stages = wgsl::global_shader_stages(&module);
+        let entry_stages = wgsl::entry_stages(&module);
 
-    // Collect tokens for each item.
-    let structs = structs::structs(&module, options, demangle.clone());
-    let consts = consts::consts(&module, demangle.clone());
-    let bind_groups_module = bind_groups_module(&module, &bind_group_data, &global_stages);
-    let vertex_methods = vertex_struct_methods(&module, demangle.clone());
-    let compute_module = compute_module(&module);
-    let entry_point_constants = entry_point_constants(&module);
-    let vertex_states = vertex_states(&module, demangle.clone());
-    let fragment_states = fragment_states(&module);
+        // Collect tokens for each item.
+        let structs = structs::structs(&module, options, demangle.clone());
+        let consts = consts::consts(&module, demangle.clone());
+        let bind_groups_module = bind_groups_module(&module, &bind_group_data, &global_stages);
+        let vertex_methods = vertex_struct_methods(&module, demangle.clone());
+        let compute_module = compute_module(&module);
+        let entry_point_constants = entry_point_constants(&module);
+        let vertex_states = vertex_states(&module, demangle.clone());
+        let fragment_states = fragment_states(&module);
 
-    // Use a string literal if no include path is provided.
-    let included_source = wgsl_include_path
-        .map(|p| quote!(include_str!(#p)))
-        .unwrap_or_else(|| quote!(#wgsl_source));
+        // Use a string literal if no include path is provided.
+        let included_source = wgsl_include_path
+            .map(|p| quote!(include_str!(#p)))
+            .unwrap_or_else(|| quote!(#wgsl_source));
 
-    let create_shader_module = quote! {
-        pub const SOURCE: &str = #included_source;
-        pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
-            let source = std::borrow::Cow::Borrowed(SOURCE);
-            device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(source)
+        let create_shader_module = quote! {
+            pub const SOURCE: &str = #included_source;
+            pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+                let source = std::borrow::Cow::Borrowed(SOURCE);
+                device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(source)
+                })
+            }
+        };
+
+        let bind_group_layouts: Vec<_> = bind_group_data
+            .keys()
+            .map(|group_no| {
+                let group = indexed_name_to_ident("BindGroup", *group_no);
+                quote!(bind_groups::#group::get_bind_group_layout(device))
             })
-        }
-    };
+            .collect();
 
-    let bind_group_layouts: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("BindGroup", *group_no);
-            quote!(bind_groups::#group::get_bind_group_layout(device))
-        })
-        .collect();
+        let (push_constant_range, push_constant_stages) =
+            push_constant_range_stages(&module, &global_stages, entry_stages).unzip();
 
-    let (push_constant_range, push_constant_stages) =
-        push_constant_range_stages(&module, &global_stages, entry_stages).unzip();
+        let create_pipeline_layout = quote! {
+            pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+                device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: None,
+                    bind_group_layouts: &[
+                        #(&#bind_group_layouts),*
+                    ],
+                    push_constant_ranges: &[#push_constant_range],
+                })
+            }
+        };
 
-    let create_pipeline_layout = quote! {
-        pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[
-                    #(&#bind_group_layouts),*
-                ],
-                push_constant_ranges: &[#push_constant_range],
-            })
-        }
-    };
+        let override_constants = pipeline_overridable_constants(&module, demangle);
 
-    let override_constants = pipeline_overridable_constants(&module, demangle);
+        let push_constant_stages = push_constant_stages.map(|stages| {
+            quote! {
+                pub const PUSH_CONSTANT_STAGES: wgpu::ShaderStages = #stages;
+            }
+        });
 
-    let push_constant_stages = push_constant_stages.map(|stages| {
-        quote! {
-            pub const PUSH_CONSTANT_STAGES: wgpu::ShaderStages = #stages;
-        }
-    });
+        // Place items into appropriate modules.
+        self.add_module_items(&consts);
+        self.add_module_items(&structs);
+        self.add_module_items(&vertex_methods);
 
-    // Place items into appropriate modules.
-    let mut root = Module::default();
-    root.add_module_items(&consts);
-    root.add_module_items(&structs);
-    root.add_module_items(&vertex_methods);
+        // Place items generated for this module in the root module.
+        let root_items = vec![(
+            root_path,
+            quote! {
+                #override_constants
+                #bind_groups_module
+                #compute_module
+                #entry_point_constants
+                #vertex_states
+                #fragment_states
+                #create_shader_module
+                #push_constant_stages
+                #create_pipeline_layout
+            },
+        )];
+        self.add_module_items(&root_items);
 
-    // Place items generated for this module in the root module.
-    let root_items = vec![(
-        TypePath {
-            parents: Vec::new(),
-            name: String::new(),
-        },
-        quote! {
-            #override_constants
-            #bind_groups_module
-            #compute_module
-            #entry_point_constants
-            #vertex_states
-            #fragment_states
-            #create_shader_module
-            #push_constant_stages
-            #create_pipeline_layout
-        },
-    )];
-    root.add_module_items(&root_items);
-
-    let output = root.to_tokens();
-
-    if options.rustfmt {
-        Ok(pretty_print_rustfmt(output))
-    } else {
-        Ok(pretty_print(output))
+        Ok(())
     }
 }
 
