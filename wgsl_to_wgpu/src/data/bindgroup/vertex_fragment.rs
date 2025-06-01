@@ -258,6 +258,10 @@ pub mod bind_groups {
         pub scalar: wgpu::BufferBinding<'a>,
         pub vector: wgpu::BufferBinding<'a>,
         pub matrix: wgpu::BufferBinding<'a>,
+        pub transforms_array: [wgpu::BufferBinding<'a>; 2],
+        pub scalar_array: [wgpu::BufferBinding<'a>; 3],
+        pub vector_array: [wgpu::BufferBinding<'a>; 4],
+        pub matrix_array: [wgpu::BufferBinding<'a>; 5],
     }
     const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
         label: Some("LayoutDescriptor1"),
@@ -302,6 +306,46 @@ pub mod bind_groups {
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::NONE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: Some(2),
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 5,
+                visibility: wgpu::ShaderStages::NONE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: Some(3),
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 6,
+                visibility: wgpu::ShaderStages::NONE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: Some(4),
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 7,
+                visibility: wgpu::ShaderStages::NONE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: Some(5),
+            },
         ],
     };
     impl BindGroup1 {
@@ -328,6 +372,22 @@ pub mod bind_groups {
                     wgpu::BindGroupEntry {
                         binding: 3,
                         resource: wgpu::BindingResource::Buffer(bindings.matrix),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::BufferArray(bindings.transforms_array),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::BufferArray(bindings.scalar_array),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::BufferArray(bindings.vector_array),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 7,
+                        resource: wgpu::BindingResource::BufferArray(bindings.matrix_array),
                     },
                 ],
                 label: Some("BindGroup1"),

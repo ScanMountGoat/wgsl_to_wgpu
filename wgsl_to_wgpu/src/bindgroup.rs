@@ -477,7 +477,6 @@ fn resource_array_ty(
             | naga::TypeInner::Scalar { .. }
             | naga::TypeInner::Vector { .. }
             | naga::TypeInner::Matrix { .. } => {
-                // TODO: How to trigger this case in tests?
                 quote!(wgpu::BindingResource::BufferArray(bindings.#field_name))
             }
             naga::TypeInner::Image { .. } => {

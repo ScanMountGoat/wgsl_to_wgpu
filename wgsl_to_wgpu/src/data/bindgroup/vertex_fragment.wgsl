@@ -43,6 +43,10 @@ var sampler_binding_array: binding_array<sampler, 3>;
 @group(1) @binding(1) var<uniform> scalar: f32;
 @group(1) @binding(2) var<uniform> vector: vec4<f32>;
 @group(1) @binding(3) var<uniform> matrix: mat4x4<f32>;
+@group(1) @binding(4) var<uniform> transforms_array: binding_array<Transforms, 2>;
+@group(1) @binding(5) var<uniform> scalar_array: binding_array<f32, 3>;
+@group(1) @binding(6) var<uniform> vector_array: binding_array<vec4<f32>, 4>;
+@group(1) @binding(7) var<uniform> matrix_array: binding_array<mat4x4<f32>, 5>;
 
 @group(2) @binding(0) var acc_struct: acceleration_structure;
 
