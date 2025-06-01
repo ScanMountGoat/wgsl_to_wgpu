@@ -30,6 +30,8 @@
 //! }
 //! ```
 
+#![allow(clippy::result_large_err)]
+
 extern crate wgpu_types as wgpu;
 
 use std::{
