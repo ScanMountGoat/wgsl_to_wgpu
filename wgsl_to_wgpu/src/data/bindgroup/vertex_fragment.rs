@@ -16,8 +16,8 @@ pub mod bind_groups {
         pub depth_texture_msaa: &'a wgpu::TextureView,
         pub color_texture_array_2d: &'a wgpu::TextureView,
         pub color_texture_array_cube: &'a wgpu::TextureView,
-        pub texture_binding_array: [&'a wgpu::TextureView; 2],
-        pub sampler_binding_array: [&'a wgpu::Sampler; 3],
+        pub texture_binding_array: &'a [&'a wgpu::TextureView; 2],
+        pub sampler_binding_array: &'a [&'a wgpu::Sampler; 3],
     }
     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
         label: Some("LayoutDescriptor0"),
@@ -258,10 +258,10 @@ pub mod bind_groups {
         pub scalar: wgpu::BufferBinding<'a>,
         pub vector: wgpu::BufferBinding<'a>,
         pub matrix: wgpu::BufferBinding<'a>,
-        pub transforms_array: [wgpu::BufferBinding<'a>; 2],
-        pub scalar_array: [wgpu::BufferBinding<'a>; 3],
-        pub vector_array: [wgpu::BufferBinding<'a>; 4],
-        pub matrix_array: [wgpu::BufferBinding<'a>; 5],
+        pub transforms_array: &'a [wgpu::BufferBinding<'a>; 2],
+        pub scalar_array: &'a [wgpu::BufferBinding<'a>; 3],
+        pub vector_array: &'a [wgpu::BufferBinding<'a>; 4],
+        pub matrix_array: &'a [wgpu::BufferBinding<'a>; 5],
     }
     const LAYOUT_DESCRIPTOR1: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
         label: Some("LayoutDescriptor1"),

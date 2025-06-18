@@ -183,7 +183,7 @@ fn binding_field_type(
         } => {
             let base = binding_field_type(module, &module.types[*base].inner, binding_name);
             let count = Literal::usize_unsuffixed(size.get() as usize);
-            quote!([#base; #count])
+            quote!(&'a [#base; #count])
         }
         naga::TypeInner::AccelerationStructure { .. } => quote!(&'a wgpu::Tlas),
         ref inner => panic!("Unsupported type `{inner:?}` of '{binding_name}'."),
