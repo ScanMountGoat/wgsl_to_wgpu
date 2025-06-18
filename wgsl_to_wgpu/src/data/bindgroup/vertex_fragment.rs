@@ -152,13 +152,13 @@ pub mod bind_groups {
                     view_dimension: wgpu::TextureViewDimension::D2,
                     multisampled: false,
                 },
-                count: Some(2),
+                count: Some(std::num::NonZeroU32::new(2).unwrap()),
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 14,
                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: Some(3),
+                count: Some(std::num::NonZeroU32::new(3).unwrap()),
             },
         ],
     };
@@ -314,7 +314,7 @@ pub mod bind_groups {
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
-                count: Some(2),
+                count: Some(std::num::NonZeroU32::new(2).unwrap()),
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 5,
@@ -324,7 +324,7 @@ pub mod bind_groups {
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
-                count: Some(3),
+                count: Some(std::num::NonZeroU32::new(3).unwrap()),
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 6,
@@ -334,7 +334,7 @@ pub mod bind_groups {
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
-                count: Some(4),
+                count: Some(std::num::NonZeroU32::new(4).unwrap()),
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 7,
@@ -344,7 +344,7 @@ pub mod bind_groups {
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
-                count: Some(5),
+                count: Some(std::num::NonZeroU32::new(5).unwrap()),
             },
         ],
     };

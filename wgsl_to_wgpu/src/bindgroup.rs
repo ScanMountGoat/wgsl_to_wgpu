@@ -3,7 +3,7 @@ use crate::{
 };
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, num::NonZeroU32};
 use syn::Ident;
 
 pub struct GroupData<'a> {
@@ -238,7 +238,13 @@ fn bind_group_layout_entry(
         &binding_index,
         buffer_binding_type,
     );
-    let count = count.map(|c| quote!(Some(#c))).unwrap_or(quote!(None));
+    let count = count
+        .map(|c| {
+            // This is already a NonZeroU32, so we can unwrap here.
+            let c = Literal::u32_unsuffixed(c.get());
+            quote!(Some(std::num::NonZeroU32::new(#c).unwrap()))
+        })
+        .unwrap_or(quote!(None));
 
     quote! {
         wgpu::BindGroupLayoutEntry {
@@ -255,7 +261,7 @@ fn binding_ty_count(
     ty: &naga::TypeInner,
     binding_index: &Literal,
     buffer_binding_type: TokenStream,
-) -> (TokenStream, Option<TokenStream>) {
+) -> (TokenStream, Option<NonZeroU32>) {
     match ty {
         naga::TypeInner::Struct { .. }
         | naga::TypeInner::Array { .. }
@@ -349,8 +355,7 @@ fn binding_ty_count(
                 binding_index,
                 buffer_binding_type,
             );
-            let count = Literal::usize_unsuffixed(size.get() as usize);
-            (base, Some(quote!(#count)))
+            (base, Some(*size))
         }
         naga::TypeInner::AccelerationStructure { vertex_return } => (
             quote!(wgpu::BindingType::AccelerationStructure { vertex_return: #vertex_return }),
