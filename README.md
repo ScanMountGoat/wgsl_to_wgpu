@@ -16,6 +16,7 @@ wgsl_to_wgpu facilitates a shader focused workflow where edits to WGSL code are 
 - pipeline-overrideable constants
 - push constants
 - `f16` support using [half](https://crates.io/crates/half).
+- support for [preprocessing libraries](#preprocessing-libraries) by specifying the name demangling logic
 
 ## Usage
 Add the following lines to the `Cargo.toml` and fill in the appropriate versions for `wgsl_to_wgpu`.
@@ -40,14 +41,17 @@ While bind groups can easily be set all at once using the `bind_groups::set_bind
 
 Organizing bind groups in this way can also help to better organize rendering resources in application code instead of redundantly storing all resources with each object. The `bindgroups::BindGroup0` may only need to be stored once while `bindgroups::BindGroup3` may be stored for each mesh in the scene. Note that bind groups store references to their underlying resource bindings, so it is not necessary to recreate a bind group if the only the uniform or storage buffer contents change. Avoid creating new bind groups during rendering if possible for best performance.
 
+# Preprocessing Libraries
+There are a number of useful processing crates like that extend or modify WGSL to add features like module imports or conditional compilation. wgsl_to_wgpu does not provide support for any of these crates directly. Instead, pass the final processed WGSL and specify the approriate name demangling logic if needed.
+See the documentation for details.
+
 ## Limitations
 - It may be necessary to disable running this function for shaders with unsupported types or features.
 Please make an issue if any new or existing WGSL syntax is unsupported.
 - This library is not a rendering library and will not generate any high level abstractions like a material or scene graph. 
 The goal is just to generate most of the tedious and error prone boilerplate required to use WGSL shaders with wgpu.
 - The generated code will not prevent accidentally calling a function from an unrelated generated module.
-It's recommended to name the shader module with the same name as the shader and use unique shader names to avoid issues. 
-Using generated code from a different shader module may be desirable in some cases such as using the same camera struct definition in multiple WGSL shaders.
+It's recommended to name the shader module with the same name as the shader and use unique shader names to avoid issues. Consider using a preprocessing library with module imports to avoid multiple definitions.
 - The current implementation assumes all shader stages are part of a single WGSL source file. Shader modules split across files may be supported in a future release.
 - Uniform and storage buffers can be initialized using the wrong generated Rust struct. 
 WGPU will still validate the size of the buffer binding at runtime.

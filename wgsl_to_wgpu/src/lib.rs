@@ -32,7 +32,7 @@
 //!
 //! ## Modules and Preprocessors
 //! There are a number of useful processing crates that extend or modify WGSL
-//! to add features like module imports or preprocessor defines.
+//! to add features like module imports or conditional compilation.
 //! wgsl_to_wgpu does not provide support for any of these crates directly.
 //! Instead, pass the final processed WGSL to [create_shader_modules]
 //! and specify the approriate name demangling logic if needed.
