@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 * Changed generated items to be sorted alphabetically by name.
-* Renamed `create_shader_module_embedded` to `create_shader_modules` with a name demangling function.
+* Changed `create_shader_module_embedded` to `create_shader_modules` and added a parameter for the name demangling function.
 
 ### Fixed
 * Fixed an issue with generated bind group code for binding arrays.
