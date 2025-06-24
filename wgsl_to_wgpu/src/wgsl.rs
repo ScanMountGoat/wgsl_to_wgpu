@@ -544,23 +544,48 @@ mod tests {
         let source = indoc! {r#"
             var<uniform> a: f32;
             var<uniform> b: f32;
+            var<uniform> c: f32;
+            var<uniform> d: u32;
 
             fn inner() -> f32 {
                 return b;
+            }
+
+            @vertex
+            fn vs_main() {
+                {
+                    let x = a;
+                }
+
+                switch d {
+                    default: {
+                        return;
+                    }
+                }
             }
 
             @fragment
             fn fs_main()  {
                 let x = a;
                 let y = inner();
+
+                loop {
+                    let z = c;
+                }
+
+                if true {
+                    let w = d;
+                }
             }
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
         assert_eq!(
             BTreeMap::from([
-                ("a".to_string(), wgpu::ShaderStages::FRAGMENT),
+                ("a".to_string(), wgpu::ShaderStages::VERTEX_FRAGMENT),
                 ("b".to_string(), wgpu::ShaderStages::FRAGMENT),
+                ("c".to_string(), wgpu::ShaderStages::FRAGMENT),
+                ("d".to_string(), wgpu::ShaderStages::VERTEX_FRAGMENT),
             ]),
             global_shader_stages(&module)
         );
