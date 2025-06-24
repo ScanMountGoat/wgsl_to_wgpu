@@ -6,6 +6,7 @@ use quote::quote;
 use syn::Ident;
 
 use crate::wgsl::vertex_entry_structs;
+use crate::TypePath;
 
 pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     match &f.result {
@@ -33,16 +34,20 @@ pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     }
 }
 
-pub fn entry_point_constants(module: &naga::Module) -> TokenStream {
+pub fn entry_point_constants<F>(module: &naga::Module, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath,
+{
     let entry_points: Vec<TokenStream> = module
         .entry_points
         .iter()
         .map(|entry_point| {
+            // The entry name string itself should remain mangled to match the WGSL code.
             let entry_name = Literal::string(&entry_point.name);
-            let const_name = Ident::new(
-                &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
-                Span::call_site(),
-            );
+
+            let name = &demangle(&entry_point.name).name;
+            let const_name =
+                Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());
             quote! {
                 pub const #const_name: &str = #entry_name;
             }
@@ -54,26 +59,28 @@ pub fn entry_point_constants(module: &naga::Module) -> TokenStream {
     }
 }
 
-pub fn vertex_states(module: &naga::Module) -> TokenStream {
+pub fn vertex_states<F>(module: &naga::Module, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let vertex_entries: Vec<TokenStream> = module
         .entry_points
         .iter()
         .filter_map(|entry_point| match &entry_point.stage {
             ShaderStage::Vertex => {
-                let fn_name =
-                    Ident::new(&format!("{}_entry", &entry_point.name), Span::call_site());
-                let const_name = Ident::new(
-                    &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
-                    Span::call_site(),
-                );
+                let name = &demangle(&entry_point.name).name;
 
-                let vertex_inputs = vertex_entry_structs(entry_point, module);
+                let fn_name = Ident::new(&format!("{}_entry", name), Span::call_site());
+                let const_name =
+                    Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());
+
+                let vertex_inputs = vertex_entry_structs(entry_point, module, demangle.clone());
                 let mut step_mode_params = vec![];
                 let layout_expressions: Vec<TokenStream> = vertex_inputs
                     .iter()
                     .map(|input| {
-                        let name = Ident::new(&input.name, Span::call_site());
-                        let step_mode = Ident::new(&input.name.to_snake(), Span::call_site());
+                        let name = Ident::new(&input.name.name, Span::call_site());
+                        let step_mode = Ident::new(&input.name.name.to_snake(), Span::call_site());
                         step_mode_params.push(quote!(#step_mode: wgpu::VertexStepMode));
                         quote!(#name::vertex_buffer_layout(#step_mode))
                     })
@@ -147,15 +154,13 @@ pub fn vertex_states(module: &naga::Module) -> TokenStream {
     }
 }
 
-pub fn vertex_struct_methods(module: &naga::Module) -> TokenStream {
-    let structs = vertex_input_structs(module);
-    quote!(#(#structs)*)
-}
-
-fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
-    let vertex_inputs = crate::wgsl::get_vertex_input_structs(module);
-    vertex_inputs.iter().map(|input|  {
-        let name = Ident::new(&input.name, Span::call_site());
+pub fn vertex_struct_methods<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
+    let vertex_inputs = crate::wgsl::get_vertex_input_structs(module, demangle);
+    vertex_inputs.into_iter().map(|input|  {
+        let name = Ident::new(&input.name.name, Span::call_site());
 
         let count = Literal::usize_unsuffixed(input.fields.len());
         let attributes: Vec<_> = input
@@ -188,7 +193,7 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
         // https://gpuweb.github.io/gpuweb/#abstract-opdef-validating-gpuvertexbufferlayout
 
         // TODO: Support vertex inputs that aren't in a struct.
-        quote! {
+        let tokens = quote! {
             impl #name {
                 pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; #count] = [#(#attributes),*];
 
@@ -200,23 +205,31 @@ fn vertex_input_structs(module: &naga::Module) -> Vec<TokenStream> {
                     }
                 }
             }
-        }
+        };
+
+        // Don't conflict with the name used for the struct itself.
+        (TypePath {
+            parent: input.name.parent,
+            name: format!("{}.methods", input.name.name)
+        }, tokens)
     }).collect()
 }
 
-pub fn fragment_states(module: &naga::Module) -> TokenStream {
+pub fn fragment_states<F>(module: &naga::Module, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let entries: Vec<TokenStream> = module
         .entry_points
         .iter()
         .filter_map(|entry_point| match &entry_point.stage {
             ShaderStage::Fragment => {
-                let fn_name =
-                    Ident::new(&format!("{}_entry", &entry_point.name), Span::call_site());
+                let name = &demangle(&entry_point.name).name;
 
-                let const_name = Ident::new(
-                    &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
-                    Span::call_site(),
-                );
+                let fn_name = Ident::new(&format!("{}_entry", name), Span::call_site());
+
+                let const_name =
+                    Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());
 
                 let target_count =
                     Literal::usize_unsuffixed(fragment_target_count(module, &entry_point.function));
@@ -286,7 +299,7 @@ pub fn fragment_states(module: &naga::Module) -> TokenStream {
 mod test {
     use super::*;
 
-    use crate::assert_tokens_eq;
+    use crate::{assert_tokens_eq, demangle_identity};
     use indoc::indoc;
 
     #[test]
@@ -301,7 +314,7 @@ mod test {
         };
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = vertex_states(&module);
+        let actual = vertex_states(&module, demangle_identity);
 
         assert_tokens_eq!(quote!(), actual)
     }
@@ -329,7 +342,7 @@ mod test {
         };
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = fragment_states(&module);
+        let actual = fragment_states(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {
@@ -405,7 +418,7 @@ mod test {
         };
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = fragment_states(&module);
+        let actual = fragment_states(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {

@@ -5,9 +5,16 @@ use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{wgsl::rust_type, WriteOptions};
+use crate::{wgsl::rust_type, TypePath, WriteOptions};
 
-pub fn structs(module: &naga::Module, options: WriteOptions) -> TokenStream {
+pub fn structs<F>(
+    module: &naga::Module,
+    options: WriteOptions,
+    demangle: F,
+) -> Vec<(TypePath, TokenStream)>
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     // Initialize the layout calculator provided by naga.
     let mut layouter = naga::proc::Layouter::default();
     layouter.update(module.to_ctx()).unwrap();
@@ -19,7 +26,7 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> TokenStream {
 
     // Create matching Rust structs for WGSL structs.
     // This is a UniqueArena, so each struct will only be generated once.
-    let structs = module
+    module
         .types
         .iter()
         .filter(|(h, _)| {
@@ -39,33 +46,41 @@ pub fn structs(module: &naga::Module, options: WriteOptions) -> TokenStream {
         })
         .filter_map(|(t_handle, t)| {
             if let naga::TypeInner::Struct { members, .. } = &t.inner {
-                Some(rust_struct(
-                    t,
+                let path = demangle(t.name.as_ref()?);
+                let s = rust_struct(
+                    &path,
                     members,
                     &layouter,
                     t_handle,
                     module,
                     options,
                     &global_variable_types,
-                ))
+                    demangle.clone(),
+                );
+                Some((path, s))
             } else {
                 None
             }
-        });
-
-    quote!(#(#structs)*)
+        })
+        .collect()
 }
 
-fn rust_struct(
-    t: &naga::Type,
+#[allow(clippy::too_many_arguments)]
+fn rust_struct<F>(
+    path: &TypePath,
     members: &[naga::StructMember],
     layouter: &naga::proc::Layouter,
     t_handle: naga::Handle<naga::Type>,
     module: &naga::Module,
     options: WriteOptions,
     global_variable_types: &HashSet<Handle<Type>>,
-) -> TokenStream {
-    let struct_name = Ident::new(t.name.as_ref().unwrap(), Span::call_site());
+    demangle: F,
+) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
+    let name = &path.name;
+    let struct_name = Ident::new(name, Span::call_site());
 
     // Skip builtins since they don't require user specified data.
     let members: Vec<_> = members
@@ -77,14 +92,14 @@ fn rust_struct(
     let assert_member_offsets: Vec<_> = members
         .iter()
         .map(|m| {
-            let name = Ident::new(m.name.as_ref().unwrap(), Span::call_site());
-            let rust_offset = quote!(std::mem::offset_of!(#struct_name, #name));
+            let field_name = Ident::new(m.name.as_ref().unwrap(), Span::call_site());
+            let rust_offset = quote!(std::mem::offset_of!(#struct_name, #field_name));
 
             let wgsl_offset = Literal::usize_unsuffixed(m.offset as usize);
 
             let assert_text = format!(
                 "offset of {}.{} does not match WGSL",
-                t.name.as_ref().unwrap(),
+                name,
                 m.name.as_ref().unwrap()
             );
             quote! {
@@ -97,13 +112,13 @@ fn rust_struct(
 
     // TODO: Does the Rust alignment matter if it's copied to a buffer anyway?
     let struct_size = Literal::usize_unsuffixed(layout.size as usize);
-    let assert_size_text = format!("size of {} does not match WGSL", t.name.as_ref().unwrap());
+    let assert_size_text = format!("size of {} does not match WGSL", name);
     let assert_size = quote! {
         const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
     };
 
     let has_rts_array = struct_has_rts_array_member(&members, module);
-    let members = struct_members(&members, module, options);
+    let members = struct_members(path, &members, module, options, demangle);
     let mut derives = Vec::new();
 
     derives.push(quote!(Debug));
@@ -197,11 +212,16 @@ fn add_types_recursive(
     }
 }
 
-fn struct_members(
+fn struct_members<F>(
+    path: &TypePath,
     members: &[naga::StructMember],
     module: &naga::Module,
     options: WriteOptions,
-) -> Vec<TokenStream> {
+    demangle: F,
+) -> Vec<TokenStream>
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     members
         .iter()
         .enumerate()
@@ -218,14 +238,25 @@ fn struct_members(
                 if index != members.len() - 1 {
                     panic!("Only the last field of a struct can be a runtime-sized array");
                 }
-                let element_type =
-                    rust_type(module, &module.types[*base], options.matrix_vector_types);
+                let element_type = rust_type(
+                    path,
+                    module,
+                    &module.types[*base],
+                    options.matrix_vector_types,
+                    demangle.clone(),
+                );
                 quote!(
                     #[size(runtime)]
                     pub #member_name: Vec<#element_type>
                 )
             } else {
-                let member_type = rust_type(module, ty, options.matrix_vector_types);
+                let member_type = rust_type(
+                    path,
+                    module,
+                    ty,
+                    options.matrix_vector_types,
+                    demangle.clone(),
+                );
                 quote!(pub #member_name: #member_type)
             }
         })
@@ -248,13 +279,22 @@ fn struct_has_rts_array_member(members: &[naga::StructMember], module: &naga::Mo
 mod tests {
     use super::*;
 
-    use crate::{assert_tokens_eq, MatrixVectorTypes, WriteOptions};
+    use crate::{assert_tokens_eq, MatrixVectorTypes, ModulePath, WriteOptions};
     use indoc::indoc;
 
     fn test_structs(wgsl: &str, rust: &str, options: WriteOptions) {
         let module = naga::front::wgsl::parse_str(wgsl).unwrap();
-        let structs = structs(&module, options);
+        let structs = struct_tokens(&module, options);
         assert_tokens_eq!(rust.parse().unwrap(), structs);
+    }
+
+    fn struct_tokens(module: &naga::Module, options: WriteOptions) -> TokenStream {
+        let structs = structs(&module, options, |s| TypePath {
+            parent: ModulePath::default(),
+            name: s.to_string(),
+        });
+        let structs = structs.iter().map(|(_, s)| s);
+        quote!(#(#structs)*)
     }
 
     #[test]
@@ -350,7 +390,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let actual = structs(
+        let actual = struct_tokens(
             &module,
             WriteOptions {
                 derive_bytemuck_vertex: false,
@@ -396,7 +436,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let actual = structs(
+        let actual = struct_tokens(
             &module,
             WriteOptions {
                 derive_bytemuck_vertex: true,
@@ -455,7 +495,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let actual = structs(
+        let actual = struct_tokens(
             &module,
             WriteOptions {
                 matrix_vector_types: MatrixVectorTypes::Nalgebra,
@@ -489,7 +529,7 @@ mod tests {
         "#};
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let actual = structs(
+        let actual = struct_tokens(
             &module,
             WriteOptions {
                 derive_encase_host_shareable: true,
@@ -524,7 +564,7 @@ mod tests {
         "#};
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let _structs = structs(
+        let _structs = struct_tokens(
             &module,
             WriteOptions {
                 ..Default::default()
@@ -548,7 +588,7 @@ mod tests {
         "#};
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let _structs = structs(
+        let _structs = struct_tokens(
             &module,
             WriteOptions {
                 derive_encase_host_shareable: true,
@@ -573,7 +613,7 @@ mod tests {
         "#};
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let _structs = structs(
+        let _structs = struct_tokens(
             &module,
             WriteOptions {
                 derive_encase_host_shareable: true,
@@ -599,7 +639,7 @@ mod tests {
         "#};
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let _structs = structs(
+        let _structs = struct_tokens(
             &module,
             WriteOptions {
                 derive_encase_host_shareable: true,

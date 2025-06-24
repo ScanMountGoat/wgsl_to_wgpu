@@ -1,10 +1,9 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
-use crate::MatrixVectorTypes;
+use crate::{MatrixVectorTypes, TypePath};
 use naga::StructMember;
-use proc_macro2::{Literal, Span, TokenStream};
+use proc_macro2::{Literal, TokenStream};
 use quote::quote;
-use syn::Ident;
 
 pub fn global_shader_stages(module: &naga::Module) -> BTreeMap<String, wgpu::ShaderStages> {
     // Collect the shader stages for all entries that access a global variable.
@@ -139,7 +138,16 @@ pub fn buffer_binding_type(storage: naga::AddressSpace) -> TokenStream {
     }
 }
 
-pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTypes) -> TokenStream {
+pub fn rust_type<F>(
+    path: &TypePath,
+    module: &naga::Module,
+    ty: &naga::Type,
+    format: MatrixVectorTypes,
+    demangle: F,
+) -> TokenStream
+where
+    F: Fn(&str) -> TypePath,
+{
     match &ty.inner {
         naga::TypeInner::Scalar(scalar) => rust_scalar_type(scalar),
         naga::TypeInner::Vector { size, scalar } => match format {
@@ -166,7 +174,7 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             size: naga::ArraySize::Constant(size),
             stride: _,
         } => {
-            let element_type = rust_type(module, &module.types[*base], format);
+            let element_type = rust_type(path, module, &module.types[*base], format, demangle);
             let count = Literal::usize_unsuffixed(size.get() as usize);
             quote!([#element_type; #count])
         }
@@ -180,7 +188,12 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             members: _,
             span: _,
         } => {
-            let name = Ident::new(ty.name.as_ref().unwrap(), Span::call_site());
+            let member_path = demangle(ty.name.as_ref().unwrap());
+
+            // Use relative paths since we don't know the generated code's root path.
+            let name = relative_type_path(path, member_path);
+
+            let name: syn::Path = syn::parse_str(&name).unwrap();
             quote!(#name)
         }
         naga::TypeInner::BindingArray { base: _, size: _ } => todo!(),
@@ -191,6 +204,27 @@ pub fn rust_type(module: &naga::Module, ty: &naga::Type, format: MatrixVectorTyp
             ..
         } => todo!(),
     }
+}
+
+fn relative_type_path(base: &TypePath, target: TypePath) -> String {
+    let base_path: PathBuf = base.parent.components.iter().collect();
+    let target_path: PathBuf = target.parent.components.iter().collect();
+    let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
+
+    // TODO: Implement this from scratch with tests?
+    let mut components: Vec<_> = relative_path
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Prefix(_) => None,
+            std::path::Component::RootDir => None,
+            std::path::Component::CurDir => None,
+            std::path::Component::ParentDir => Some("super".to_string()),
+            std::path::Component::Normal(s) => Some(s.to_str()?.to_string()),
+        })
+        .collect();
+    components.push(target.name);
+
+    components.join("::")
 }
 
 fn rust_matrix_type(rows: naga::VectorSize, columns: naga::VectorSize, width: u8) -> TokenStream {
@@ -313,31 +347,38 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
 
 #[derive(PartialEq, Eq)]
 pub struct VertexInput {
-    pub name: String,
+    pub name: TypePath,
     pub fields: Vec<(u32, StructMember)>,
 }
 
 // TODO: Handle errors.
 // Collect the necessary data to generate an equivalent Rust struct.
-pub fn get_vertex_input_structs(module: &naga::Module) -> Vec<VertexInput> {
+pub fn get_vertex_input_structs<F>(module: &naga::Module, demangle: F) -> Vec<VertexInput>
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let mut structs: Vec<_> = module
         .entry_points
         .iter()
         .filter(|e| e.stage == naga::ShaderStage::Vertex)
-        .flat_map(|vertex_entry| vertex_entry_structs(vertex_entry, module))
+        .flat_map(|vertex_entry| vertex_entry_structs(vertex_entry, module, demangle.clone()))
         .collect();
 
     // Remove structs that are used more than once.
-    structs.sort_by_key(|s| s.name.clone());
-    structs.dedup_by_key(|s| s.name.clone());
+    structs.sort_by_key(|s| s.name.name.clone());
+    structs.dedup_by_key(|s| s.name.name.clone());
 
     structs
 }
 
-pub fn vertex_entry_structs(
+pub fn vertex_entry_structs<F>(
     vertex_entry: &naga::EntryPoint,
     module: &naga::Module,
-) -> Vec<VertexInput> {
+    demangle: F,
+) -> Vec<VertexInput>
+where
+    F: Fn(&str) -> TypePath,
+{
     vertex_entry
         .function
         .arguments
@@ -348,7 +389,7 @@ pub fn vertex_entry_structs(
             match &arg_type.inner {
                 naga::TypeInner::Struct { members, span: _ } => {
                     let input = VertexInput {
-                        name: arg_type.name.as_ref().unwrap().clone(),
+                        name: demangle(arg_type.name.as_ref()?),
                         fields: members
                             .iter()
                             .filter_map(|member| {

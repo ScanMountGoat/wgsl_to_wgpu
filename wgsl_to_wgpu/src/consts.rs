@@ -2,15 +2,19 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{wgsl::rust_type, MatrixVectorTypes};
+use crate::{wgsl::rust_type, MatrixVectorTypes, ModulePath, TypePath};
 
-pub fn consts(module: &naga::Module) -> Vec<TokenStream> {
+pub fn consts<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>
+where
+    F: Fn(&str) -> TypePath,
+{
     // Create matching Rust constants for WGSl constants.
     module
         .constants
         .iter()
-        .filter_map(|(_, t)| -> Option<TokenStream> {
-            let name = Ident::new(t.name.as_ref()?, Span::call_site());
+        .filter_map(|(_, t)| {
+            let path = demangle(t.name.as_ref()?);
+            let name = Ident::new(&path.name, Span::call_site());
 
             // TODO: Add support for f64 once naga supports it.
             let type_and_value = match &module.global_expressions[t.init] {
@@ -32,12 +36,15 @@ pub fn consts(module: &naga::Module) -> Vec<TokenStream> {
                 _ => None,
             }?;
 
-            Some(quote!( pub const #name: #type_and_value;))
+            Some((path, quote!( pub const #name: #type_and_value;)))
         })
         .collect()
 }
 
-pub fn pipeline_overridable_constants(module: &naga::Module) -> TokenStream {
+pub fn pipeline_overridable_constants<F>(module: &naga::Module, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let overrides: Vec<_> = module.overrides.iter().map(|(_, o)| o).collect();
 
     let fields: Vec<_> = overrides
@@ -45,7 +52,16 @@ pub fn pipeline_overridable_constants(module: &naga::Module) -> TokenStream {
         .map(|o| {
             let name = Ident::new(o.name.as_ref().unwrap(), Span::call_site());
             // TODO: Do we only need to handle scalar types here?
-            let ty = rust_type(module, &module.types[o.ty], MatrixVectorTypes::Rust);
+            let ty = rust_type(
+                &TypePath {
+                    parent: ModulePath::default(),
+                    name: String::new(),
+                },
+                module,
+                &module.types[o.ty],
+                MatrixVectorTypes::Rust,
+                demangle.clone(),
+            );
 
             if o.init.is_some() {
                 quote!(pub #name: Option<#ty>)
@@ -143,7 +159,7 @@ fn override_key(o: &naga::Override) -> String {
 mod tests {
     use super::*;
 
-    use crate::assert_tokens_eq;
+    use crate::{assert_tokens_eq, demangle_identity};
     use indoc::indoc;
 
     #[test]
@@ -176,7 +192,8 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let consts = consts(&module);
+        let consts = consts(&module, demangle_identity);
+        let consts = consts.iter().map(|(_, c)| c);
         let actual = quote!(#(#consts)*);
 
         // TODO: Why are int and float consts missing?
@@ -216,7 +233,7 @@ mod tests {
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let actual = pipeline_overridable_constants(&module);
+        let actual = pipeline_overridable_constants(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {
@@ -277,7 +294,7 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pipeline_overridable_constants(&module);
+        let actual = pipeline_overridable_constants(&module, demangle_identity);
         assert_tokens_eq!(quote!(), actual);
     }
 }
