@@ -280,7 +280,8 @@ mod tests {
     use super::*;
 
     use crate::{
-        assert_tokens_eq, assert_tokens_snapshot, MatrixVectorTypes, ModulePath, WriteOptions,
+        assert_rust_snapshot, assert_tokens_eq, create_shader_module, MatrixVectorTypes,
+        ModulePath, WriteOptions,
     };
     use indoc::indoc;
 
@@ -293,46 +294,50 @@ mod tests {
         quote!(#(#structs)*)
     }
 
-    macro_rules! assert_structs_snapshot {
-        ($wgsl:expr, $options:expr) => {
-            let wgsl = include_str!($wgsl);
-            let module = naga::front::wgsl::parse_str(wgsl).unwrap();
-            let structs = struct_tokens(&module, $options);
-            assert_tokens_snapshot!(structs);
-        };
-    }
-
     #[test]
     fn write_all_structs_rust() {
-        assert_structs_snapshot!("data/struct/types.wgsl", WriteOptions::default());
+        let output = create_shader_module(
+            include_str!("data/struct/types.wgsl"),
+            "types.wgsl",
+            WriteOptions::default(),
+        )
+        .unwrap();
+        assert_rust_snapshot!(output);
     }
 
     #[test]
     fn write_all_structs_glam() {
-        assert_structs_snapshot!(
-            "data/struct/types.wgsl",
+        let output = create_shader_module(
+            include_str!("data/struct/types.wgsl"),
+            "types.wgsl",
             WriteOptions {
                 matrix_vector_types: MatrixVectorTypes::Glam,
                 ..Default::default()
-            }
-        );
+            },
+        )
+        .unwrap();
+        assert_rust_snapshot!(output);
     }
 
     #[test]
     fn write_all_structs_nalgebra() {
-        assert_structs_snapshot!(
-            "data/struct/types.wgsl",
+        let output = create_shader_module(
+            include_str!("data/struct/types.wgsl"),
+            "types.wgsl",
             WriteOptions {
                 matrix_vector_types: MatrixVectorTypes::Nalgebra,
                 ..Default::default()
-            }
-        );
+            },
+        )
+        .unwrap();
+        assert_rust_snapshot!(output);
     }
 
     #[test]
     fn write_all_structs_encase_bytemuck() {
-        assert_structs_snapshot!(
-            "data/struct/encase_bytemuck.wgsl",
+        let output = create_shader_module(
+            include_str!("data/struct/types.wgsl"),
+            "types.wgsl",
             WriteOptions {
                 derive_bytemuck_vertex: true,
                 derive_bytemuck_host_shareable: true,
@@ -341,14 +346,17 @@ mod tests {
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
                 ..Default::default()
-            }
-        );
+            },
+        )
+        .unwrap();
+        assert_rust_snapshot!(output);
     }
 
     #[test]
     fn write_all_structs_serde_encase_bytemuck() {
-        assert_structs_snapshot!(
-            "data/struct/serde_encase_bytemuck.wgsl",
+        let output = create_shader_module(
+            include_str!("data/struct/serde_encase_bytemuck.wgsl"),
+            "serde_encase_bytemuck.wgsl",
             WriteOptions {
                 derive_bytemuck_vertex: true,
                 derive_bytemuck_host_shareable: true,
@@ -357,8 +365,10 @@ mod tests {
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
                 ..Default::default()
-            }
-        );
+            },
+        )
+        .unwrap();
+        assert_rust_snapshot!(output);
     }
 
     #[test]
@@ -463,8 +473,9 @@ mod tests {
     #[test]
     fn write_all_structs_bytemuck_input_layout_validation() {
         // The struct is also used with a storage buffer and should be validated.
-        assert_structs_snapshot!(
-            "data/struct/bytemuck_input_layout_validation.wgsl",
+        let output = create_shader_module(
+            include_str!("data/struct/bytemuck_input_layout_validation.wgsl"),
+            "bytemuck_input_layout_validation.wgsl",
             WriteOptions {
                 derive_bytemuck_vertex: true,
                 derive_bytemuck_host_shareable: true,
@@ -473,8 +484,10 @@ mod tests {
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,
                 ..Default::default()
-            }
-        );
+            },
+        )
+        .unwrap();
+        assert_rust_snapshot!(output);
     }
 
     #[test]

@@ -1,41 +1,244 @@
 ---
 source: wgsl_to_wgpu/src/structs.rs
 ---
+pub const ENTRY_MAIN: &str = "main";
+#[derive(Debug)]
+pub struct FragmentEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub targets: [Option<wgpu::ColorTargetState>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+pub fn fragment_state<'a, const N: usize>(
+    module: &'a wgpu::ShaderModule,
+    entry: &'a FragmentEntry<N>,
+) -> wgpu::FragmentState<'a> {
+    wgpu::FragmentState {
+        module,
+        entry_point: Some(entry.entry_point),
+        targets: &entry.targets,
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &entry.constants,
+            ..Default::default()
+        },
+    }
+}
+pub fn main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
+    FragmentEntry {
+        entry_point: ENTRY_MAIN,
+        targets,
+        constants: Default::default(),
+    }
+}
+pub const SOURCE: &str = include_str!("types.wgsl");
+pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+    let source = std::borrow::Cow::Borrowed(SOURCE);
+    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(source),
+    })
+}
+pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        push_constant_ranges: &[],
+    })
+}
 #[repr(C)]
 #[derive(
     Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
 )]
-pub struct Input0 {
-    pub a: u32,
-    pub b: i32,
-    pub c: f32,
+pub struct Atomics {
+    pub num: u32,
+    pub numi: i32,
 }
 const _: () = assert!(
-    std::mem::size_of::<Input0>() == 12,
-    "size of Input0 does not match WGSL"
+    std::mem::size_of::<Atomics>() == 8,
+    "size of Atomics does not match WGSL"
 );
 const _: () = assert!(
-    std::mem::offset_of!(Input0, a) == 0,
-    "offset of Input0.a does not match WGSL"
+    std::mem::offset_of!(Atomics, num) == 0,
+    "offset of Atomics.num does not match WGSL"
 );
 const _: () = assert!(
-    std::mem::offset_of!(Input0, b) == 4,
-    "offset of Input0.b does not match WGSL"
+    std::mem::offset_of!(Atomics, numi) == 4,
+    "offset of Atomics.numi does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct MatricesF16 {
+    pub a: [[half::f16; 4]; 4],
+    pub b: [[half::f16; 4]; 3],
+    pub c: [[half::f16; 4]; 2],
+    pub d: [[half::f16; 3]; 4],
+    pub e: [[half::f16; 3]; 3],
+    pub f: [[half::f16; 3]; 2],
+    pub g: [[half::f16; 2]; 4],
+    pub h: [[half::f16; 2]; 3],
+    pub i: [[half::f16; 2]; 2],
+}
+const _: () = assert!(
+    std::mem::size_of::<MatricesF16>() == 184,
+    "size of MatricesF16 does not match WGSL"
 );
 const _: () = assert!(
-    std::mem::offset_of!(Input0, c) == 8,
-    "offset of Input0.c does not match WGSL"
+    std::mem::offset_of!(MatricesF16, a) == 0,
+    "offset of MatricesF16.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF16, b) == 32,
+    "offset of MatricesF16.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF16, c) == 64,
+    "offset of MatricesF16.c does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF16, d) == 80,
+    "offset of MatricesF16.d does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF16, e) == 104,
+    "offset of MatricesF16.e does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF16, f) == 128,
+    "offset of MatricesF16.f does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF16, g) == 144,
+    "offset of MatricesF16.g does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF16, h) == 160,
+    "offset of MatricesF16.h does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF16, i) == 176,
+    "offset of MatricesF16.i does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct MatricesF32 {
+    pub a: [[f32; 4]; 4],
+    pub b: [[f32; 4]; 3],
+    pub c: [[f32; 4]; 2],
+    pub d: [[f32; 3]; 4],
+    pub e: [[f32; 3]; 3],
+    pub f: [[f32; 3]; 2],
+    pub g: [[f32; 2]; 4],
+    pub h: [[f32; 2]; 3],
+    pub i: [[f32; 2]; 2],
+}
+const _: () = assert!(
+    std::mem::size_of::<MatricesF32>() == 368,
+    "size of MatricesF32 does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF32, a) == 0,
+    "offset of MatricesF32.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF32, b) == 64,
+    "offset of MatricesF32.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF32, c) == 128,
+    "offset of MatricesF32.c does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF32, d) == 160,
+    "offset of MatricesF32.d does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF32, e) == 208,
+    "offset of MatricesF32.e does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF32, f) == 256,
+    "offset of MatricesF32.f does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF32, g) == 288,
+    "offset of MatricesF32.g does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF32, h) == 320,
+    "offset of MatricesF32.h does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF32, i) == 352,
+    "offset of MatricesF32.i does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct MatricesF64 {
+    pub a: [[f64; 4]; 4],
+    pub b: [[f64; 4]; 3],
+    pub c: [[f64; 4]; 2],
+    pub d: [[f64; 3]; 4],
+    pub e: [[f64; 3]; 3],
+    pub f: [[f64; 3]; 2],
+    pub g: [[f64; 2]; 4],
+    pub h: [[f64; 2]; 3],
+    pub i: [[f64; 2]; 2],
+}
+const _: () = assert!(
+    std::mem::size_of::<MatricesF64>() == 736,
+    "size of MatricesF64 does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF64, a) == 0,
+    "offset of MatricesF64.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF64, b) == 128,
+    "offset of MatricesF64.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF64, c) == 256,
+    "offset of MatricesF64.c does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF64, d) == 320,
+    "offset of MatricesF64.d does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF64, e) == 416,
+    "offset of MatricesF64.e does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF64, f) == 512,
+    "offset of MatricesF64.f does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF64, g) == 576,
+    "offset of MatricesF64.g does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF64, h) == 640,
+    "offset of MatricesF64.h does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(MatricesF64, i) == 704,
+    "offset of MatricesF64.i does not match WGSL"
 );
 #[repr(C)]
 #[derive(
     Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
 )]
 pub struct Nested {
-    pub a: Input0,
-    pub b: f32,
+    pub a: MatricesF32,
+    pub b: MatricesF64,
 }
 const _: () = assert!(
-    std::mem::size_of::<Nested>() == 16,
+    std::mem::size_of::<Nested>() == 1120,
     "size of Nested does not match WGSL"
 );
 const _: () = assert!(
@@ -43,6 +246,181 @@ const _: () = assert!(
     "offset of Nested.a does not match WGSL"
 );
 const _: () = assert!(
-    std::mem::offset_of!(Nested, b) == 12,
+    std::mem::offset_of!(Nested, b) == 384,
     "offset of Nested.b does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct Scalars {
+    pub a: u32,
+    pub b: i32,
+    pub c: f32,
+    pub d: half::f16,
+}
+const _: () = assert!(
+    std::mem::size_of::<Scalars>() == 16,
+    "size of Scalars does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(Scalars, a) == 0,
+    "offset of Scalars.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(Scalars, b) == 4,
+    "offset of Scalars.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(Scalars, c) == 8,
+    "offset of Scalars.c does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(Scalars, d) == 12,
+    "offset of Scalars.d does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct StaticArrays {
+    pub a: [u32; 5],
+    pub b: [f32; 3],
+    pub c: [[[f32; 4]; 4]; 512],
+}
+const _: () = assert!(
+    std::mem::size_of::<StaticArrays>() == 32800,
+    "size of StaticArrays does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(StaticArrays, a) == 0,
+    "offset of StaticArrays.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(StaticArrays, b) == 20,
+    "offset of StaticArrays.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(StaticArrays, c) == 32,
+    "offset of StaticArrays.c does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct VectorsF16 {
+    pub a: [half::f16; 2],
+    pub b: [half::f16; 4],
+}
+const _: () = assert!(
+    std::mem::size_of::<VectorsF16>() == 16,
+    "size of VectorsF16 does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsF16, a) == 0,
+    "offset of VectorsF16.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsF16, b) == 8,
+    "offset of VectorsF16.b does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct VectorsF32 {
+    pub a: [f32; 2],
+    pub b: [f32; 3],
+    pub c: [f32; 4],
+}
+const _: () = assert!(
+    std::mem::size_of::<VectorsF32>() == 48,
+    "size of VectorsF32 does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsF32, a) == 0,
+    "offset of VectorsF32.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsF32, b) == 16,
+    "offset of VectorsF32.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsF32, c) == 32,
+    "offset of VectorsF32.c does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct VectorsF64 {
+    pub a: [f64; 2],
+    pub b: [f64; 3],
+    pub c: [f64; 4],
+}
+const _: () = assert!(
+    std::mem::size_of::<VectorsF64>() == 96,
+    "size of VectorsF64 does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsF64, a) == 0,
+    "offset of VectorsF64.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsF64, b) == 32,
+    "offset of VectorsF64.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsF64, c) == 64,
+    "offset of VectorsF64.c does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct VectorsI32 {
+    pub a: [i32; 2],
+    pub b: [i32; 3],
+    pub c: [i32; 4],
+}
+const _: () = assert!(
+    std::mem::size_of::<VectorsI32>() == 48,
+    "size of VectorsI32 does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsI32, a) == 0,
+    "offset of VectorsI32.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsI32, b) == 16,
+    "offset of VectorsI32.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsI32, c) == 32,
+    "offset of VectorsI32.c does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,
+)]
+pub struct VectorsU32 {
+    pub a: [u32; 2],
+    pub b: [u32; 3],
+    pub c: [u32; 4],
+}
+const _: () = assert!(
+    std::mem::size_of::<VectorsU32>() == 48,
+    "size of VectorsU32 does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsU32, a) == 0,
+    "offset of VectorsU32.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsU32, b) == 16,
+    "offset of VectorsU32.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(VectorsU32, c) == 32,
+    "offset of VectorsU32.c does not match WGSL"
 );

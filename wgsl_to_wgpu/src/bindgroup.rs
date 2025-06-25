@@ -620,7 +620,6 @@ mod tests {
                 get_bind_group_data(&module, &global_stages, demangle_identity).unwrap();
 
             let actual = bind_groups_module(&module, &bind_group_data);
-
             assert_tokens_snapshot!(actual);
         };
     }

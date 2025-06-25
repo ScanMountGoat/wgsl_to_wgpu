@@ -1,9 +1,9 @@
 struct Input0 {
     @size(8)
-    a: u32,
-    b: i32,
+    @location(0) a: u32,
+    @location(1) b: i32,
     @align(32)
-    c: f32,
+    @location(2) c: f32,
     @builtin(vertex_index) d: u32,
 };
 
