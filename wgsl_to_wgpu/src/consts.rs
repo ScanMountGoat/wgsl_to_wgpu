@@ -159,7 +159,7 @@ fn override_key(o: &naga::Override) -> String {
 mod tests {
     use super::*;
 
-    use crate::{assert_tokens_eq, demangle_identity};
+    use crate::{assert_tokens_eq, assert_tokens_snapshot, demangle_identity};
     use indoc::indoc;
 
     #[test]
@@ -235,55 +235,7 @@ mod tests {
 
         let actual = pipeline_overridable_constants(&module, demangle_identity);
 
-        assert_tokens_eq!(
-            quote! {
-                pub struct OverrideConstants {
-                    pub b1: Option<bool>,
-                    pub b2: Option<bool>,
-                    pub b3: bool,
-                    pub f1: Option<f32>,
-                    pub f2: f32,
-                    pub i1: Option<i32>,
-                    pub i2: i32,
-                    pub i3: Option<i32>,
-                    pub a: Option<f32>,
-                    pub b: Option<f32>,
-                }
-
-                impl OverrideConstants {
-                    pub fn constants(&self) -> Vec<(&'static str, f64)> {
-                        let mut entries = vec![
-                            ("b3", if self.b3 { 1.0 } else { 0.0 }),
-                            ("f2", self.f2 as f64),
-                            ("i2", self.i2 as f64)
-                        ];
-                        if let Some(value) = self.b1 {
-                            entries.push(("b1", if value { 1.0 } else { 0.0 }));
-                        };
-                        if let Some(value) = self.b2 {
-                            entries.push(("b2", if value { 1.0 } else { 0.0 }));
-                        };
-                        if let Some(value) = self.f1 {
-                            entries.push(("f1", value as f64));
-                        };
-                        if let Some(value) = self.i1 {
-                            entries.push(("i1", value as f64));
-                        };
-                        if let Some(value) = self.i3 {
-                            entries.push(("i3", value as f64));
-                        };
-                        if let Some(value) = self.a {
-                            entries.push(("0", value as f64));
-                        };
-                        if let Some(value) = self.b {
-                            entries.push(("35", value as f64));
-                        }
-                        entries
-                    }
-                }
-            },
-            actual
-        );
+        assert_tokens_snapshot!(actual);
     }
 
     #[test]

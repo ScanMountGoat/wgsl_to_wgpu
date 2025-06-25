@@ -1,3 +1,6 @@
+---
+source: wgsl_to_wgpu/src/lib.rs
+---
 pub const ENTRY_VS_MAIN_NONE: &str = "vs_main_none";
 pub const ENTRY_VS_MAIN_SINGLE: &str = "vs_main_single";
 pub const ENTRY_VS_MAIN_MULTIPLE: &str = "vs_main_multiple";

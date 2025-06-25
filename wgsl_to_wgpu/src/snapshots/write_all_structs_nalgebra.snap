@@ -1,3 +1,6 @@
+---
+source: wgsl_to_wgpu/src/structs.rs
+---
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Scalars {

@@ -1,14 +1,17 @@
+---
+source: wgsl_to_wgpu/src/structs.rs
+---
 #[repr(C)]
 #[derive(
     Debug,
     Copy,
     Clone,
     PartialEq,
-    bytemuck::Pod,
-    bytemuck::Zeroable,
-    encase::ShaderType,
-    serde::Serialize,
-    serde::Deserialize,
+    bytemuck :: Pod,
+    bytemuck :: Zeroable,
+    encase :: ShaderType,
+    serde :: Serialize,
+    serde :: Deserialize,
 )]
 pub struct Input0 {
     pub a: u32,
@@ -37,11 +40,11 @@ const _: () = assert!(
     Copy,
     Clone,
     PartialEq,
-    bytemuck::Pod,
-    bytemuck::Zeroable,
-    encase::ShaderType,
-    serde::Serialize,
-    serde::Deserialize,
+    bytemuck :: Pod,
+    bytemuck :: Zeroable,
+    encase :: ShaderType,
+    serde :: Serialize,
+    serde :: Deserialize,
 )]
 pub struct Nested {
     pub a: Input0,

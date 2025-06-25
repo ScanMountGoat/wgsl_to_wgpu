@@ -1,3 +1,6 @@
+---
+source: wgsl_to_wgpu/src/lib.rs
+---
 pub mod bind_groups {
     #[derive(Debug)]
     pub struct BindGroup0(wgpu::BindGroup);

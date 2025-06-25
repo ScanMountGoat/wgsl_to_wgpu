@@ -299,7 +299,7 @@ where
 mod test {
     use super::*;
 
-    use crate::{assert_tokens_eq, demangle_identity};
+    use crate::{assert_tokens_eq, assert_tokens_snapshot, demangle_identity};
     use indoc::indoc;
 
     #[test]
@@ -344,67 +344,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let actual = fragment_states(&module, demangle_identity);
 
-        assert_tokens_eq!(
-            quote! {
-                #[derive(Debug)]
-                pub struct FragmentEntry<const N: usize> {
-                    pub entry_point: &'static str,
-                    pub targets: [Option<wgpu::ColorTargetState>; N],
-                    pub constants: Vec<(&'static str, f64)>,
-                }
-                pub fn fragment_state<'a, const N: usize>(
-                    module: &'a wgpu::ShaderModule,
-                    entry: &'a FragmentEntry<N>,
-                ) -> wgpu::FragmentState<'a> {
-                    wgpu::FragmentState {
-                        module,
-                        entry_point: Some(entry.entry_point),
-                        targets: &entry.targets,
-                        compilation_options: wgpu::PipelineCompilationOptions {
-                            constants: &entry.constants,
-                            ..Default::default()
-                        },
-                    }
-                }
-                pub fn fs_multiple_entry(
-                    targets: [Option<wgpu::ColorTargetState>; 2]
-                ) -> FragmentEntry<2> {
-                    FragmentEntry {
-                        entry_point: ENTRY_FS_MULTIPLE,
-                        targets,
-                        constants: Default::default(),
-                    }
-                }
-                pub fn fs_single_entry(
-                    targets: [Option<wgpu::ColorTargetState>; 1]
-                ) -> FragmentEntry<1> {
-                    FragmentEntry {
-                        entry_point: ENTRY_FS_SINGLE,
-                        targets,
-                        constants: Default::default(),
-                    }
-                }
-                pub fn fs_single_builtin_entry(
-                    targets: [Option<wgpu::ColorTargetState>; 0]
-                ) -> FragmentEntry<0> {
-                    FragmentEntry {
-                        entry_point: ENTRY_FS_SINGLE_BUILTIN,
-                        targets,
-                        constants: Default::default(),
-                    }
-                }
-                pub fn fs_empty_entry(
-                    targets: [Option<wgpu::ColorTargetState>; 0]
-                ) -> FragmentEntry<0> {
-                    FragmentEntry {
-                        entry_point: ENTRY_FS_EMPTY,
-                        targets,
-                        constants: Default::default(),
-                    }
-                }
-            },
-            actual
-        )
+        assert_tokens_snapshot!(actual);
     }
 
     #[test]
@@ -420,40 +360,6 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let actual = fragment_states(&module, demangle_identity);
 
-        assert_tokens_eq!(
-            quote! {
-                #[derive(Debug)]
-                pub struct FragmentEntry<const N: usize> {
-                    pub entry_point: &'static str,
-                    pub targets: [Option<wgpu::ColorTargetState>; N],
-                    pub constants: Vec<(&'static str, f64)>,
-                }
-                pub fn fragment_state<'a, const N: usize>(
-                    module: &'a wgpu::ShaderModule,
-                    entry: &'a FragmentEntry<N>,
-                ) -> wgpu::FragmentState<'a> {
-                    wgpu::FragmentState {
-                        module,
-                        entry_point: Some(entry.entry_point),
-                        targets: &entry.targets,
-                        compilation_options: wgpu::PipelineCompilationOptions {
-                            constants: &entry.constants,
-                            ..Default::default()
-                        },
-                    }
-                }
-                pub fn fs_single_entry(
-                    targets: [Option<wgpu::ColorTargetState>; 1],
-                    overrides: &OverrideConstants
-                ) -> FragmentEntry<1> {
-                    FragmentEntry {
-                        entry_point: ENTRY_FS_SINGLE,
-                        targets,
-                        constants: overrides.constants(),
-                    }
-                }
-            },
-            actual
-        )
+        assert_tokens_snapshot!(actual);
     }
 }

@@ -2,3 +2,7 @@
 # wgpu requires the newer resolver
 resolver = "2"
 members = ["wgsl_to_wgpu", "example"]
+
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3

@@ -786,10 +786,35 @@ macro_rules! assert_tokens_eq {
 }
 
 #[cfg(test)]
+#[macro_export]
+macro_rules! assert_tokens_snapshot {
+    ($output:expr) => {
+        let mut settings = insta::Settings::new();
+        settings.set_prepend_module_to_snapshot(false);
+        settings.set_omit_expression(true);
+        settings.bind(|| {
+            insta::assert_snapshot!(crate::pretty_print_rustfmt($output));
+        });
+    };
+}
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! assert_rust_snapshot {
+    ($output:expr) => {
+        let mut settings = insta::Settings::new();
+        settings.set_prepend_module_to_snapshot(false);
+        settings.set_omit_expression(true);
+        settings.bind(|| {
+            insta::assert_snapshot!($output);
+        });
+    };
+}
+
+#[cfg(test)]
 mod test {
     use super::*;
     use indoc::indoc;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn create_shader_module_include_source() {
@@ -800,69 +825,8 @@ mod test {
             fn fs_main() {}
         "#};
 
-        let actual = create_shader_module(source, "shader.wgsl", WriteOptions::default())
-            .unwrap()
-            .parse()
-            .unwrap();
-
-        assert_tokens_eq!(
-            quote! {
-                pub const ENTRY_FS_MAIN: &str = "fs_main";
-                #[derive(Debug)]
-                pub struct FragmentEntry<const N: usize> {
-                    pub entry_point: &'static str,
-                    pub targets: [Option<wgpu::ColorTargetState>; N],
-                    pub constants: Vec<(&'static str, f64)>,
-                }
-                pub fn fragment_state<'a, const N: usize>(
-                    module: &'a wgpu::ShaderModule,
-                    entry: &'a FragmentEntry<N>,
-                ) -> wgpu::FragmentState<'a> {
-                    wgpu::FragmentState {
-                        module,
-                        entry_point: Some(entry.entry_point),
-                        targets: &entry.targets,
-                        compilation_options: wgpu::PipelineCompilationOptions {
-                            constants: &entry.constants,
-                            ..Default::default()
-                        },
-                    }
-                }
-                pub fn fs_main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
-                    FragmentEntry {
-                        entry_point: ENTRY_FS_MAIN,
-                        targets,
-                        constants: Default::default(),
-                    }
-                }
-                pub const SOURCE: &str = include_str!("shader.wgsl");
-                pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
-                    let source = std::borrow::Cow::Borrowed(SOURCE);
-                    device
-                        .create_shader_module(wgpu::ShaderModuleDescriptor {
-                            label: None,
-                            source: wgpu::ShaderSource::Wgsl(source),
-                        })
-                }
-                pub const PUSH_CONSTANT_STAGES: wgpu::ShaderStages = wgpu::ShaderStages::FRAGMENT;
-                pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
-                    device
-                        .create_pipeline_layout(
-                            &wgpu::PipelineLayoutDescriptor {
-                                label: None,
-                                bind_group_layouts: &[],
-                                push_constant_ranges: &[
-                                    wgpu::PushConstantRange {
-                                        stages: PUSH_CONSTANT_STAGES,
-                                        range: 0..16,
-                                    },
-                                ],
-                            },
-                        )
-                }
-            },
-            actual
-        );
+        let actual = create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
+        assert_rust_snapshot!(actual);
     }
 
     #[test]
@@ -870,7 +834,7 @@ mod test {
         let source = include_str!("data/fragment_simple.wgsl");
         let actual =
             create_shader_modules(source, WriteOptions::default(), demangle_identity).unwrap();
-        assert_eq!(include_str!("data/fragment_simple.rs"), actual);
+        assert_rust_snapshot!(actual);
     }
 
     #[test]
@@ -885,7 +849,7 @@ mod test {
             demangle_identity,
         )
         .unwrap();
-        assert_eq!(include_str!("data/fragment_simple_rustfmt.rs"), actual);
+        assert_rust_snapshot!(actual);
     }
 
     #[test]
@@ -983,44 +947,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let actual = vertex_struct_methods(&module, demangle_identity);
 
-        assert_tokens_eq!(
-            quote! {
-                impl VertexInput0 {
-                    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32,
-                            offset: std::mem::offset_of!(VertexInput0, a) as u64,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32x2,
-                            offset: std::mem::offset_of!(VertexInput0, b) as u64,
-                            shader_location: 1,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32x3,
-                            offset: std::mem::offset_of!(VertexInput0, c) as u64,
-                            shader_location: 2,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32x4,
-                            offset: std::mem::offset_of!(VertexInput0, d) as u64,
-                            shader_location: 3,
-                        },
-                    ];
-                    pub const fn vertex_buffer_layout(
-                        step_mode: wgpu::VertexStepMode,
-                    ) -> wgpu::VertexBufferLayout<'static> {
-                        wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<VertexInput0>() as u64,
-                            step_mode,
-                            attributes: &VertexInput0::VERTEX_ATTRIBUTES,
-                        }
-                    }
-                }
-            },
-            items_to_tokens(actual)
-        );
+        assert_tokens_snapshot!(items_to_tokens(actual));
     }
 
     #[test]
@@ -1040,44 +967,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let actual = vertex_struct_methods(&module, demangle_identity);
 
-        assert_tokens_eq!(
-            quote! {
-                impl VertexInput0 {
-                    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float64,
-                            offset: std::mem::offset_of!(VertexInput0, a) as u64,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float64x2,
-                            offset: std::mem::offset_of!(VertexInput0, b) as u64,
-                            shader_location: 1,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float64x3,
-                            offset: std::mem::offset_of!(VertexInput0, c) as u64,
-                            shader_location: 2,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float64x4,
-                            offset: std::mem::offset_of!(VertexInput0, d) as u64,
-                            shader_location: 3,
-                        },
-                    ];
-                    pub const fn vertex_buffer_layout(
-                        step_mode: wgpu::VertexStepMode,
-                    ) -> wgpu::VertexBufferLayout<'static> {
-                        wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<VertexInput0>() as u64,
-                            step_mode,
-                            attributes: &VertexInput0::VERTEX_ATTRIBUTES,
-                        }
-                    }
-                }
-            },
-            items_to_tokens(actual)
-        );
+        assert_tokens_snapshot!(items_to_tokens(actual));
     }
 
     #[test]
@@ -1098,39 +988,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let actual = vertex_struct_methods(&module, demangle_identity);
 
-        assert_tokens_eq!(
-            quote! {
-                impl VertexInput0 {
-                    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = [
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float16,
-                            offset: std::mem::offset_of!(VertexInput0, a) as u64,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float16x2,
-                            offset: std::mem::offset_of!(VertexInput0, b) as u64,
-                            shader_location: 1,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float16x4,
-                            offset: std::mem::offset_of!(VertexInput0, c) as u64,
-                            shader_location: 2,
-                        },
-                    ];
-                    pub const fn vertex_buffer_layout(
-                        step_mode: wgpu::VertexStepMode,
-                    ) -> wgpu::VertexBufferLayout<'static> {
-                        wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<VertexInput0>() as u64,
-                            step_mode,
-                            attributes: &VertexInput0::VERTEX_ATTRIBUTES,
-                        }
-                    }
-                }
-            },
-            items_to_tokens(actual)
-        );
+        assert_tokens_snapshot!(items_to_tokens(actual));
     }
 
     #[test]
@@ -1151,44 +1009,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let actual = vertex_struct_methods(&module, demangle_identity);
 
-        assert_tokens_eq!(
-            quote! {
-                impl VertexInput0 {
-                    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Sint32,
-                            offset: std::mem::offset_of!(VertexInput0, a) as u64,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Sint32x2,
-                            offset: std::mem::offset_of!(VertexInput0, b) as u64,
-                            shader_location: 1,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Sint32x3,
-                            offset: std::mem::offset_of!(VertexInput0, c) as u64,
-                            shader_location: 2,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Sint32x4,
-                            offset: std::mem::offset_of!(VertexInput0, d) as u64,
-                            shader_location: 3,
-                        },
-                    ];
-                    pub const fn vertex_buffer_layout(
-                        step_mode: wgpu::VertexStepMode,
-                    ) -> wgpu::VertexBufferLayout<'static> {
-                        wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<VertexInput0>() as u64,
-                            step_mode,
-                            attributes: &VertexInput0::VERTEX_ATTRIBUTES,
-                        }
-                    }
-                }
-            },
-            items_to_tokens(actual)
-        );
+        assert_tokens_snapshot!(items_to_tokens(actual));
     }
 
     #[test]
@@ -1208,44 +1029,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let actual = vertex_struct_methods(&module, demangle_identity);
 
-        assert_tokens_eq!(
-            quote! {
-                impl VertexInput0 {
-                    pub const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Uint32,
-                            offset: std::mem::offset_of!(VertexInput0, a) as u64,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Uint32x2,
-                            offset: std::mem::offset_of!(VertexInput0, b) as u64,
-                            shader_location: 1,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Uint32x3,
-                            offset: std::mem::offset_of!(VertexInput0, c) as u64,
-                            shader_location: 2,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Uint32x4,
-                            offset: std::mem::offset_of!(VertexInput0, d) as u64,
-                            shader_location: 3,
-                        },
-                    ];
-                    pub const fn vertex_buffer_layout(
-                        step_mode: wgpu::VertexStepMode,
-                    ) -> wgpu::VertexBufferLayout<'static> {
-                        wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<VertexInput0>() as u64,
-                            step_mode,
-                            attributes: &VertexInput0::VERTEX_ATTRIBUTES,
-                        }
-                    }
-                }
-            },
-            items_to_tokens(actual)
-        );
+        assert_tokens_snapshot!(items_to_tokens(actual));
     }
 
     #[test]
@@ -1277,45 +1061,7 @@ mod test {
         let module = naga::front::wgsl::parse_str(source).unwrap();
         let actual = compute_module(&module, demangle_identity);
 
-        assert_tokens_eq!(
-            quote! {
-                pub mod compute {
-                    pub const MAIN1_WORKGROUP_SIZE: [u32; 3] = [1, 2, 3];
-                    pub fn create_main1_pipeline(device: &wgpu::Device) -> wgpu::ComputePipeline {
-                        let module = super::create_shader_module(device);
-                        let layout = super::create_pipeline_layout(device);
-                        device
-                            .create_compute_pipeline(
-                                &wgpu::ComputePipelineDescriptor {
-                                    label: Some("Compute Pipeline main1"),
-                                    layout: Some(&layout),
-                                    module: &module,
-                                    entry_point: Some("main1"),
-                                    compilation_options: Default::default(),
-                                    cache: Default::default(),
-                                },
-                            )
-                    }
-                    pub const MAIN2_WORKGROUP_SIZE: [u32; 3] = [256, 1, 1];
-                    pub fn create_main2_pipeline(device: &wgpu::Device) -> wgpu::ComputePipeline {
-                        let module = super::create_shader_module(device);
-                        let layout = super::create_pipeline_layout(device);
-                        device
-                            .create_compute_pipeline(
-                                &wgpu::ComputePipelineDescriptor {
-                                    label: Some("Compute Pipeline main2"),
-                                    layout: Some(&layout),
-                                    module: &module,
-                                    entry_point: Some("main2"),
-                                    compilation_options: Default::default(),
-                                    cache: Default::default(),
-                                },
-                            )
-                    }
-                }
-            },
-            actual
-        );
+        assert_tokens_snapshot!(actual);
     }
 
     #[test]
@@ -1395,5 +1141,121 @@ mod test {
             matches!(result, Err(CreateModuleError::ValidationError { .. }),),
             "{result:?} is ValidationError"
         )
+    }
+
+    fn demangle_underscore(name: &str) -> TypePath {
+        // Preprocessors that support modules mangle absolute paths.
+        // Use a very basic mangling scheme that assumes no '_' in the identifier name.
+        // This allows testing the module logic without needing extra dependencies.
+        // a_b_C -> a::b::C
+        let components: Vec<_> = name.split("_").collect();
+        let (name, parents) = components.split_last().unwrap();
+        TypePath {
+            parent: ModulePath {
+                components: parents.into_iter().map(|p| p.to_string()).collect(),
+            },
+            name: name.to_string(),
+        }
+    }
+
+    #[test]
+    fn single_root_module() {
+        let output = create_shader_modules(
+            include_str!("data/modules.wgsl"),
+            WriteOptions {
+                rustfmt: true,
+                ..Default::default()
+            },
+            demangle_underscore,
+        )
+        .unwrap();
+
+        assert_rust_snapshot!(output);
+    }
+
+    #[test]
+    fn add_single_root_module() {
+        let mut root = Module::default();
+        let options = WriteOptions {
+            rustfmt: true,
+            ..Default::default()
+        };
+        root.add_shader_module(
+            include_str!("data/modules.wgsl"),
+            None,
+            options,
+            ModulePath::default(),
+            demangle_underscore,
+        )
+        .unwrap();
+
+        let output = root.to_generated_bindings(options);
+        assert_rust_snapshot!(output);
+    }
+
+    #[test]
+    fn add_duplicate_module_different_paths() {
+        // Test shared types and handling of duplicate names.
+        let mut root = Module::default();
+        let options = WriteOptions {
+            rustfmt: true,
+            ..Default::default()
+        };
+        root.add_shader_module(
+            include_str!("data/modules.wgsl"),
+            None,
+            options,
+            ModulePath {
+                components: vec!["shader1".to_string()],
+            },
+            demangle_underscore,
+        )
+        .unwrap();
+        root.add_shader_module(
+            include_str!("data/modules.wgsl"),
+            None,
+            options,
+            ModulePath {
+                components: vec!["shaders".to_string(), "shader2".to_string()],
+            },
+            demangle_underscore,
+        )
+        .unwrap();
+
+        let output = root.to_generated_bindings(options);
+        assert_rust_snapshot!(output);
+    }
+
+    #[test]
+    fn vertex_entries() {
+        // Check vertex entry points and builtin attribute handling.
+        let actual = create_shader_module(
+            include_str!("data/vertex_entries.wgsl"),
+            "shader.wgsl",
+            WriteOptions {
+                rustfmt: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_rust_snapshot!(actual);
+    }
+
+    #[test]
+    fn shader_stage_collection() {
+        // Check the visibility: wgpu::ShaderStages::COMPUTE
+        let actual = create_shader_module(
+            include_str!("data/shader_stage_collection.wgsl"),
+            "shader.wgsl",
+            WriteOptions {
+                rustfmt: true,
+                derive_encase_host_shareable: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_rust_snapshot!(actual);
     }
 }

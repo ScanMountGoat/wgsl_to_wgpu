@@ -548,7 +548,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{assert_tokens_eq, demangle_identity, wgsl};
+    use crate::{assert_tokens_snapshot, demangle_identity, wgsl};
     use indoc::indoc;
 
     #[test]
@@ -610,53 +610,44 @@ mod tests {
         ));
     }
 
-    fn test_bind_groups(wgsl: &str, rust: &str) {
-        let module = naga::front::wgsl::parse_str(wgsl).unwrap();
+    macro_rules! assert_bindgroups_snapshot {
+        ($wgsl:expr) => {
+            let wgsl = include_str!($wgsl);
+            let module = naga::front::wgsl::parse_str(wgsl).unwrap();
 
-        let global_stages = wgsl::global_shader_stages(&module);
-        let bind_group_data =
-            get_bind_group_data(&module, &global_stages, demangle_identity).unwrap();
+            let global_stages = wgsl::global_shader_stages(&module);
+            let bind_group_data =
+                get_bind_group_data(&module, &global_stages, demangle_identity).unwrap();
 
-        let actual = bind_groups_module(&module, &bind_group_data);
+            let actual = bind_groups_module(&module, &bind_group_data);
 
-        assert_tokens_eq!(rust.parse().unwrap(), actual);
+            assert_tokens_snapshot!(actual);
+        };
     }
 
     #[test]
     fn bind_groups_module_compute() {
-        test_bind_groups(
-            include_str!("data/bindgroup/compute.wgsl"),
-            include_str!("data/bindgroup/compute.rs"),
-        );
+        assert_bindgroups_snapshot!("data/bindgroup/compute.wgsl");
     }
 
     #[test]
     fn bind_groups_module_vertex_fragment() {
         // Test different texture and sampler types.
         // TODO: Storage textures.
-        test_bind_groups(
-            include_str!("data/bindgroup/vertex_fragment.wgsl"),
-            include_str!("data/bindgroup/vertex_fragment.rs"),
-        );
+        assert_bindgroups_snapshot!("data/bindgroup/vertex_fragment.wgsl");
     }
 
     #[test]
     fn bind_groups_module_vertex() {
         // The actual content of the structs doesn't matter.
         // We only care about the groups and bindings.
-        test_bind_groups(
-            include_str!("data/bindgroup/vertex.wgsl"),
-            include_str!("data/bindgroup/vertex.rs"),
-        );
+        assert_bindgroups_snapshot!("data/bindgroup/vertex.wgsl");
     }
 
     #[test]
     fn bind_groups_module_fragment() {
         // The actual content of the structs doesn't matter.
         // We only care about the groups and bindings.
-        test_bind_groups(
-            include_str!("data/bindgroup/fragment.wgsl"),
-            include_str!("data/bindgroup/fragment.rs"),
-        );
+        assert_bindgroups_snapshot!("data/bindgroup/fragment.wgsl");
     }
 }

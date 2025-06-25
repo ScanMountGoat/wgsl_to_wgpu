@@ -1,5 +1,8 @@
+---
+source: wgsl_to_wgpu/src/structs.rs
+---
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable)]
 pub struct Input0 {
     pub a: u32,
     pub b: i32,
@@ -22,7 +25,7 @@ const _: () = assert!(
     "offset of Input0.c does not match WGSL"
 );
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable)]
 pub struct Inner {
     pub a: f32,
 }
@@ -35,7 +38,7 @@ const _: () = assert!(
     "offset of Inner.a does not match WGSL"
 );
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable)]
 pub struct Outer {
     pub inner: Inner,
 }

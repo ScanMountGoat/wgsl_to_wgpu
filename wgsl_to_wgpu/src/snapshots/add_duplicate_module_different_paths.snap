@@ -1,3 +1,6 @@
+---
+source: wgsl_to_wgpu/src/lib.rs
+---
 pub mod shader1 {
     pub mod bind_groups {
         #[derive(Debug)]
