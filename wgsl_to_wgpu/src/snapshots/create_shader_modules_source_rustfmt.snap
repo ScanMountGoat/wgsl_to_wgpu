@@ -1,7 +1,7 @@
 ---
 source: wgsl_to_wgpu/src/lib.rs
 ---
-pub const ENTRY_FS_MAIN: &str = "fs_main";
+pub const ENTRY_MAIN: &str = "main";
 #[derive(Debug)]
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -22,14 +22,14 @@ pub fn fragment_state<'a, const N: usize>(
         },
     }
 }
-pub fn fs_main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
+pub fn main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
     FragmentEntry {
-        entry_point: ENTRY_FS_MAIN,
+        entry_point: ENTRY_MAIN,
         targets,
         constants: Default::default(),
     }
 }
-pub const SOURCE: &str = "@fragment\nfn fs_main() {}\n";
+pub const SOURCE: &str = "@fragment fn main() {}";
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
     let source = std::borrow::Cow::Borrowed(SOURCE);
     device.create_shader_module(wgpu::ShaderModuleDescriptor {

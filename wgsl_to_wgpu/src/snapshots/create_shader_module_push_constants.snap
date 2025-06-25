@@ -1,7 +1,7 @@
 ---
 source: wgsl_to_wgpu/src/lib.rs
 ---
-pub const ENTRY_MAIN: &str = "main";
+pub const ENTRY_FS_MAIN: &str = "fs_main";
 #[derive(Debug)]
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -22,14 +22,14 @@ pub fn fragment_state<'a, const N: usize>(
         },
     }
 }
-pub fn main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
+pub fn fs_main_entry(targets: [Option<wgpu::ColorTargetState>; 1]) -> FragmentEntry<1> {
     FragmentEntry {
-        entry_point: ENTRY_MAIN,
+        entry_point: ENTRY_FS_MAIN,
         targets,
         constants: Default::default(),
     }
 }
-pub const SOURCE: &str = "@fragment fn main() {}";
+pub const SOURCE: &str = include_str!("shader.wgsl");
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
     let source = std::borrow::Cow::Borrowed(SOURCE);
     device
@@ -38,13 +38,19 @@ pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
             source: wgpu::ShaderSource::Wgsl(source),
         })
 }
+pub const PUSH_CONSTANT_STAGES: wgpu::ShaderStages = wgpu::ShaderStages::FRAGMENT;
 pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
     device
         .create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: None,
                 bind_group_layouts: &[],
-                push_constant_ranges: &[],
+                push_constant_ranges: &[
+                    wgpu::PushConstantRange {
+                        stages: PUSH_CONSTANT_STAGES,
+                        range: 0..16,
+                    },
+                ],
             },
         )
 }

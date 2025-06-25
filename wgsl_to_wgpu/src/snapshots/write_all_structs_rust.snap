@@ -95,3 +95,9 @@ pub struct MatricesF16 {
     pub h: [[half::f16; 2]; 3],
     pub i: [[half::f16; 2]; 2],
 }
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Atomics {
+    pub num: u32,
+    pub numi: i32,
+}

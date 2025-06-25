@@ -94,5 +94,11 @@ struct MatricesF16 {
 };
 var<uniform> k: MatricesF16;
 
+struct Atomics {
+    num: atomic<u32>,
+    numi: atomic<i32>,
+};
+var <storage, read_write> atomics: Atomics;
+
 @fragment
 fn main() {}

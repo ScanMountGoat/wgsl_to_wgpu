@@ -817,12 +817,14 @@ mod test {
     use indoc::indoc;
 
     #[test]
-    fn create_shader_module_include_source() {
+    fn create_shader_module_push_constants() {
         let source = indoc! {r#"
             var<push_constant> consts: vec4<f32>;
 
             @fragment
-            fn fs_main() {}
+            fn fs_main() -> @location(0) vec4<f32> {
+                return consts;
+            }
         "#};
 
         let actual = create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
@@ -830,8 +832,86 @@ mod test {
     }
 
     #[test]
+    fn create_shader_multiple_entries() {
+        let source = indoc! {r#"
+            @group(0) @binding(0) var<uniform> a: f32;
+            @group(0) @binding(1) var<uniform> b: f32;
+            @group(0) @binding(2) var<uniform> c: f32;
+            @group(0) @binding(3) var<uniform> d: u32;
+            @group(0) @binding(4) var<uniform> e: u32;
+            @group(0) @binding(5) var<uniform> f: u32;
+            @group(0) @binding(6) var<uniform> g: u32;
+            @group(0) @binding(7) var<uniform> h: u32;
+
+            fn inner() -> f32 {
+                return d;
+            }
+
+            @vertex
+            fn vs_main() {
+                {
+                    let x = b;
+                    let y = f;
+                }
+
+                let x = h;
+
+                switch e {
+                    default: {
+                        let y = e;
+                        return;
+                    }
+                }
+            }
+
+            @fragment
+            fn fs_main()  {
+                let z = e;
+
+                loop {
+                    let z = c;
+                }
+
+                if true {
+                    let x = h;
+                    let y = g;
+                }
+            }
+
+            @compute @workgroup_size(1, 1, 1)
+            fn main() {
+                let y = inner();
+                let z = f;
+                loop {
+                    let w = g;
+                    let x = h;
+                }
+            }
+        "#};
+
+        let actual = create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
+        assert_rust_snapshot!(actual);
+    }
+
+    #[test]
+    fn create_shader_module_multiple_outputs() {
+        let source = indoc! {r#"
+            struct Output {
+                @location(0) col0: vec4<f32>,
+                @builtin(frag_depth) depth: f32,
+                @location(1) col1: vec4<f32>,
+            };
+
+            @fragment
+            fn fs_multiple() -> Output {}
+        "#};
+        let actual = create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
+        assert_rust_snapshot!(actual);
+    }
+
+    #[test]
     fn create_shader_modules_source() {
-        let source = include_str!("data/fragment_simple.wgsl");
+        let source = "@fragment fn main() {}";
         let actual =
             create_shader_modules(source, WriteOptions::default(), demangle_identity).unwrap();
         assert_rust_snapshot!(actual);
@@ -839,7 +919,7 @@ mod test {
 
     #[test]
     fn create_shader_modules_source_rustfmt() {
-        let source = include_str!("data/fragment_simple.wgsl");
+        let source = "@fragment fn main() {}";
         let actual = create_shader_modules(
             source,
             WriteOptions {
@@ -1065,42 +1145,6 @@ mod test {
     }
 
     #[test]
-    fn quote_all_shader_stages() {
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::NONE),
-            quote_shader_stages(wgpu::ShaderStages::NONE)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::VERTEX),
-            quote_shader_stages(wgpu::ShaderStages::VERTEX)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::FRAGMENT),
-            quote_shader_stages(wgpu::ShaderStages::FRAGMENT)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::COMPUTE),
-            quote_shader_stages(wgpu::ShaderStages::COMPUTE)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::VERTEX_FRAGMENT),
-            quote_shader_stages(wgpu::ShaderStages::VERTEX_FRAGMENT)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::COMPUTE)),
-            quote_shader_stages(wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::COMPUTE)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::FRAGMENT.union(wgpu::ShaderStages::COMPUTE)),
-            quote_shader_stages(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::all()),
-            quote_shader_stages(wgpu::ShaderStages::all())
-        );
-    }
-
-    #[test]
     fn create_shader_module_parse_error() {
         let source = indoc! {r#"
             var<push_constant> consts: vec4<f32>;
@@ -1111,10 +1155,7 @@ mod test {
 
         let result = create_shader_module(source, "shader.wgsl", WriteOptions::default());
 
-        assert!(
-            matches!(result, Err(CreateModuleError::ParseError { .. })),
-            "{result:?} is ParseError"
-        )
+        assert!(matches!(result, Err(CreateModuleError::ParseError { .. })));
     }
 
     #[test]
@@ -1137,10 +1178,10 @@ mod test {
             },
         );
 
-        assert!(
-            matches!(result, Err(CreateModuleError::ValidationError { .. }),),
-            "{result:?} is ValidationError"
-        )
+        assert!(matches!(
+            result,
+            Err(CreateModuleError::ValidationError { .. })
+        ));
     }
 
     fn demangle_underscore(name: &str) -> TypePath {

@@ -478,41 +478,6 @@ mod tests {
     }
 
     #[test]
-    fn write_atomic_types() {
-        let source = indoc! {r#"
-            struct Atomics {
-                num: atomic<u32>,
-                numi: atomic<i32>,
-            };
-
-            @group(0) @binding(0)
-            var <storage, read_write> atomics:Atomics;
-        "#};
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let actual = struct_tokens(
-            &module,
-            WriteOptions {
-                matrix_vector_types: MatrixVectorTypes::Nalgebra,
-                ..Default::default()
-            },
-        );
-
-        assert_tokens_eq!(
-            quote! {
-                #[repr(C)]
-                #[derive(Debug, Copy, Clone, PartialEq)]
-                pub struct Atomics {
-                    pub num: u32,
-                    pub numi: i32,
-                }
-            },
-            actual
-        );
-    }
-
-    #[test]
     fn write_runtime_sized_array() {
         let source = indoc! {r#"
             struct RtsStruct {
