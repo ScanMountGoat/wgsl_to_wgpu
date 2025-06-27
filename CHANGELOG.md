@@ -6,14 +6,14 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## unreleased
+## 0.15.0 - 2025-06-27
 ### Added
 * Added support for using preprocessing libraries with module imports with the `Module` type. See `Module::add_Shader_module` for details.
 * Added function `demangle_identity` for using `create_shader_modules` and `Module::add_Shader_module` without module imports.
 
 ### Changed
 * Changed generated items to be sorted alphabetically by name.
-* Changed `create_shader_module_embedded` to `create_shader_modules` and added a parameter for the name demangling function.
+* Renamed `create_shader_module_embedded` to `create_shader_modules` and added a parameter for the name demangling function.
 
 ### Fixed
 * Fixed an issue with generated bind group code for binding arrays.
