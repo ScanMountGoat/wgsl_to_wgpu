@@ -336,7 +336,7 @@ where
     let output = root.to_generated_bindings(options);
     Ok(output)
 }
-/// A fully qualified absolute path like `a::b::Item` split into `["a", "b"]` and `Item`.
+/// A fully qualified absolute module path like `a::b` split into `["a", "b"]`.
 ///
 /// This path will be relative to the generated root module.
 /// Use [ModulePath::default] to refer to the root module itself.
@@ -347,7 +347,7 @@ pub struct ModulePath {
     pub components: Vec<String>,
 }
 
-/// A fully qualified absolute path like `a::b::Item` split into `["a", "b"]` and `Item`.
+/// A fully qualified absolute path like `a::b::Item` split into `["a", "b"]` and `"Item"`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypePath {
     /// The parent components like `["a", "b"]` in `a::b::Item`.
@@ -479,7 +479,8 @@ impl Module {
         };
         root.add_shader_module(&wgsl_source1, None, options, path2, demangle)?;
 
-        // Generate modules for "shader1", "shader2", and any imported modules determined by the demangle function.
+        // Generate modules for "shader1", "shader2",
+        // and any imported modules determined by the demangle function.
         let text = root.to_generated_bindings(options);
 
         std::fs::write("src/shaders.rs", text.as_bytes())?;
