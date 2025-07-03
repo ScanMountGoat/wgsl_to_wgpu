@@ -34,3 +34,22 @@ fn demangle_wesl(name: &str) -> wgsl_to_wgpu::TypePath {
     }
 }
 ```
+
+## naga_oil
+The function `naga_oil::compose::undecorate` is private and will need to be implemented manually. This requires additional dependencies like `data-encoding`, `regex`, and `regex-syntax`. Most projects should consider using wesl due to its easier integration with wgsl_to_wgpu.
+
+```rust
+fn demangle_naga_oil(name: &str) -> wgsl_to_wgpu::TypePath {
+    // fn undecorate(&self, string: &str) -> String
+    let name = undecorate(name);
+    let parts: Vec<_> = name.split("::").collect();
+    let (name, parents) = parts.split_last().unwrap();
+
+    wgsl_to_wgpu::TypePath {
+        parent: wgsl_to_wgpu::ModulePath {
+            components: parents.into_iter().map(|s| s.to_string()).collect(),
+        },
+        name: name.to_string(),
+    }
+}
+```
