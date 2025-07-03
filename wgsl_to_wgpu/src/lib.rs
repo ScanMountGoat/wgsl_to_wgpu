@@ -708,13 +708,13 @@ where
     let name = &demangle(&e.name).name;
 
     // Compute pipeline creation has few parameters and can be generated.
-    let pipeline_name = Ident::new(&format!("create_{}_pipeline", name), Span::call_site());
+    let pipeline_name = Ident::new(&format!("create_{name}_pipeline"), Span::call_site());
 
     // The entry name string itself should remain mangled to match the WGSL code.
     let entry_point = &e.name;
 
     // TODO: Include a user supplied module name in the label?
-    let label = format!("Compute Pipeline {}", name);
+    let label = format!("Compute Pipeline {name}");
     quote! {
         pub fn #pipeline_name(device: &wgpu::Device) -> wgpu::ComputePipeline {
             let module = super::create_shader_module(device);
@@ -780,8 +780,8 @@ fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
 macro_rules! assert_tokens_eq {
     ($a:expr, $b:expr) => {
         pretty_assertions::assert_eq!(
-            crate::pretty_print_rustfmt($a),
-            crate::pretty_print_rustfmt($b)
+            $crate::pretty_print_rustfmt($a),
+            $crate::pretty_print_rustfmt($b)
         )
     };
 }
@@ -794,7 +794,7 @@ macro_rules! assert_tokens_snapshot {
         settings.set_prepend_module_to_snapshot(false);
         settings.set_omit_expression(true);
         settings.bind(|| {
-            insta::assert_snapshot!(crate::pretty_print_rustfmt($output));
+            insta::assert_snapshot!($crate::pretty_print_rustfmt($output));
         });
     };
 }
@@ -1194,7 +1194,7 @@ mod test {
         let (name, parents) = components.split_last().unwrap();
         TypePath {
             parent: ModulePath {
-                components: parents.into_iter().map(|p| p.to_string()).collect(),
+                components: parents.iter().map(|p| p.to_string()).collect(),
             },
             name: name.to_string(),
         }

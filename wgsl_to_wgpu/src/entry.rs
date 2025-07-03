@@ -70,7 +70,7 @@ where
             ShaderStage::Vertex => {
                 let name = &demangle(&entry_point.name).name;
 
-                let fn_name = Ident::new(&format!("{}_entry", name), Span::call_site());
+                let fn_name = Ident::new(&format!("{name}_entry"), Span::call_site());
                 let const_name =
                     Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());
 
@@ -226,7 +226,7 @@ where
             ShaderStage::Fragment => {
                 let name = &demangle(&entry_point.name).name;
 
-                let fn_name = Ident::new(&format!("{}_entry", name), Span::call_site());
+                let fn_name = Ident::new(&format!("{name}_entry"), Span::call_site());
 
                 let const_name =
                     Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());

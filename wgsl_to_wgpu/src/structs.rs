@@ -112,7 +112,7 @@ where
 
     // TODO: Does the Rust alignment matter if it's copied to a buffer anyway?
     let struct_size = Literal::usize_unsuffixed(layout.size as usize);
-    let assert_size_text = format!("size of {} does not match WGSL", name);
+    let assert_size_text = format!("size of {name} does not match WGSL");
     let assert_size = quote! {
         const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
     };
@@ -286,7 +286,7 @@ mod tests {
     use indoc::indoc;
 
     fn struct_tokens(module: &naga::Module, options: WriteOptions) -> TokenStream {
-        let structs = structs(&module, options, |s| TypePath {
+        let structs = structs(module, options, |s| TypePath {
             parent: ModulePath::default(),
             name: s.to_string(),
         });
