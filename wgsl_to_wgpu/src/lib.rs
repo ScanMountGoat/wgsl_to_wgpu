@@ -112,7 +112,7 @@ impl CreateModuleError {
                 error.emit_to_stderr_with_path(wgsl_source, path)
             }
             CreateModuleError::ValidationError { error } => {
-                error.emit_to_stderr_with_path(wgsl_source, &path.to_string_lossy())
+                error.emit_to_stderr_with_path(wgsl_source, path)
             }
             other => {
                 eprintln!("{}: {}", path.to_string_lossy(), other)
@@ -139,7 +139,7 @@ impl CreateModuleError {
                 error.emit_to_string_with_path(wgsl_source, path)
             }
             CreateModuleError::ValidationError { error } => {
-                error.emit_to_string_with_path(wgsl_source, &path.to_string_lossy())
+                error.emit_to_string_with_path(wgsl_source, path)
             }
             other => {
                 format!("{}: {}", path.to_string_lossy(), other)
