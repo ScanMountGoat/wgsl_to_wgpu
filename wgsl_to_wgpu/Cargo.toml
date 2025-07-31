@@ -19,8 +19,8 @@ prettyplease = "0.2"
 thiserror = "2.0"
 case = "1.0"
 pathdiff = "0.2.3"
-insta = "1.43.1"
 
 [dev-dependencies]
 indoc = "2.0"
 pretty_assertions = "1.4"
+insta = "1.43.1"
