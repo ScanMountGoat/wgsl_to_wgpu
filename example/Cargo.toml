@@ -1,15 +1,17 @@
 [package]
 name = "example"
-version = "0.15.1"
-edition = "2021"
+version = "0.15.2"
+edition = "2024"
+
+publish = false
 
 [dependencies]
 winit = "0.30"
-wgpu = "26.0.0"
+wgpu = "26.0"
 futures = "0.3"
-bytemuck = { version = "1.19", features = ["derive"] }
-encase = { version = "0.11.0", features = ["glam"] }
-glam = { version = "0.30.3", features = ["bytemuck"] }
+bytemuck = { version = "1.23", features = ["derive"] }
+encase = { version = "0.11", features = ["glam"] }
+glam = { version = "0.30", features = ["bytemuck"] }
 
 [build-dependencies]
 wgsl_to_wgpu = { path = "../wgsl_to_wgpu" }
