@@ -362,7 +362,7 @@ fn storage_access(access: naga::StorageAccess) -> TokenStream {
         (true, true) => quote!(wgpu::StorageTextureAccess::ReadWrite),
         (true, false) => quote!(wgpu::StorageTextureAccess::ReadOnly),
         (false, true) => quote!(wgpu::StorageTextureAccess::WriteOnly),
-        _ => todo!(), // shouldn't be possible
+        (false, false) => unreachable!(), // shouldn't be possible
     }
 }
 

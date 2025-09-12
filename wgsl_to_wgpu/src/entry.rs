@@ -13,11 +13,7 @@ pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
         Some(r) => match &r.binding {
             Some(b) => {
                 // Builtins don't have render targets.
-                if matches!(b, naga::Binding::Location { .. }) {
-                    1
-                } else {
-                    0
-                }
+                matches!(b, naga::Binding::Location { .. }) as usize // one if true
             }
             None => {
                 // Fragment functions should return a single variable or a struct.

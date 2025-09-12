@@ -16,10 +16,9 @@ where
             let path = demangle(t.name.as_ref()?);
             let name = Ident::new(&path.name, Span::call_site());
 
-            // TODO: Add support for f64 once naga supports it.
             let type_and_value = match &module.global_expressions[t.init] {
                 naga::Expression::Literal(literal) => match literal {
-                    naga::Literal::F64(v) => Some(quote!(f32 = #v)),
+                    naga::Literal::F64(v) => Some(quote!(f64 = #v)),
                     naga::Literal::F32(v) => Some(quote!(f32 = #v)),
                     naga::Literal::U32(v) => Some(quote!(u32 = #v)),
                     naga::Literal::I32(v) => Some(quote!(i32 = #v)),

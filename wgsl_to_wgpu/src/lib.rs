@@ -173,8 +173,8 @@ pub struct WriteOptions {
     /// Use [MatrixVectorTypes::Glam] for best compatibility.
     pub derive_encase_host_shareable: bool,
 
-    /// Derive [serde::Serialize](https://docs.rs/serde/1.0.159/serde/trait.Serialize.html)
-    /// and [serde::Deserialize](https://docs.rs/serde/1.0.159/serde/trait.Deserialize.html)
+    /// Derive [serde::Serialize](https://docs.rs/serde/1.0.219/serde/trait.Serialize.html)
+    /// and [serde::Deserialize](https://docs.rs/serde/1.0.219/serde/trait.Deserialize.html)
     /// for user defined WGSL structs when `true`.
     pub derive_serde: bool,
 
