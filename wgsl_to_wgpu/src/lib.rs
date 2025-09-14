@@ -231,7 +231,8 @@ impl Default for MatrixVectorTypes {
     }
 }
 
-/// Create a Rust module for a WGSL shader included via [include_str].
+/// Create a Rust module for a WGSL shader.
+/// Which the Rust module will included via [include_str].
 ///
 /// The `wgsl_include_path` should be a valid input to [include_str] in the generated file's location.
 /// The included contents should be identical to `wgsl_source`.
