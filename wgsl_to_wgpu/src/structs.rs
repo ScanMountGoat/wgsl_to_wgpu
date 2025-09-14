@@ -378,6 +378,7 @@ mod tests {
                 a: u32,
                 b: i32,
                 c: f32,
+                d: f64,
             };
 
             struct Output0 {
@@ -418,6 +419,7 @@ mod tests {
                     pub a: u32,
                     pub b: i32,
                     pub c: f32,
+                    pub d: f64,
                 }
             },
             actual
@@ -464,6 +466,52 @@ mod tests {
                     pub a: u32,
                     pub b: i32,
                     pub c: f32,
+                }
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_all_structs_bytemuck_f64_vec() {
+        // Structs used only for vertex inputs don't require layout validation.
+        // Correctly specifying the offsets is handled by the buffer layout itself.
+        let source = indoc! {r#"
+            struct Input0 {
+                a: u32,
+                b: i32,
+                c: f64,
+            };
+
+            @vertex
+            fn main(input: Input0) -> vec4<f64> {
+                return vec4(0.0);
+            }
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let actual = struct_tokens(
+            &module,
+            WriteOptions {
+                derive_bytemuck_vertex: true,
+                derive_bytemuck_host_shareable: true,
+                derive_encase_host_shareable: true,
+                derive_serde: false,
+                matrix_vector_types: MatrixVectorTypes::Rust,
+                rustfmt: true,
+                ..Default::default()
+            },
+        );
+
+        assert_tokens_eq!(
+            quote! {
+                #[repr(C)]
+                #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+                pub struct Input0 {
+                    pub a: u32,
+                    pub b: i32,
+                    pub c: f64,
                 }
             },
             actual
