@@ -22,7 +22,7 @@ proc-macro2 = "1.0"
 prettyplease = "0.2"
 thiserror = "2.0"
 case = "1.0"
-pathdiff = "0.2.3"
+pathdiff = "0.2"
 
 [dev-dependencies]
 indoc = "2.0"
