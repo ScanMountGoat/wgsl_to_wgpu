@@ -1,6 +1,6 @@
 [package]
 name = "wgsl_to_wgpu"
-version = "0.15.1"
+version = "0.15.2"
 edition.workspace = true
 
 authors = ["ScanMountGoat <>"]
