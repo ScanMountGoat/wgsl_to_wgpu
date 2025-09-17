@@ -18,7 +18,7 @@ pub fn global_shader_stages(module: &naga::Module) -> BTreeMap<String, wgpu::Sha
     global_stages
 }
 
-fn naga_stages(stage: naga::ShaderStage) -> wgpu::ShaderStages {
+const fn naga_stages(stage: naga::ShaderStage) -> wgpu::ShaderStages {
     match stage {
         naga::ShaderStage::Vertex => wgpu::ShaderStages::VERTEX,
         naga::ShaderStage::Fragment => wgpu::ShaderStages::FRAGMENT,
@@ -182,7 +182,9 @@ where
             size: naga::ArraySize::Dynamic,
             ..
         } => {
-            panic!("Runtime-sized arrays can only be used in variable declarations or as the last field of a struct.");
+            panic!(
+                "Runtime-sized arrays can only be used in variable declarations or as the last field of a struct."
+            );
         }
         naga::TypeInner::Struct {
             members: _,
@@ -306,7 +308,7 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
             (naga::ScalarKind::Float, 2) => wgpu::VertexFormat::Float16,
             (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32,
             (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64,
-            _ => todo!(),
+            _ => unreachable!(),
         },
         naga::TypeInner::Vector { size, scalar } => match size {
             naga::VectorSize::Bi => match (scalar.kind, scalar.width) {
@@ -319,14 +321,14 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
                 (naga::ScalarKind::Float, 2) => wgpu::VertexFormat::Float16x2,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x2,
                 (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x2,
-                _ => todo!(),
+                _ => unreachable!(),
             },
             naga::VectorSize::Tri => match (scalar.kind, scalar.width) {
                 (naga::ScalarKind::Uint, 4) => wgpu::VertexFormat::Uint32x3,
                 (naga::ScalarKind::Sint, 4) => wgpu::VertexFormat::Sint32x3,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x3,
                 (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x3,
-                _ => todo!(),
+                _ => unreachable!(),
             },
             naga::VectorSize::Quad => match (scalar.kind, scalar.width) {
                 (naga::ScalarKind::Sint, 1) => wgpu::VertexFormat::Sint8x4,
@@ -338,7 +340,7 @@ pub fn vertex_format(ty: &naga::Type) -> wgpu::VertexFormat {
                 (naga::ScalarKind::Float, 2) => wgpu::VertexFormat::Float16x4,
                 (naga::ScalarKind::Float, 4) => wgpu::VertexFormat::Float32x4,
                 (naga::ScalarKind::Float, 8) => wgpu::VertexFormat::Float64x4,
-                _ => todo!(),
+                _ => unimplemented!(),
             },
         },
         _ => todo!(), // are these types even valid as attributes?

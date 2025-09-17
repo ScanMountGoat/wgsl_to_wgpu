@@ -1,6 +1,6 @@
 use crate::{
-    indexed_name_to_ident, quote_shader_stages, wgsl::buffer_binding_type, CreateModuleError,
-    TypePath,
+    CreateModuleError, TypePath, indexed_name_to_ident, quote_shader_stages,
+    wgsl::buffer_binding_type,
 };
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
@@ -362,7 +362,7 @@ fn storage_access(access: naga::StorageAccess) -> TokenStream {
         (true, true) => quote!(wgpu::StorageTextureAccess::ReadWrite),
         (true, false) => quote!(wgpu::StorageTextureAccess::ReadOnly),
         (false, true) => quote!(wgpu::StorageTextureAccess::WriteOnly),
-        _ => todo!(), // shouldn't be possible
+        (false, false) => unreachable!(), // shouldn't be possible
     }
 }
 
@@ -441,12 +441,12 @@ fn resource_ty(
         naga::TypeInner::Sampler { .. } => {
             quote!(wgpu::BindingResource::Sampler(bindings.#field_name))
         }
-        naga::TypeInner::BindingArray {
-            base,
-            ..
-        } => {
-            resource_array_ty(&module.types[*base].inner, binding_index, binding_name, field_name)
-        }
+        naga::TypeInner::BindingArray { base, .. } => resource_array_ty(
+            &module.types[*base].inner,
+            binding_index,
+            binding_name,
+            field_name,
+        ),
         naga::TypeInner::AccelerationStructure { .. } => {
             quote!(wgpu::BindingResource::AccelerationStructure(bindings.#field_name))
         }
@@ -465,22 +465,22 @@ fn resource_array_ty(
 ) -> TokenStream {
     match ty {
         naga::TypeInner::Struct { .. }
-            | naga::TypeInner::Array { .. }
-            | naga::TypeInner::Scalar { .. }
-            | naga::TypeInner::Vector { .. }
-            | naga::TypeInner::Matrix { .. } => {
-                quote!(wgpu::BindingResource::BufferArray(bindings.#field_name))
-            }
-            naga::TypeInner::Image { .. } => {
-                quote!(wgpu::BindingResource::TextureViewArray(bindings.#field_name))
-            }
-            naga::TypeInner::Sampler { .. } => {
-                quote!(wgpu::BindingResource::SamplerArray(bindings.#field_name))
-            }
-            // TODO: Better error handling.
-            inner => panic!(
-                "Failed to generate binding array type for `{inner:?}` for '{binding_name}' at index {binding_index}.",
-            ),
+        | naga::TypeInner::Array { .. }
+        | naga::TypeInner::Scalar { .. }
+        | naga::TypeInner::Vector { .. }
+        | naga::TypeInner::Matrix { .. } => {
+            quote!(wgpu::BindingResource::BufferArray(bindings.#field_name))
+        }
+        naga::TypeInner::Image { .. } => {
+            quote!(wgpu::BindingResource::TextureViewArray(bindings.#field_name))
+        }
+        naga::TypeInner::Sampler { .. } => {
+            quote!(wgpu::BindingResource::SamplerArray(bindings.#field_name))
+        }
+        // TODO: Better error handling.
+        inner => panic!(
+            "Failed to generate binding array type for `{inner:?}` for '{binding_name}' at index {binding_index}.",
+        ),
     }
 }
 

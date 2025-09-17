@@ -1,6 +1,5 @@
 ---
 source: wgsl_to_wgpu/src/structs.rs
-assertion_line: 517
 ---
 pub mod bind_groups {
     #[derive(Debug)]

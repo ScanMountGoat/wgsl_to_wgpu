@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use wgsl_to_wgpu::{create_shader_module, MatrixVectorTypes, WriteOptions};
+use wgsl_to_wgpu::{MatrixVectorTypes, WriteOptions, create_shader_module};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     for name in ["shader", "compute_shader"] {

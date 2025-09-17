@@ -51,7 +51,7 @@ use std::{
 use bindgroup::{bind_groups_module, get_bind_group_data};
 use consts::pipeline_overridable_constants;
 use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
-use naga::{valid::ValidationFlags, WithSpan};
+use naga::{WithSpan, valid::ValidationFlags};
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
@@ -173,8 +173,8 @@ pub struct WriteOptions {
     /// Use [MatrixVectorTypes::Glam] for best compatibility.
     pub derive_encase_host_shareable: bool,
 
-    /// Derive [serde::Serialize](https://docs.rs/serde/1.0.159/serde/trait.Serialize.html)
-    /// and [serde::Deserialize](https://docs.rs/serde/1.0.159/serde/trait.Deserialize.html)
+    /// Derive [serde::Serialize](https://docs.rs/serde/1.0.*/serde/trait.Serialize.html)
+    /// and [serde::Deserialize](https://docs.rs/serde/1.0.*/serde/trait.Deserialize.html)
     /// for user defined WGSL structs when `true`.
     pub derive_serde: bool,
 
@@ -772,50 +772,50 @@ fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
     }
 }
 
-// Tokenstreams can't be compared directly using PartialEq.
-// Use pretty_print to normalize the formatting and compare strings.
-// Use a colored diff output to make differences easier to see.
-#[cfg(test)]
-#[macro_export]
-macro_rules! assert_tokens_eq {
-    ($a:expr, $b:expr) => {
-        pretty_assertions::assert_eq!(
-            $crate::pretty_print_rustfmt($a),
-            $crate::pretty_print_rustfmt($b)
-        )
-    };
-}
-
-#[cfg(test)]
-#[macro_export]
-macro_rules! assert_tokens_snapshot {
-    ($output:expr) => {
-        let mut settings = insta::Settings::new();
-        settings.set_prepend_module_to_snapshot(false);
-        settings.set_omit_expression(true);
-        settings.bind(|| {
-            insta::assert_snapshot!($crate::pretty_print_rustfmt($output));
-        });
-    };
-}
-
-#[cfg(test)]
-#[macro_export]
-macro_rules! assert_rust_snapshot {
-    ($output:expr) => {
-        let mut settings = insta::Settings::new();
-        settings.set_prepend_module_to_snapshot(false);
-        settings.set_omit_expression(true);
-        settings.bind(|| {
-            insta::assert_snapshot!($output);
-        });
-    };
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     use indoc::indoc;
+
+    // Tokenstreams can't be compared directly using PartialEq.
+    // Use pretty_print to normalize the formatting and compare strings.
+    // Use a colored diff output to make differences easier to see.
+    #[cfg(test)]
+    #[macro_export]
+    macro_rules! assert_tokens_eq {
+        ($a:expr, $b:expr) => {
+            pretty_assertions::assert_eq!(
+                $crate::pretty_print_rustfmt($a),
+                $crate::pretty_print_rustfmt($b)
+            )
+        };
+    }
+
+    #[cfg(test)]
+    #[macro_export]
+    macro_rules! assert_tokens_snapshot {
+        ($output:expr) => {
+            let mut settings = insta::Settings::new();
+            settings.set_prepend_module_to_snapshot(false);
+            settings.set_omit_expression(true);
+            settings.bind(|| {
+                insta::assert_snapshot!($crate::pretty_print_rustfmt($output));
+            });
+        };
+    }
+
+    #[cfg(test)]
+    #[macro_export]
+    macro_rules! assert_rust_snapshot {
+        ($output:expr) => {
+            let mut settings = insta::Settings::new();
+            settings.set_prepend_module_to_snapshot(false);
+            settings.set_omit_expression(true);
+            settings.bind(|| {
+                insta::assert_snapshot!($output);
+            });
+        };
+    }
 
     #[test]
     fn create_shader_module_push_constants() {
@@ -843,9 +843,14 @@ mod test {
             @group(0) @binding(5) var<uniform> f: u32;
             @group(0) @binding(6) var<uniform> g: u32;
             @group(0) @binding(7) var<uniform> h: u32;
+            @group(0) @binding(8) var<uniform> i: f64;
 
             fn inner() -> f32 {
                 return d;
+            }
+
+            fn inner_double() -> f64 {
+                return i;
             }
 
             @vertex

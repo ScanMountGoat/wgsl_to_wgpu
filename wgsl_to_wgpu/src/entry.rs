@@ -5,19 +5,15 @@ use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::wgsl::vertex_entry_structs;
 use crate::TypePath;
+use crate::wgsl::vertex_entry_structs;
 
 pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     match &f.result {
         Some(r) => match &r.binding {
             Some(b) => {
                 // Builtins don't have render targets.
-                if matches!(b, naga::Binding::Location { .. }) {
-                    1
-                } else {
-                    0
-                }
+                matches!(b, naga::Binding::Location { .. }) as usize // one if true
             }
             None => {
                 // Fragment functions should return a single variable or a struct.
