@@ -48,9 +48,6 @@ use std::{
     process::{Command, Stdio},
 };
 
-#[cfg(test)]
-mod test;
-
 use bindgroup::{bind_groups_module, get_bind_group_data};
 use consts::pipeline_overridable_constants;
 use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
