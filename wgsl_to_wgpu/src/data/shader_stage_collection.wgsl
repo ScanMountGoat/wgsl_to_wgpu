@@ -7,5 +7,5 @@ fn add_one() {
 
 @compute @workgroup_size(1, 1, 1)
 fn main() {
-  add_one();
+    add_one();
 }
