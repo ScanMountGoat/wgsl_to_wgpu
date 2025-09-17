@@ -2,7 +2,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{wgsl::rust_type, MatrixVectorTypes, ModulePath, TypePath};
+use crate::{MatrixVectorTypes, ModulePath, TypePath, wgsl::rust_type};
 
 pub fn consts<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>
 where

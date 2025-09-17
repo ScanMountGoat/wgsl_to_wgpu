@@ -182,7 +182,9 @@ where
             size: naga::ArraySize::Dynamic,
             ..
         } => {
-            panic!("Runtime-sized arrays can only be used in variable declarations or as the last field of a struct.");
+            panic!(
+                "Runtime-sized arrays can only be used in variable declarations or as the last field of a struct."
+            );
         }
         naga::TypeInner::Struct {
             members: _,

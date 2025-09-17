@@ -5,7 +5,7 @@ use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{wgsl::rust_type, TypePath, WriteOptions};
+use crate::{TypePath, WriteOptions, wgsl::rust_type};
 
 pub fn structs<F>(
     module: &naga::Module,
@@ -280,8 +280,8 @@ mod tests {
     use super::*;
 
     use crate::{
-        assert_rust_snapshot, assert_tokens_eq, create_shader_module, MatrixVectorTypes,
-        ModulePath, WriteOptions,
+        MatrixVectorTypes, ModulePath, WriteOptions, assert_rust_snapshot, assert_tokens_eq,
+        create_shader_module,
     };
     use indoc::indoc;
 

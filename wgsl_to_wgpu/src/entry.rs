@@ -5,8 +5,8 @@ use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::wgsl::vertex_entry_structs;
 use crate::TypePath;
+use crate::wgsl::vertex_entry_structs;
 
 pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     match &f.result {
