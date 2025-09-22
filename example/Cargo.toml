@@ -10,8 +10,8 @@ winit = "0.30"
 wgpu = "26.0"
 futures = "0.3"
 bytemuck = { version = "1.23", features = ["derive"] }
-encase = { version = "0.11", features = ["glam"] }
-glam = { version = "0.30", features = ["bytemuck"] }
+encase = "0.12"
+glam = { version = "0.30", features = ["bytemuck", "encase"] }
 
 [build-dependencies]
 wgsl_to_wgpu = { path = "../wgsl_to_wgpu" }
