@@ -58,12 +58,15 @@ use syn::Ident;
 use thiserror::Error;
 
 mod bindgroup;
+mod compute;
 mod consts;
 mod entry;
 mod structs;
 mod wgsl;
 
 pub use naga::valid::Capabilities as WgslCapabilities;
+
+use crate::compute::compute_module;
 
 /// Errors while generating Rust source for a WGSL shader module.
 #[derive(Debug, Error)]
@@ -665,86 +668,6 @@ fn pretty_print_rustfmt(tokens: TokenStream) -> String {
 
 fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
     Ident::new(&format!("{name}{index}"), Span::call_site())
-}
-
-fn compute_module<F>(module: &naga::Module, demangle: F) -> TokenStream
-where
-    F: Fn(&str) -> TypePath + Clone,
-{
-    let entry_points: Vec<_> = module
-        .entry_points
-        .iter()
-        .filter_map(|e| {
-            if e.stage == naga::ShaderStage::Compute {
-                let workgroup_size_constant = workgroup_size(e, demangle.clone());
-                let create_pipeline = create_compute_pipeline(e, demangle.clone());
-
-                Some(quote! {
-                    #workgroup_size_constant
-                    #create_pipeline
-                })
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    if entry_points.is_empty() {
-        // Don't include empty modules.
-        quote!()
-    } else {
-        quote! {
-            pub mod compute {
-                #(#entry_points)*
-            }
-        }
-    }
-}
-
-fn create_compute_pipeline<F>(e: &naga::EntryPoint, demangle: F) -> TokenStream
-where
-    F: Fn(&str) -> TypePath,
-{
-    let name = &demangle(&e.name).name;
-
-    // Compute pipeline creation has few parameters and can be generated.
-    let pipeline_name = Ident::new(&format!("create_{name}_pipeline"), Span::call_site());
-
-    // The entry name string itself should remain mangled to match the WGSL code.
-    let entry_point = &e.name;
-
-    // TODO: Include a user supplied module name in the label?
-    let label = format!("Compute Pipeline {name}");
-    quote! {
-        pub fn #pipeline_name(device: &wgpu::Device) -> wgpu::ComputePipeline {
-            let module = super::create_shader_module(device);
-            let layout = super::create_pipeline_layout(device);
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(#label),
-                layout: Some(&layout),
-                module: &module,
-                entry_point: Some(#entry_point),
-                compilation_options: Default::default(),
-                cache: Default::default(),
-            })
-        }
-    }
-}
-
-fn workgroup_size<F>(e: &naga::EntryPoint, demangle: F) -> TokenStream
-where
-    F: Fn(&str) -> TypePath + Clone,
-{
-    let name = &demangle(&e.name).name;
-
-    let name = Ident::new(
-        &format!("{}_WORKGROUP_SIZE", name.to_uppercase()),
-        Span::call_site(),
-    );
-    let [x, y, z] = e
-        .workgroup_size
-        .map(|s| Literal::usize_unsuffixed(s as usize));
-    quote!(pub const #name: [u32; 3] = [#x, #y, #z];)
 }
 
 fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
