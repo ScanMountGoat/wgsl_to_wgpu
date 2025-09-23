@@ -11,7 +11,7 @@ wgpu = "26.0"
 futures = "0.3"
 bytemuck = { version = "1.23", features = ["derive"] }
 encase = "0.12"
-glam = { version = "0.30", features = ["bytemuck", "encase"] }
+glam = { version = "0.30.7", features = ["bytemuck", "encase"] }
 
 [build-dependencies]
 wgsl_to_wgpu = { path = "../wgsl_to_wgpu" }
