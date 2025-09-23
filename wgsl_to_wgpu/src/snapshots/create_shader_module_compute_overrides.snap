@@ -159,8 +159,9 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             },
         )
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Uniforms {
-    pub color_rgb: [f32; 3],
+#[derive(Debug, Clone, PartialEq, encase::ShaderType)]
+pub struct RtsStruct {
+    pub other_data: i32,
+    #[shader(size(runtime))]
+    pub the_array: Vec<u32>,
 }
