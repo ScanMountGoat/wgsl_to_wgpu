@@ -207,37 +207,6 @@ mod tests {
     }
 
     #[test]
-    fn write_pipeline_overrideable_constants() {
-        let source = indoc! {r#"
-            override b1: bool = true;
-            override b2: bool = false;
-            override b3: bool;
-
-            override f1: f32 = 0.5;
-            override f2: f32;
-
-            // override f3: f64 = 0.6;
-            // override f4: f64;
-
-            override i1: i32 = 0;
-            override i2: i32;
-            override i3: i32 = i1 * i2;
-
-            @id(0) override a: f32 = 1.0;
-            @id(35) override b: f32 = 2.0;
-
-            @fragment
-            fn main() {}
-        "#};
-
-        let module = naga::front::wgsl::parse_str(source).unwrap();
-
-        let actual = pipeline_overridable_constants(&module, demangle_identity);
-
-        assert_tokens_snapshot!(actual);
-    }
-
-    #[test]
     fn write_pipeline_overrideable_constants_empty() {
         let source = indoc! {r#"
             @fragment

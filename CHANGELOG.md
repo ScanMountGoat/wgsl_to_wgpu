@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 * Updated to encase 0.12 from 0.11
 
+### Added
+* Added support for pipeline-overrideable constants in generated code for compute shaders.
+
+## 0.15.2 - 2025-09-16
+### Added
+* Added support for f64.
+
+### Changed
+* Changed Rust edition to 2024.
+
 ## 0.15.1 - 2025-07-31
 ### Changed
 * Updated wgpu to latest.
