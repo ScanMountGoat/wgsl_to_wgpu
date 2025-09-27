@@ -9,6 +9,7 @@ Wesl supports multiple mangling schemes. Make sure that the demangle function us
 Wesl does not mangle identifiers in the root module by default. wgsl_to_wgpu demangles all identifiers, which can cause issues demangling certain names. A workaround is to detect if a name is mangled by looking for the appropriate prefix.
 
 ```rust
+// wesl 0.2.0
 fn demangle_wesl(name: &str) -> wgsl_to_wgpu::TypePath {
     // Assume all paths are absolute paths.
     if name.starts_with("package_") {
@@ -28,7 +29,7 @@ fn demangle_wesl(name: &str) -> wgsl_to_wgpu::TypePath {
     } else {
         // Use the root module if the name is not mangled.
         wgsl_to_wgpu::TypePath {
-            parent: wgsl_to_wgpu::ModulePath::default(),
+            parent: wgsl_to_wgpu::ModulePath::new_root(),
             name: name.to_string(),
         }
     }
