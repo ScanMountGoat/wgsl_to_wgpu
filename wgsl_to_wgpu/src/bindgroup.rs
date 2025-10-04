@@ -321,6 +321,9 @@ fn binding_ty_count(
                         None,
                     )
                 }
+                naga::ImageClass::External => {
+                    unimplemented!()
+                }
             }
         }
         naga::TypeInner::Sampler { comparison } => {

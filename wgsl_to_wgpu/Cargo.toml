@@ -14,8 +14,8 @@ readme = "../README.md"
 publish = true
 
 [dependencies]
-naga = { version = "26.0", features = ["wgsl-in", "stderr"] }
-wgpu-types = "26.0"
+naga = { version = "27.0", features = ["wgsl-in", "stderr"] }
+wgpu-types = "27.0"
 syn = "2.0"
 quote = "1.0"
 proc-macro2 = "1.0"

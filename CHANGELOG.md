@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 * Updated to encase 0.12 from 0.11
+* Updated wgpu version to 27.0.
 
 ## 0.15.2 - 2025-09-16
 ### Added
