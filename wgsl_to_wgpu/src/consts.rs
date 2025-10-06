@@ -128,9 +128,11 @@ where
         quote!(let mut entries = vec![#(#required_entries),*];)
     };
 
+    // todo constants should use arrayvec since it's alredy used by naga
     if !fields.is_empty() {
         // Create a Rust struct that can initialize the constants dictionary.
         quote! {
+            #[allow(non_snake_case)]
             pub struct OverrideConstants {
                 #(#fields),*
             }
