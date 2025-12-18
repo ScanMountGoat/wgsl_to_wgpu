@@ -1,3 +1,5 @@
+enable wgpu_ray_query;
+
 struct Transforms {
     value: vec4<f32>
 };

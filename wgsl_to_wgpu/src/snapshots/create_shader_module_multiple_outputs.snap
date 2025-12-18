@@ -46,7 +46,7 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             &wgpu::PipelineLayoutDescriptor {
                 label: None,
                 bind_group_layouts: &[],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             },
         )
 }

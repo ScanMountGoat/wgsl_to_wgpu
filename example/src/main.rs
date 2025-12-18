@@ -44,15 +44,15 @@ impl State {
             .await
             .unwrap();
 
-        // Push constants need to be enabled and have a requested max size.
+        // Immediate data needs to be enabled and have a requested max size.
         // 128 bytes is a reasonable limit to assume for desktop APIs.
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::TEXTURE_COMPRESSION_BC
-                    | wgpu::Features::PUSH_CONSTANTS,
+                    | wgpu::Features::IMMEDIATES,
                 required_limits: wgpu::Limits {
-                    max_push_constant_size: 128,
+                    max_immediate_size: 128,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -92,8 +92,8 @@ impl State {
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
             cache: Default::default(),
+            multiview_mask: None,
         });
 
         // Create a gradient texture.
@@ -264,22 +264,19 @@ impl State {
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: None,
         });
 
         render_pass.set_pipeline(&self.pipeline);
 
-        // Push constant data also needs to follow alignment rules.
-        let mut push_constant_bytes = UniformBuffer::new(Vec::new());
-        push_constant_bytes
+        // Immediate data also needs to follow alignment rules.
+        let mut immediate_data = UniformBuffer::new(Vec::new());
+        immediate_data
             .write(&shader::PushConstants {
                 color_matrix: glam::Mat4::IDENTITY,
             })
             .unwrap();
-        render_pass.set_push_constants(
-            shader::PUSH_CONSTANT_STAGES,
-            0,
-            &push_constant_bytes.into_inner(),
-        );
+        render_pass.set_immediates(0, &immediate_data.into_inner());
 
         // Use this function to ensure all bind groups are set.
         crate::shader::set_bind_groups(&mut render_pass, &self.bind_group0, &self.bind_group1);

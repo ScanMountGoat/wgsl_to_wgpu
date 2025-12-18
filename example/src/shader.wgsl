@@ -32,7 +32,7 @@ struct PushConstants {
     color_matrix: mat4x4<f32>
 }
 
-var<push_constant> constants: PushConstants;
+var<immediate> constants: PushConstants;
 
 override force_black: bool;
 override scale: f32 = 1.0;

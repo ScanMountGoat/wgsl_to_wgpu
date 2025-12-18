@@ -235,7 +235,6 @@ pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
         source: wgpu::ShaderSource::Wgsl(source),
     })
 }
-pub const PUSH_CONSTANT_STAGES: wgpu::ShaderStages = wgpu::ShaderStages::FRAGMENT;
 pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
@@ -243,10 +242,7 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             &bind_groups::BindGroup0::get_bind_group_layout(device),
             &bind_groups::BindGroup1::get_bind_group_layout(device),
         ],
-        push_constant_ranges: &[wgpu::PushConstantRange {
-            stages: PUSH_CONSTANT_STAGES,
-            range: 0..64,
-        }],
+        immediate_size: 64,
     })
 }
 #[repr(C)]

@@ -158,7 +158,7 @@ fn override_key(o: &naga::Override) -> String {
 mod tests {
     use super::*;
 
-    use crate::{assert_tokens_eq, assert_tokens_snapshot, demangle_identity};
+    use crate::{assert_tokens_eq, demangle_identity};
     use indoc::indoc;
 
     #[test]

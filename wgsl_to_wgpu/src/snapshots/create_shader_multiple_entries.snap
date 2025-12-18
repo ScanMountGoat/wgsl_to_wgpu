@@ -335,7 +335,7 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
                 bind_group_layouts: &[
                     &bind_groups::BindGroup0::get_bind_group_layout(device),
                 ],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             },
         )
 }

@@ -6,6 +6,14 @@ Breaking changes in the generated code will be considered as breaking changes wh
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## unreleased
+### Changed
+* Updated wgpu to 28.0.
+* Changed generated code to use the new immediate data API instead of push constants.
+
+### Removed
+* Removed the `PUSH_CONSTANT_STAGES` constant. wgpu now uses a single unified size for all shader stages.
+
 ## 0.16.0 - 2025-10-04
 ### Added
 * Added support for pipeline-overrideable constants in generated code for compute shaders.

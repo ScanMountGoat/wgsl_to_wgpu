@@ -28,14 +28,6 @@ const fn naga_stages(stage: naga::ShaderStage) -> wgpu::ShaderStages {
     }
 }
 
-pub fn entry_stages(module: &naga::Module) -> wgpu::ShaderStages {
-    module
-        .entry_points
-        .iter()
-        .map(|entry| naga_stages(entry.stage))
-        .collect()
-}
-
 fn update_stages_blocks(
     module: &naga::Module,
     block: &naga::Block,

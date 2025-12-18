@@ -214,9 +214,10 @@ impl Default for ValidationOptions {
 
 /// The format to use for matrix and vector types.
 /// Note that the generated types for the same WGSL type may differ in size or alignment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MatrixVectorTypes {
     /// Rust types like `[f32; 4]` or `[[f32; 4]; 4]`.
+    #[default]
     Rust,
 
     /// `glam` types like `glam::Vec4` or `glam::Mat4`.
@@ -225,12 +226,6 @@ pub enum MatrixVectorTypes {
 
     /// `nalgebra` types like `nalgebra::SVector<f64, 4>` or `nalgebra::SMatrix<f32, 2, 3>`.
     Nalgebra,
-}
-
-impl Default for MatrixVectorTypes {
-    fn default() -> Self {
-        Self::Rust
-    }
 }
 
 /// Create a Rust module for a WGSL shader included via [include_str].
@@ -516,8 +511,6 @@ impl Module {
         let global_stages = wgsl::global_shader_stages(&module);
         let bind_group_data = get_bind_group_data(&module, &global_stages, demangle.clone())?;
 
-        let entry_stages = wgsl::entry_stages(&module);
-
         // Collect tokens for each item.
         let structs = structs::structs(&module, options, demangle.clone());
         let consts = consts::consts(&module, demangle.clone());
@@ -552,8 +545,7 @@ impl Module {
             })
             .collect();
 
-        let (push_constant_range, push_constant_stages) =
-            push_constant_range_stages(&module, &global_stages, entry_stages).unzip();
+        let immediate_size = immediate_data_size(&module).unwrap_or(quote!(0));
 
         let create_pipeline_layout = quote! {
             pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
@@ -562,18 +554,12 @@ impl Module {
                     bind_group_layouts: &[
                         #(&#bind_group_layouts),*
                     ],
-                    push_constant_ranges: &[#push_constant_range],
+                    immediate_size: #immediate_size,
                 })
             }
         };
 
         let override_constants = pipeline_overridable_constants(&module, demangle);
-
-        let push_constant_stages = push_constant_stages.map(|stages| {
-            quote! {
-                pub const PUSH_CONSTANT_STAGES: wgpu::ShaderStages = #stages;
-            }
-        });
 
         // Place items into appropriate modules.
         self.add_module_items(&consts, &root_path);
@@ -594,7 +580,6 @@ impl Module {
                 #vertex_states
                 #fragment_states
                 #create_shader_module
-                #push_constant_stages
                 #create_pipeline_layout
             },
         )];
@@ -604,41 +589,19 @@ impl Module {
     }
 }
 
-fn push_constant_range_stages(
-    module: &naga::Module,
-    global_stages: &BTreeMap<String, wgpu::ShaderStages>,
-    entry_stages: wgpu::ShaderStages,
-) -> Option<(TokenStream, TokenStream)> {
-    // Assume only one variable is used with var<push_constant> in WGSL.
+fn immediate_data_size(module: &naga::Module) -> Option<TokenStream> {
+    // Assume only one variable is used with var<immediate> in WGSL.
     let (_, global) = module
         .global_variables
         .iter()
-        .find(|(_, g)| g.space == naga::AddressSpace::PushConstant)?;
+        .find(|(_, g)| g.space == naga::AddressSpace::Immediate)?;
 
-    let push_constant_size = module.types[global.ty].inner.size(module.to_ctx());
+    let size = module.types[global.ty].inner.size(module.to_ctx());
 
-    // Set visibility to all stages that access this binding.
-    // Use all entry points as a safe fallback.
-    let shader_stages = global
-        .name
-        .as_ref()
-        .and_then(|n| global_stages.get(n).copied())
-        .unwrap_or(entry_stages);
-
-    let stages = quote_shader_stages(shader_stages);
-
-    // Use a single push constant range for all shader stages.
-    // This allows easily setting push constants in a single call with offset 0.
-    let size = Literal::usize_unsuffixed(push_constant_size as usize);
-    Some((
-        quote! {
-            wgpu::PushConstantRange {
-                stages: PUSH_CONSTANT_STAGES,
-                range: 0..#size
-            }
-        },
-        stages,
-    ))
+    // wgpu only uses a single immediate data range for all shader stages.
+    // This allows easily setting immediate data in a single call with offset 0.
+    let size = Literal::usize_unsuffixed(size as usize);
+    Some(quote!(#size))
 }
 
 fn pretty_print(output: TokenStream) -> String {
@@ -743,9 +706,9 @@ mod test {
     }
 
     #[test]
-    fn create_shader_module_push_constants() {
+    fn create_shader_module_immediate_data() {
         let source = indoc! {r#"
-            var<push_constant> consts: vec4<f32>;
+            var<immediate> consts: vec4<f32>;
 
             @fragment
             fn fs_main() -> @location(0) vec4<f32> {
@@ -1101,7 +1064,7 @@ mod test {
     #[test]
     fn create_shader_module_parse_error() {
         let source = indoc! {r#"
-            var<push_constant> consts: vec4<f32>;
+            var<immediate> consts: vec4<f32>;
 
             @fragment
             fn fs_main() }
@@ -1115,7 +1078,7 @@ mod test {
     #[test]
     fn create_shader_module_semantic_error() {
         let source = indoc! {r#"
-            var<push_constant> consts: vec4<f32>;
+            var<immediate> consts: vec4<f32>;
 
             @fragment
             fn fs_main() {
