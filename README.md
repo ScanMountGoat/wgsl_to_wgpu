@@ -42,7 +42,7 @@ While bind groups can easily be set all at once using the `bind_groups::set_bind
 Organizing bind groups in this way can also help to better organize rendering resources in application code instead of redundantly storing all resources with each object. The `bindgroups::BindGroup0` may only need to be stored once while `bindgroups::BindGroup3` may be stored for each mesh in the scene. Note that bind groups store references to their underlying resource bindings, so it is not necessary to recreate a bind group if the only the uniform or storage buffer contents change. Avoid creating new bind groups during rendering if possible for best performance.
 
 # Preprocessing Libraries
-There are a number of useful processing crates like that extend or modify WGSL to add features like module imports or conditional compilation. wgsl_to_wgpu does not provide support for any of these crates directly. Instead, pass the final processed WGSL and specify the approriate name demangling logic if needed. See [Mangling](https://github.com/ScanMountGoat/wgsl_to_wgpu/blob/main/Mangling.md) and the crate documentation for details.
+There are a number of useful processing crates like [wesl](https://crates.io/crates/wesl) that extend or modify WGSL to add features like module imports or conditional compilation. wgsl_to_wgpu does not provide support for any of these crates directly. Instead, pass the final processed WGSL and specify the approriate name demangling logic if needed. See [Mangling](https://github.com/ScanMountGoat/wgsl_to_wgpu/blob/main/Mangling.md) and the crate documentation for details.
 
 ## Limitations
 - It may be necessary to disable running this function for shaders with unsupported types or features.
