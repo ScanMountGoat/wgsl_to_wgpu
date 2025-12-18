@@ -15,6 +15,9 @@ pub mod bind_groups {
         pub g: wgpu::BufferBinding<'a>,
         pub h: wgpu::BufferBinding<'a>,
         pub i: wgpu::BufferBinding<'a>,
+        pub j: wgpu::BufferBinding<'a>,
+        pub k: wgpu::BufferBinding<'a>,
+        pub l: wgpu::BufferBinding<'a>,
     }
     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
         label: Some("LayoutDescriptor0"),
@@ -95,7 +98,8 @@ pub mod bind_groups {
                 binding: 7,
                 visibility: wgpu::ShaderStages::VERTEX
                     .union(wgpu::ShaderStages::FRAGMENT)
-                    .union(wgpu::ShaderStages::COMPUTE),
+                    .union(wgpu::ShaderStages::COMPUTE)
+                    .union(wgpu::ShaderStages::TASK),
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -105,6 +109,36 @@ pub mod bind_groups {
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 8,
+                visibility: wgpu::ShaderStages::all(),
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 9,
+                visibility: wgpu::ShaderStages::TASK,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 10,
+                visibility: wgpu::ShaderStages::MESH,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 11,
                 visibility: wgpu::ShaderStages::NONE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
@@ -161,6 +195,18 @@ pub mod bind_groups {
                             wgpu::BindGroupEntry {
                                 binding: 8,
                                 resource: wgpu::BindingResource::Buffer(bindings.i),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 9,
+                                resource: wgpu::BindingResource::Buffer(bindings.j),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 10,
+                                resource: wgpu::BindingResource::Buffer(bindings.k),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 11,
+                                resource: wgpu::BindingResource::Buffer(bindings.l),
                             },
                         ],
                         label: Some("BindGroup0"),
@@ -264,6 +310,8 @@ pub const ENTRY_VS_MAIN: &str = "vs_main";
 pub const ENTRY_FS_MAIN: &str = "fs_main";
 pub const ENTRY_MAIN: &str = "main";
 pub const ENTRY_MAIN2: &str = "main2";
+pub const ENTRY_TS_MAIN: &str = "ts_main";
+pub const ENTRY_MS_MAIN: &str = "ms_main";
 #[derive(Debug)]
 pub struct VertexEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -339,3 +387,6 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             },
         )
 }
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MeshOutput {}

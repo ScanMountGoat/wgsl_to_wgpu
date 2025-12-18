@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## unreleased
+### Added
+* Added support for mesh and task shaders.
+
 ### Changed
 * Updated wgpu to 28.0.
 * Changed generated code to use the new immediate data API instead of push constants.

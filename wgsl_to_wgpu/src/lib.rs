@@ -651,6 +651,12 @@ fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
         if stages.contains(wgpu::ShaderStages::COMPUTE) {
             components.push(quote!(wgpu::ShaderStages::COMPUTE));
         }
+        if stages.contains(wgpu::ShaderStages::TASK) {
+            components.push(quote!(wgpu::ShaderStages::TASK));
+        }
+        if stages.contains(wgpu::ShaderStages::MESH) {
+            components.push(quote!(wgpu::ShaderStages::MESH));
+        }
 
         if let Some((first, remaining)) = components.split_first() {
             quote!(#first #(.union(#remaining))*)
@@ -722,71 +728,8 @@ mod test {
 
     #[test]
     fn create_shader_multiple_entries() {
-        let source = indoc! {r#"
-            @group(0) @binding(0) var<uniform> a: f32;
-            @group(0) @binding(1) var<uniform> b: f32;
-            @group(0) @binding(2) var<uniform> c: f32;
-            @group(0) @binding(3) var<uniform> d: u32;
-            @group(0) @binding(4) var<uniform> e: u32;
-            @group(0) @binding(5) var<uniform> f: u32;
-            @group(0) @binding(6) var<uniform> g: u32;
-            @group(0) @binding(7) var<uniform> h: u32;
-            @group(0) @binding(8) var<uniform> i: f64;
-
-            fn inner() -> f32 {
-                return d;
-            }
-
-            fn inner_double() -> f64 {
-                return i;
-            }
-
-            @vertex
-            fn vs_main() {
-                {
-                    let x = b;
-                    let y = f;
-                }
-
-                let x = h;
-
-                switch e {
-                    default: {
-                        let y = e;
-                        return;
-                    }
-                }
-            }
-
-            @fragment
-            fn fs_main()  {
-                let z = e;
-
-                loop {
-                    let z = c;
-                }
-
-                if true {
-                    let x = h;
-                    let y = g;
-                }
-            }
-
-            @compute @workgroup_size(1, 1, 1)
-            fn main() {
-                let y = inner();
-                let z = f;
-                loop {
-                    let w = g;
-                    let x = h;
-                }
-            }
-
-            @compute
-            @workgroup_size(256)
-            fn main2() {}
-        "#};
-
+        // Test all shader stages.
+        let source = include_str!("data/entries_all_stages.wgsl");
         let actual = create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
         assert_rust_snapshot!(actual);
     }
@@ -1215,5 +1158,20 @@ mod test {
         .unwrap();
 
         assert_rust_snapshot!(actual);
+    }
+
+    #[test]
+    fn mesh_shader() {
+        let output = create_shader_modules(
+            include_str!("data/mesh_shader.wgsl"),
+            WriteOptions {
+                rustfmt: true,
+                ..Default::default()
+            },
+            demangle_identity,
+        )
+        .unwrap();
+
+        assert_rust_snapshot!(output);
     }
 }
