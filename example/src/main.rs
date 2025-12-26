@@ -360,7 +360,7 @@ impl State {
 
         // Read the buffer contents
         let buffer_view = self.invocation_count_readback_buffer.get_mapped_range(..);
-        let invocation_count: u32 = bytemuck::cast_slice(&*buffer_view)[0];
+        let invocation_count: u32 = bytemuck::cast_slice(&buffer_view)[0];
         drop(buffer_view);
         self.invocation_count_readback_buffer.unmap();
 
