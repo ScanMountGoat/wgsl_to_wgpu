@@ -87,10 +87,8 @@ impl State {
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
-            vertex: shader::vertex_state(
-                &module,
-                &shader::vs_main_entry(wgpu::VertexStepMode::Vertex, &overrides),
-            ),
+            vertex: shader::vs_main_entry(wgpu::VertexStepMode::Vertex, &overrides)
+                .vertex_state(&module),
             fragment: Some(shader::fragment_state(
                 &module,
                 &shader::fs_main_entry([Some(surface_format.into())], &overrides),

@@ -1,7 +1,6 @@
 ---
 source: wgsl_to_wgpu/src/structs.rs
 ---
-pub const ENTRY_MAIN: &str = "main";
 #[derive(Debug)]
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -64,6 +63,7 @@ const _: () = assert!(
     std::mem::offset_of!(Atomics, numi) == 4,
     "offset of Atomics.numi does not match WGSL"
 );
+pub const ENTRY_MAIN: &str = "main";
 #[repr(C)]
 #[derive(
     Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable, encase :: ShaderType,

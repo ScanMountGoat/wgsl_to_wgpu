@@ -35,7 +35,7 @@ const shared_TEST: f32 = 1.0;
 var<uniform> bindings_uniforms: uniforms_Uniforms;
 
 @vertex
-fn vert(in: shared_VertexInput) -> shared_VertexOutput {
+fn shared_nested_vert(in: shared_VertexInput) -> shared_VertexOutput {
     var out: shared_VertexOutput;
     out.clip_position = vec4(in.position, shared_TEST);
     return out;

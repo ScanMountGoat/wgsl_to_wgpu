@@ -67,7 +67,7 @@ mod wgsl;
 
 pub use naga::valid::Capabilities as WgslCapabilities;
 
-use crate::compute::compute_module;
+use crate::{compute::compute_module, entry::vertex_states_shared};
 
 /// Errors while generating Rust source for a WGSL shader module.
 #[derive(Debug, Error)]
@@ -582,10 +582,25 @@ impl Module {
 
         let override_constants = pipeline_overridable_constants(&module, demangle);
 
+        // Add shared code to top level module if the vertex states are not empty.
+        // This code is shared for all shader modules.
+        if !vertex_states.is_empty() {
+            let shared_items = vec![(
+                TypePath {
+                    parent: ModulePath::default(),
+                    name: "__SHARED".to_string(),
+                },
+                vertex_states_shared(),
+            )];
+            self.add_module_items(shared_items);
+        }
+
         // Place items into appropriate modules.
         self.add_module_items(consts);
         self.add_module_items(structs);
         self.add_module_items(vertex_methods);
+        self.add_module_items(entry_point_constants);
+        self.add_module_items(vertex_states);
 
         // Place items generated for this module in the root module.
         let root_items = vec![(
@@ -597,8 +612,6 @@ impl Module {
                 #override_constants
                 #bind_groups_module
                 #compute_module
-                #entry_point_constants
-                #vertex_states
                 #fragment_states
                 #create_shader_module
                 #create_pipeline_layout

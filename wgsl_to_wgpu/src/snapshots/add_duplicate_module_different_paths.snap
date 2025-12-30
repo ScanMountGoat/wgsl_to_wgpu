@@ -1,6 +1,25 @@
 ---
 source: wgsl_to_wgpu/src/lib.rs
 ---
+#[derive(Debug)]
+pub struct VertexEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+impl<const N: usize> VertexEntry<N> {
+    pub fn vertex_state<'a>(&'a self, module: &'a wgpu::ShaderModule) -> wgpu::VertexState<'a> {
+        wgpu::VertexState {
+            module,
+            entry_point: Some(self.entry_point),
+            buffers: &self.buffers,
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: &self.constants,
+                ..Default::default()
+            },
+        }
+    }
+}
 pub mod shader1 {
     pub mod bind_groups {
         #[derive(Debug)]
@@ -97,37 +116,6 @@ pub mod shader1 {
     ) {
         bind_group0.set(pass);
     }
-    pub const ENTRY_VERT: &str = "vert";
-    pub const ENTRY_FRAG: &str = "frag";
-    #[derive(Debug)]
-    pub struct VertexEntry<const N: usize> {
-        pub entry_point: &'static str,
-        pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-        pub constants: Vec<(&'static str, f64)>,
-    }
-    pub fn vertex_state<'a, const N: usize>(
-        module: &'a wgpu::ShaderModule,
-        entry: &'a VertexEntry<N>,
-    ) -> wgpu::VertexState<'a> {
-        wgpu::VertexState {
-            module,
-            entry_point: Some(entry.entry_point),
-            buffers: &entry.buffers,
-            compilation_options: wgpu::PipelineCompilationOptions {
-                constants: &entry.constants,
-                ..Default::default()
-            },
-        }
-    }
-    pub fn vert_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
-        VertexEntry {
-            entry_point: ENTRY_VERT,
-            buffers: [super::shared::VertexInput::vertex_buffer_layout(
-                vertex_input,
-            )],
-            constants: Default::default(),
-        }
-    }
     #[derive(Debug)]
     pub struct FragmentEntry<const N: usize> {
         pub entry_point: &'static str,
@@ -155,7 +143,7 @@ pub mod shader1 {
             constants: Default::default(),
         }
     }
-    pub const SOURCE : & str = "struct uniforms_Uniforms {\n    a: vec4<f32>,\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_Uniforms2 {\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_nested_Nested {\n    a: vec4<f32>,\n    b: Root,\n    c: shared_Shared\n}\n\nstruct Root {\n    c: vec4<f32>\n}\n\nstruct shared_Shared {\n    d: vec4<f32>\n}\n\nstruct shared_VertexInput {\n    @location(0) position: vec3<f32>\n}\n\nstruct shared_VertexOutput {\n    @builtin(position) clip_position: vec4<f32>,\n};\n\nconst shared_TEST: f32 = 1.0;\n\n@group(0) @binding(0)\nvar<uniform> bindings_uniforms: uniforms_Uniforms;\n\n@vertex\nfn vert(in: shared_VertexInput) -> shared_VertexOutput {\n    var out: shared_VertexOutput;\n    out.clip_position = vec4(in.position, shared_TEST);\n    return out;\n}\n\n@fragment\nfn frag(in: shared_VertexOutput) -> @location(0) vec4<f32> {\n    return bindings_uniforms.b.a * vec4(0.0);\n}" ;
+    pub const SOURCE : & str = "struct uniforms_Uniforms {\n    a: vec4<f32>,\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_Uniforms2 {\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_nested_Nested {\n    a: vec4<f32>,\n    b: Root,\n    c: shared_Shared\n}\n\nstruct Root {\n    c: vec4<f32>\n}\n\nstruct shared_Shared {\n    d: vec4<f32>\n}\n\nstruct shared_VertexInput {\n    @location(0) position: vec3<f32>\n}\n\nstruct shared_VertexOutput {\n    @builtin(position) clip_position: vec4<f32>,\n};\n\nconst shared_TEST: f32 = 1.0;\n\n@group(0) @binding(0)\nvar<uniform> bindings_uniforms: uniforms_Uniforms;\n\n@vertex\nfn shared_nested_vert(in: shared_VertexInput) -> shared_VertexOutput {\n    var out: shared_VertexOutput;\n    out.clip_position = vec4(in.position, shared_TEST);\n    return out;\n}\n\n@fragment\nfn frag(in: shared_VertexOutput) -> @location(0) vec4<f32> {\n    return bindings_uniforms.b.a * vec4(0.0);\n}" ;
     pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
         let source = std::borrow::Cow::Borrowed(SOURCE);
         device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -170,6 +158,7 @@ pub mod shader1 {
             immediate_size: 0,
         })
     }
+    pub const ENTRY_FRAG: &str = "frag";
     #[repr(C)]
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Root {
@@ -273,37 +262,6 @@ pub mod shaders {
         ) {
             bind_group0.set(pass);
         }
-        pub const ENTRY_VERT: &str = "vert";
-        pub const ENTRY_FRAG: &str = "frag";
-        #[derive(Debug)]
-        pub struct VertexEntry<const N: usize> {
-            pub entry_point: &'static str,
-            pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-            pub constants: Vec<(&'static str, f64)>,
-        }
-        pub fn vertex_state<'a, const N: usize>(
-            module: &'a wgpu::ShaderModule,
-            entry: &'a VertexEntry<N>,
-        ) -> wgpu::VertexState<'a> {
-            wgpu::VertexState {
-                module,
-                entry_point: Some(entry.entry_point),
-                buffers: &entry.buffers,
-                compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &entry.constants,
-                    ..Default::default()
-                },
-            }
-        }
-        pub fn vert_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
-            VertexEntry {
-                entry_point: ENTRY_VERT,
-                buffers: [super::super::shared::VertexInput::vertex_buffer_layout(
-                    vertex_input,
-                )],
-                constants: Default::default(),
-            }
-        }
         #[derive(Debug)]
         pub struct FragmentEntry<const N: usize> {
             pub entry_point: &'static str,
@@ -331,7 +289,7 @@ pub mod shaders {
                 constants: Default::default(),
             }
         }
-        pub const SOURCE : & str = "struct uniforms_Uniforms {\n    a: vec4<f32>,\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_Uniforms2 {\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_nested_Nested {\n    a: vec4<f32>,\n    b: Root,\n    c: shared_Shared\n}\n\nstruct Root {\n    c: vec4<f32>\n}\n\nstruct shared_Shared {\n    d: vec4<f32>\n}\n\nstruct shared_VertexInput {\n    @location(0) position: vec3<f32>\n}\n\nstruct shared_VertexOutput {\n    @builtin(position) clip_position: vec4<f32>,\n};\n\nconst shared_TEST: f32 = 1.0;\n\n@group(0) @binding(0)\nvar<uniform> bindings_uniforms: uniforms_Uniforms;\n\n@vertex\nfn vert(in: shared_VertexInput) -> shared_VertexOutput {\n    var out: shared_VertexOutput;\n    out.clip_position = vec4(in.position, shared_TEST);\n    return out;\n}\n\n@fragment\nfn frag(in: shared_VertexOutput) -> @location(0) vec4<f32> {\n    return bindings_uniforms.b.a * vec4(0.0);\n}" ;
+        pub const SOURCE : & str = "struct uniforms_Uniforms {\n    a: vec4<f32>,\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_Uniforms2 {\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_nested_Nested {\n    a: vec4<f32>,\n    b: Root,\n    c: shared_Shared\n}\n\nstruct Root {\n    c: vec4<f32>\n}\n\nstruct shared_Shared {\n    d: vec4<f32>\n}\n\nstruct shared_VertexInput {\n    @location(0) position: vec3<f32>\n}\n\nstruct shared_VertexOutput {\n    @builtin(position) clip_position: vec4<f32>,\n};\n\nconst shared_TEST: f32 = 1.0;\n\n@group(0) @binding(0)\nvar<uniform> bindings_uniforms: uniforms_Uniforms;\n\n@vertex\nfn shared_nested_vert(in: shared_VertexInput) -> shared_VertexOutput {\n    var out: shared_VertexOutput;\n    out.clip_position = vec4(in.position, shared_TEST);\n    return out;\n}\n\n@fragment\nfn frag(in: shared_VertexOutput) -> @location(0) vec4<f32> {\n    return bindings_uniforms.b.a * vec4(0.0);\n}" ;
         pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
             let source = std::borrow::Cow::Borrowed(SOURCE);
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -346,6 +304,7 @@ pub mod shaders {
                 immediate_size: 0,
             })
         }
+        pub const ENTRY_FRAG: &str = "frag";
         #[repr(C)]
         #[derive(Debug, Copy, Clone, PartialEq)]
         pub struct Root {
@@ -378,6 +337,16 @@ pub mod shared {
                 array_stride: std::mem::size_of::<VertexInput>() as u64,
                 step_mode,
                 attributes: &VertexInput::VERTEX_ATTRIBUTES,
+            }
+        }
+    }
+    pub mod nested {
+        pub const ENTRY_VERT: &str = "shared_nested_vert";
+        pub fn vert_entry(vertex_input: wgpu::VertexStepMode) -> super::super::VertexEntry<1> {
+            super::super::VertexEntry {
+                entry_point: ENTRY_VERT,
+                buffers: [super::VertexInput::vertex_buffer_layout(vertex_input)],
+                constants: Default::default(),
             }
         }
     }

@@ -1,56 +1,6 @@
 ---
 source: wgsl_to_wgpu/src/lib.rs
 ---
-pub const ENTRY_VS_MAIN_NONE: &str = "vs_main_none";
-pub const ENTRY_VS_MAIN_SINGLE: &str = "vs_main_single";
-pub const ENTRY_VS_MAIN_MULTIPLE: &str = "vs_main_multiple";
-#[derive(Debug)]
-pub struct VertexEntry<const N: usize> {
-    pub entry_point: &'static str,
-    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-    pub constants: Vec<(&'static str, f64)>,
-}
-pub fn vertex_state<'a, const N: usize>(
-    module: &'a wgpu::ShaderModule,
-    entry: &'a VertexEntry<N>,
-) -> wgpu::VertexState<'a> {
-    wgpu::VertexState {
-        module,
-        entry_point: Some(entry.entry_point),
-        buffers: &entry.buffers,
-        compilation_options: wgpu::PipelineCompilationOptions {
-            constants: &entry.constants,
-            ..Default::default()
-        },
-    }
-}
-pub fn vs_main_none_entry() -> VertexEntry<0> {
-    VertexEntry {
-        entry_point: ENTRY_VS_MAIN_NONE,
-        buffers: [],
-        constants: Default::default(),
-    }
-}
-pub fn vs_main_single_entry(input0: wgpu::VertexStepMode) -> VertexEntry<1> {
-    VertexEntry {
-        entry_point: ENTRY_VS_MAIN_SINGLE,
-        buffers: [Input0::vertex_buffer_layout(input0)],
-        constants: Default::default(),
-    }
-}
-pub fn vs_main_multiple_entry(
-    input0: wgpu::VertexStepMode,
-    input1: wgpu::VertexStepMode,
-) -> VertexEntry<2> {
-    VertexEntry {
-        entry_point: ENTRY_VS_MAIN_MULTIPLE,
-        buffers: [
-            Input0::vertex_buffer_layout(input0),
-            Input1::vertex_buffer_layout(input1),
-        ],
-        constants: Default::default(),
-    }
-}
 pub const SOURCE: &str = include_str!("shader.wgsl");
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
     let source = std::borrow::Cow::Borrowed(SOURCE);
@@ -66,6 +16,9 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
         immediate_size: 0,
     })
 }
+pub const ENTRY_VS_MAIN_MULTIPLE: &str = "vs_main_multiple";
+pub const ENTRY_VS_MAIN_NONE: &str = "vs_main_none";
+pub const ENTRY_VS_MAIN_SINGLE: &str = "vs_main_single";
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Input0 {
@@ -140,5 +93,51 @@ impl Input1 {
             step_mode,
             attributes: &Input1::VERTEX_ATTRIBUTES,
         }
+    }
+}
+#[derive(Debug)]
+pub struct VertexEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+impl<const N: usize> VertexEntry<N> {
+    pub fn vertex_state<'a>(&'a self, module: &'a wgpu::ShaderModule) -> wgpu::VertexState<'a> {
+        wgpu::VertexState {
+            module,
+            entry_point: Some(self.entry_point),
+            buffers: &self.buffers,
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: &self.constants,
+                ..Default::default()
+            },
+        }
+    }
+}
+pub fn vs_main_multiple_entry(
+    input0: wgpu::VertexStepMode,
+    input1: wgpu::VertexStepMode,
+) -> VertexEntry<2> {
+    VertexEntry {
+        entry_point: ENTRY_VS_MAIN_MULTIPLE,
+        buffers: [
+            Input0::vertex_buffer_layout(input0),
+            Input1::vertex_buffer_layout(input1),
+        ],
+        constants: Default::default(),
+    }
+}
+pub fn vs_main_none_entry() -> VertexEntry<0> {
+    VertexEntry {
+        entry_point: ENTRY_VS_MAIN_NONE,
+        buffers: [],
+        constants: Default::default(),
+    }
+}
+pub fn vs_main_single_entry(input0: wgpu::VertexStepMode) -> VertexEntry<1> {
+    VertexEntry {
+        entry_point: ENTRY_VS_MAIN_SINGLE,
+        buffers: [Input0::vertex_buffer_layout(input0)],
+        constants: Default::default(),
     }
 }

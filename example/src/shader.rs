@@ -165,38 +165,6 @@ pub fn set_bind_groups<P: bind_groups::SetBindGroup>(
     bind_group0.set(pass);
     bind_group1.set(pass);
 }
-pub const ENTRY_VS_MAIN: &str = "vs_main";
-pub const ENTRY_FS_MAIN: &str = "fs_main";
-#[derive(Debug)]
-pub struct VertexEntry<const N: usize> {
-    pub entry_point: &'static str,
-    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-    pub constants: Vec<(&'static str, f64)>,
-}
-pub fn vertex_state<'a, const N: usize>(
-    module: &'a wgpu::ShaderModule,
-    entry: &'a VertexEntry<N>,
-) -> wgpu::VertexState<'a> {
-    wgpu::VertexState {
-        module,
-        entry_point: Some(entry.entry_point),
-        buffers: &entry.buffers,
-        compilation_options: wgpu::PipelineCompilationOptions {
-            constants: &entry.constants,
-            ..Default::default()
-        },
-    }
-}
-pub fn vs_main_entry(
-    vertex_input: wgpu::VertexStepMode,
-    overrides: &OverrideConstants,
-) -> VertexEntry<1> {
-    VertexEntry {
-        entry_point: ENTRY_VS_MAIN,
-        buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
-        constants: overrides.constants(),
-    }
-}
 #[derive(Debug)]
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -245,6 +213,8 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
         immediate_size: 64,
     })
 }
+pub const ENTRY_FS_MAIN: &str = "fs_main";
+pub const ENTRY_VS_MAIN: &str = "vs_main";
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
 pub struct PushConstants {
@@ -274,5 +244,34 @@ impl VertexInput {
             step_mode,
             attributes: &VertexInput::VERTEX_ATTRIBUTES,
         }
+    }
+}
+#[derive(Debug)]
+pub struct VertexEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+impl<const N: usize> VertexEntry<N> {
+    pub fn vertex_state<'a>(&'a self, module: &'a wgpu::ShaderModule) -> wgpu::VertexState<'a> {
+        wgpu::VertexState {
+            module,
+            entry_point: Some(self.entry_point),
+            buffers: &self.buffers,
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: &self.constants,
+                ..Default::default()
+            },
+        }
+    }
+}
+pub fn vs_main_entry(
+    vertex_input: wgpu::VertexStepMode,
+    overrides: &OverrideConstants,
+) -> VertexEntry<1> {
+    VertexEntry {
+        entry_point: ENTRY_VS_MAIN,
+        buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
+        constants: overrides.constants(),
     }
 }

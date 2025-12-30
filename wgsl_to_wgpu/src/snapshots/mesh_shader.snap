@@ -1,9 +1,6 @@
 ---
 source: wgsl_to_wgpu/src/lib.rs
 ---
-pub const ENTRY_TS_MAIN: &str = "ts_main";
-pub const ENTRY_MS_MAIN: &str = "ms_main";
-pub const ENTRY_FS_MAIN: &str = "fs_main";
 #[derive(Debug)]
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -46,6 +43,9 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
         immediate_size: 0,
     })
 }
+pub const ENTRY_FS_MAIN: &str = "fs_main";
+pub const ENTRY_MS_MAIN: &str = "ms_main";
+pub const ENTRY_TS_MAIN: &str = "ts_main";
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct MeshOutput {}
