@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{MatrixVectorTypes, ModulePath, TypePath};
+use crate::{MatrixVectorTypes, TypePath};
 use naga::StructMember;
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
@@ -135,7 +135,6 @@ pub fn rust_type<F>(
     module: &naga::Module,
     ty: &naga::Type,
     format: MatrixVectorTypes,
-    root_path: &ModulePath,
     demangle: F,
 ) -> TokenStream
 where
@@ -167,14 +166,7 @@ where
             size: naga::ArraySize::Constant(size),
             stride: _,
         } => {
-            let element_type = rust_type(
-                path,
-                module,
-                &module.types[*base],
-                format,
-                root_path,
-                demangle,
-            );
+            let element_type = rust_type(path, module, &module.types[*base], format, demangle);
             let count = Literal::usize_unsuffixed(size.get() as usize);
             quote!([#element_type; #count])
         }
@@ -190,7 +182,7 @@ where
             members: _,
             span: _,
         } => {
-            let member_path = demangle(ty.name.as_ref().unwrap()).with_root(root_path);
+            let member_path = demangle(ty.name.as_ref().unwrap());
 
             // Use relative paths since we don't know the generated code's root path.
             path.parent.relative_path(&member_path)

@@ -5,8 +5,8 @@ use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
+use crate::TypePath;
 use crate::wgsl::vertex_entry_structs;
-use crate::{ModulePath, TypePath};
 
 pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     match &f.result {
@@ -55,7 +55,7 @@ where
     }
 }
 
-pub fn vertex_states<F>(module: &naga::Module, root_path: &ModulePath, demangle: F) -> TokenStream
+pub fn vertex_states<F>(module: &naga::Module, demangle: F) -> TokenStream
 where
     F: Fn(&str) -> TypePath + Clone,
 {
@@ -64,7 +64,8 @@ where
         .iter()
         .filter_map(|entry_point| match &entry_point.stage {
             ShaderStage::Vertex => {
-                let name = &demangle(&entry_point.name).name;
+                let name_path = demangle(&entry_point.name);
+                let name = &name_path.name;
 
                 let fn_name = Ident::new(&format!("{name}_entry"), Span::call_site());
                 let const_name =
@@ -75,7 +76,7 @@ where
                 let layout_expressions: Vec<TokenStream> = vertex_inputs
                     .iter()
                     .map(|input| {
-                        let path = root_path.relative_path(&input.name);
+                        let path = name_path.parent.relative_path(&input.name);
                         let step_mode = Ident::new(&input.name.name.to_snake(), Span::call_site());
                         step_mode_params.push(quote!(#step_mode: wgpu::VertexStepMode));
                         quote!(#path::vertex_buffer_layout(#step_mode))

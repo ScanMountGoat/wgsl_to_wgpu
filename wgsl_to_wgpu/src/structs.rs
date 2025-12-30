@@ -5,12 +5,11 @@ use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{ModulePath, TypePath, WriteOptions, wgsl::rust_type};
+use crate::{TypePath, WriteOptions, wgsl::rust_type};
 
 pub fn structs<F>(
     module: &naga::Module,
     options: WriteOptions,
-    root_path: &ModulePath,
     demangle: F,
 ) -> Vec<(TypePath, TokenStream)>
 where
@@ -56,7 +55,6 @@ where
                     module,
                     options,
                     &global_variable_types,
-                    root_path,
                     demangle.clone(),
                 );
                 Some((path, s))
@@ -76,7 +74,6 @@ fn rust_struct<F>(
     module: &naga::Module,
     options: WriteOptions,
     global_variable_types: &HashSet<Handle<Type>>,
-    root_path: &ModulePath,
     demangle: F,
 ) -> TokenStream
 where
@@ -121,7 +118,7 @@ where
     };
 
     let has_rts_array = struct_has_rts_array_member(&members, module);
-    let members = struct_members(path, &members, module, options, root_path, demangle);
+    let members = struct_members(path, &members, module, options, demangle);
     let mut derives = Vec::new();
 
     derives.push(quote!(Debug));
@@ -220,7 +217,6 @@ fn struct_members<F>(
     members: &[naga::StructMember],
     module: &naga::Module,
     options: WriteOptions,
-    root_path: &ModulePath,
     demangle: F,
 ) -> Vec<TokenStream>
 where
@@ -247,7 +243,6 @@ where
                     module,
                     &module.types[*base],
                     options.matrix_vector_types,
-                    root_path,
                     demangle.clone(),
                 );
                 quote!(
@@ -260,7 +255,6 @@ where
                     module,
                     ty,
                     options.matrix_vector_types,
-                    root_path,
                     demangle.clone(),
                 );
                 quote!(pub #member_name: #member_type)
@@ -292,7 +286,7 @@ mod tests {
     use indoc::indoc;
 
     fn struct_tokens(module: &naga::Module, options: WriteOptions) -> TokenStream {
-        let structs = structs(module, options, &ModulePath::default(), |s| TypePath {
+        let structs = structs(module, options, |s| TypePath {
             parent: ModulePath::default(),
             name: s.to_string(),
         });

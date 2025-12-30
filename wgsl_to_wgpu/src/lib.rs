@@ -382,16 +382,6 @@ pub struct TypePath {
     pub name: String,
 }
 
-impl TypePath {
-    /// Set the path to the root module, if the module path is empty.
-    fn with_root(mut self, root_path: &ModulePath) -> Self {
-        if self.parent.components.is_empty() {
-            self.parent = root_path.clone();
-        }
-        self
-    }
-}
-
 /// An identity demangling function that treats `name` as an item in the root module.
 pub fn demangle_identity(name: &str) -> TypePath {
     TypePath {
@@ -439,9 +429,8 @@ impl Module {
         }
     }
 
-    fn add_module_items(&mut self, structs: Vec<(TypePath, TokenStream)>, root_path: &ModulePath) {
+    fn add_module_items(&mut self, structs: Vec<(TypePath, TokenStream)>) {
         for (item, tokens) in structs {
-            let item = item.with_root(root_path);
             let module = self.get_module(&item.parent.components);
             module.items.insert(item.name, tokens);
         }
@@ -530,6 +519,7 @@ impl Module {
     where
         F: Fn(&str) -> TypePath + Clone,
     {
+        let demangle = demangle_with_root(demangle, root_path.clone());
         let module = naga::front::wgsl::parse_str(wgsl_source)
             .map_err(|error| CreateModuleError::ParseError { error })?;
 
@@ -543,13 +533,13 @@ impl Module {
         let bind_group_data = get_bind_group_data(&module, &global_stages, demangle.clone())?;
 
         // Collect tokens for each item.
-        let structs = structs::structs(&module, options, &root_path, demangle.clone());
+        let structs = structs::structs(&module, options, demangle.clone());
         let consts = consts::consts(&module, demangle.clone());
         let bind_groups_module = bind_groups_module(&module, &bind_group_data);
         let vertex_methods = vertex_struct_methods(&module, demangle.clone());
         let compute_module = compute_module(&module, demangle.clone());
         let entry_point_constants = entry_point_constants(&module, demangle.clone());
-        let vertex_states = vertex_states(&module, &root_path, demangle.clone());
+        let vertex_states = vertex_states(&module, demangle.clone());
         let fragment_states = fragment_states(&module, demangle.clone());
 
         // Use a string literal if no include path is provided.
@@ -590,12 +580,12 @@ impl Module {
             }
         };
 
-        let override_constants = pipeline_overridable_constants(&module, &root_path, demangle);
+        let override_constants = pipeline_overridable_constants(&module, demangle);
 
         // Place items into appropriate modules.
-        self.add_module_items(consts, &root_path);
-        self.add_module_items(structs, &root_path);
-        self.add_module_items(vertex_methods, &root_path);
+        self.add_module_items(consts);
+        self.add_module_items(structs);
+        self.add_module_items(vertex_methods);
 
         // Place items generated for this module in the root module.
         let root_items = vec![(
@@ -614,7 +604,7 @@ impl Module {
                 #create_pipeline_layout
             },
         )];
-        self.add_module_items(root_items, &root_path);
+        self.add_module_items(root_items);
 
         Ok(())
     }
@@ -694,6 +684,19 @@ fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
         } else {
             quote!(wgpu::ShaderStages::NONE)
         }
+    }
+}
+
+fn demangle_with_root<F: Fn(&str) -> TypePath + Clone>(
+    f: F,
+    root_path: ModulePath,
+) -> impl Fn(&str) -> TypePath + Clone {
+    move |path| {
+        let mut path = f(path);
+        if path.parent.components.is_empty() {
+            path.parent = root_path.clone();
+        }
+        path
     }
 }
 
@@ -916,7 +919,7 @@ mod test {
 
     fn items_to_tokens(items: Vec<(TypePath, TokenStream)>) -> TokenStream {
         let mut root = Module::default();
-        root.add_module_items(items, &ModulePath::default());
+        root.add_module_items(items);
         root.to_tokens()
     }
 
