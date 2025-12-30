@@ -44,7 +44,8 @@ extern crate wgpu_types as wgpu;
 use std::{
     collections::BTreeMap,
     io::Write,
-    path::Path,
+    iter::once,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -53,7 +54,7 @@ use consts::pipeline_overridable_constants;
 use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
 use naga::{WithSpan, valid::ValidationFlags};
 use proc_macro2::{Literal, Span, TokenStream};
-use quote::quote;
+use quote::{TokenStreamExt, quote};
 use syn::Ident;
 use thiserror::Error;
 
@@ -347,6 +348,31 @@ pub struct ModulePath {
     pub components: Vec<String>,
 }
 
+impl ModulePath {
+    fn relative_path(&self, target: &TypePath) -> TokenStream {
+        let base_path: PathBuf = self.components.iter().collect();
+        let target_path: PathBuf = target.parent.components.iter().collect();
+        let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
+
+        // TODO: Implement this from scratch with tests?
+        let components = relative_path
+            .components()
+            .filter_map(|c| match c {
+                std::path::Component::Prefix(_) => None,
+                std::path::Component::RootDir => None,
+                std::path::Component::CurDir => None,
+                std::path::Component::ParentDir => Some("super"),
+                std::path::Component::Normal(s) => s.to_str(),
+            })
+            .chain(once(target.name.as_str()))
+            .map(|c| Ident::new(c, Span::call_site()));
+
+        let mut path = TokenStream::new();
+        path.append_separated(components, quote! { :: });
+        path
+    }
+}
+
 /// A fully qualified absolute path like `a::b::Item` split into `["a", "b"]` and `"Item"`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypePath {
@@ -354,6 +380,16 @@ pub struct TypePath {
     pub parent: ModulePath,
     /// The name of the item like `"Item"` for `a::b::Item`.
     pub name: String,
+}
+
+impl TypePath {
+    /// Set the path to the root module, if the module path is empty.
+    fn with_root(mut self, root_path: &ModulePath) -> Self {
+        if self.parent.components.is_empty() {
+            self.parent = root_path.clone();
+        }
+        self
+    }
 }
 
 /// An identity demangling function that treats `name` as an item in the root module.
@@ -403,16 +439,11 @@ impl Module {
         }
     }
 
-    fn add_module_items(&mut self, structs: &[(TypePath, TokenStream)], root_path: &ModulePath) {
+    fn add_module_items(&mut self, structs: Vec<(TypePath, TokenStream)>, root_path: &ModulePath) {
         for (item, tokens) in structs {
-            // Replace a "root" path with the specified root module.
-            let components = if item.parent.components.is_empty() {
-                &root_path.components
-            } else {
-                &item.parent.components
-            };
-            let module = self.get_module(components);
-            module.items.insert(item.name.clone(), tokens.clone());
+            let item = item.with_root(root_path);
+            let module = self.get_module(&item.parent.components);
+            module.items.insert(item.name, tokens);
         }
     }
 
@@ -512,13 +543,13 @@ impl Module {
         let bind_group_data = get_bind_group_data(&module, &global_stages, demangle.clone())?;
 
         // Collect tokens for each item.
-        let structs = structs::structs(&module, options, demangle.clone());
+        let structs = structs::structs(&module, options, &root_path, demangle.clone());
         let consts = consts::consts(&module, demangle.clone());
         let bind_groups_module = bind_groups_module(&module, &bind_group_data);
         let vertex_methods = vertex_struct_methods(&module, demangle.clone());
         let compute_module = compute_module(&module, demangle.clone());
         let entry_point_constants = entry_point_constants(&module, demangle.clone());
-        let vertex_states = vertex_states(&module, demangle.clone());
+        let vertex_states = vertex_states(&module, &root_path, demangle.clone());
         let fragment_states = fragment_states(&module, demangle.clone());
 
         // Use a string literal if no include path is provided.
@@ -559,12 +590,12 @@ impl Module {
             }
         };
 
-        let override_constants = pipeline_overridable_constants(&module, demangle);
+        let override_constants = pipeline_overridable_constants(&module, &root_path, demangle);
 
         // Place items into appropriate modules.
-        self.add_module_items(&consts, &root_path);
-        self.add_module_items(&structs, &root_path);
-        self.add_module_items(&vertex_methods, &root_path);
+        self.add_module_items(consts, &root_path);
+        self.add_module_items(structs, &root_path);
+        self.add_module_items(vertex_methods, &root_path);
 
         // Place items generated for this module in the root module.
         let root_items = vec![(
@@ -583,7 +614,7 @@ impl Module {
                 #create_pipeline_layout
             },
         )];
-        self.add_module_items(&root_items, &root_path);
+        self.add_module_items(root_items, &root_path);
 
         Ok(())
     }
@@ -885,7 +916,7 @@ mod test {
 
     fn items_to_tokens(items: Vec<(TypePath, TokenStream)>) -> TokenStream {
         let mut root = Module::default();
-        root.add_module_items(&items, &ModulePath::default());
+        root.add_module_items(items, &ModulePath::default());
         root.to_tokens()
     }
 

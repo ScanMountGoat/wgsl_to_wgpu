@@ -122,7 +122,9 @@ pub mod shader1 {
     pub fn vert_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
         VertexEntry {
             entry_point: ENTRY_VERT,
-            buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
+            buffers: [super::shared::VertexInput::vertex_buffer_layout(
+                vertex_input,
+            )],
             constants: Default::default(),
         }
     }
@@ -296,7 +298,9 @@ pub mod shaders {
         pub fn vert_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
             VertexEntry {
                 entry_point: ENTRY_VERT,
-                buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
+                buffers: [super::super::shared::VertexInput::vertex_buffer_layout(
+                    vertex_input,
+                )],
                 constants: Default::default(),
             }
         }
@@ -390,7 +394,7 @@ pub mod uniforms {
         #[derive(Debug, Copy, Clone, PartialEq)]
         pub struct Nested {
             pub a: [f32; 4],
-            pub b: super::super::Root,
+            pub b: super::super::shaders::shader2::Root,
             pub c: super::super::shared::Shared,
         }
     }

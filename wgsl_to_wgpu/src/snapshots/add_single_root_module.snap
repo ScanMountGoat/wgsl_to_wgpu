@@ -120,7 +120,7 @@ pub fn vertex_state<'a, const N: usize>(
 pub fn vert_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
     VertexEntry {
         entry_point: ENTRY_VERT,
-        buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
+        buffers: [shared::VertexInput::vertex_buffer_layout(vertex_input)],
         constants: Default::default(),
     }
 }

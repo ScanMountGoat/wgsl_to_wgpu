@@ -40,7 +40,11 @@ where
         .collect()
 }
 
-pub fn pipeline_overridable_constants<F>(module: &naga::Module, demangle: F) -> TokenStream
+pub fn pipeline_overridable_constants<F>(
+    module: &naga::Module,
+    root_path: &ModulePath,
+    demangle: F,
+) -> TokenStream
 where
     F: Fn(&str) -> TypePath + Clone,
 {
@@ -59,6 +63,7 @@ where
                 module,
                 &module.types[o.ty],
                 MatrixVectorTypes::Rust,
+                root_path,
                 demangle.clone(),
             );
 
@@ -214,7 +219,8 @@ mod tests {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = pipeline_overridable_constants(&module, demangle_identity);
+        let actual =
+            pipeline_overridable_constants(&module, &ModulePath::default(), demangle_identity);
         assert_tokens_eq!(quote!(), actual);
     }
 }
