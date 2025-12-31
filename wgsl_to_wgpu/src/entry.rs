@@ -62,24 +62,23 @@ pub fn vertex_states_shared() -> TokenStream {
             pub constants: Vec<(&'static str, f64)>,
         }
 
-        impl<const N: usize> VertexEntry<N> {
-            pub fn vertex_state<'a>(
-                &'a self,
-                module: &'a wgpu::ShaderModule,
-            ) -> wgpu::VertexState<'a> {
-                wgpu::VertexState {
-                    module,
-                    entry_point: Some(self.entry_point),
-                    buffers: &self.buffers,
-                    compilation_options: wgpu::PipelineCompilationOptions {
-                        constants: &self.constants,
-                        ..Default::default()
-                    },
-                }
+        pub fn vertex_state<'a, const N: usize>(
+            entry: &'a VertexEntry<N>,
+            module: &'a wgpu::ShaderModule,
+        ) -> wgpu::VertexState<'a> {
+            wgpu::VertexState {
+                module,
+                entry_point: Some(entry.entry_point),
+                buffers: &entry.buffers,
+                compilation_options: wgpu::PipelineCompilationOptions {
+                    constants: &entry.constants,
+                    ..Default::default()
+                },
             }
         }
     }
 }
+
 pub fn vertex_states<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>
 where
     F: Fn(&str) -> TypePath + Clone,

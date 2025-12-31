@@ -252,17 +252,18 @@ pub struct VertexEntry<const N: usize> {
     pub buffers: [wgpu::VertexBufferLayout<'static>; N],
     pub constants: Vec<(&'static str, f64)>,
 }
-impl<const N: usize> VertexEntry<N> {
-    pub fn vertex_state<'a>(&'a self, module: &'a wgpu::ShaderModule) -> wgpu::VertexState<'a> {
-        wgpu::VertexState {
-            module,
-            entry_point: Some(self.entry_point),
-            buffers: &self.buffers,
-            compilation_options: wgpu::PipelineCompilationOptions {
-                constants: &self.constants,
-                ..Default::default()
-            },
-        }
+pub fn vertex_state<'a, const N: usize>(
+    module: &'a wgpu::ShaderModule,
+    entry: &'a VertexEntry<N>,
+) -> wgpu::VertexState<'a> {
+    wgpu::VertexState {
+        module,
+        entry_point: Some(entry.entry_point),
+        buffers: &entry.buffers,
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &entry.constants,
+            ..Default::default()
+        },
     }
 }
 pub fn vs_main_entry(
