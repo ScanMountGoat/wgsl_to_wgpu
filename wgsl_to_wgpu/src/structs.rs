@@ -334,14 +334,33 @@ mod tests {
     }
 
     #[test]
-    fn write_all_structs_encase_bytemuck() {
+    fn write_all_structs_encase() {
         let output = create_shader_module(
             include_str!("data/struct/types.wgsl"),
             "types.wgsl",
             WriteOptions {
+                derive_bytemuck_vertex: false,
+                derive_bytemuck_host_shareable: false,
+                derive_encase_host_shareable: true,
+                derive_serde: false,
+                matrix_vector_types: MatrixVectorTypes::Rust,
+                rustfmt: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_rust_snapshot!(output);
+    }
+
+    #[test]
+    fn write_all_structs_bytemuck() {
+        let output = create_shader_module(
+            include_str!("data/struct/types_bytemuck.wgsl"),
+            "types.wgsl",
+            WriteOptions {
                 derive_bytemuck_vertex: true,
                 derive_bytemuck_host_shareable: true,
-                derive_encase_host_shareable: true,
+                derive_encase_host_shareable: false,
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,
                 rustfmt: true,

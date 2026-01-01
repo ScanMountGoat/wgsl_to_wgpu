@@ -1,0 +1,5 @@
+---
+source: wgsl_to_wgpu/src/structs.rs
+extension: rs
+snapshot_kind: binary
+---
