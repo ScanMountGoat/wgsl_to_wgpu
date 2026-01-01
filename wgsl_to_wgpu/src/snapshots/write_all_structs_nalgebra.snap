@@ -1,7 +1,6 @@
 ---
 source: wgsl_to_wgpu/src/structs.rs
 ---
-pub const ENTRY_MAIN: &str = "main";
 #[derive(Debug)]
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -54,6 +53,7 @@ pub struct Atomics {
     pub num: u32,
     pub numi: i32,
 }
+pub const ENTRY_MAIN: &str = "main";
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct MatricesF16 {
