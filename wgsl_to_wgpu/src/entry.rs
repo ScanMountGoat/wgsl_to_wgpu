@@ -5,8 +5,8 @@ use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::TypePath;
 use crate::wgsl::vertex_entry_structs;
+use crate::{ModulePath, TypePath};
 
 pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     match &f.result {
@@ -30,41 +30,66 @@ pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     }
 }
 
-pub fn entry_point_constants<F>(module: &naga::Module, demangle: F) -> TokenStream
+pub fn entry_point_constants<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>
 where
     F: Fn(&str) -> TypePath,
 {
-    let entry_points: Vec<TokenStream> = module
+    module
         .entry_points
         .iter()
         .map(|entry_point| {
             // The entry name string itself should remain mangled to match the WGSL code.
             let entry_name = Literal::string(&entry_point.name);
 
-            let name = &demangle(&entry_point.name).name;
-            let const_name =
-                Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());
-            quote! {
-                pub const #const_name: &str = #entry_name;
-            }
-        })
-        .collect();
+            let mut name_path = demangle(&entry_point.name);
+            name_path.name = format!("ENTRY_{}", name_path.name.to_uppercase());
 
+            let const_name = Ident::new(&name_path.name, Span::call_site());
+            let tokens = quote! {
+                pub const #const_name: &str = #entry_name;
+            };
+            (name_path, tokens)
+        })
+        .collect()
+}
+
+pub fn vertex_states_shared() -> TokenStream {
     quote! {
-        #(#entry_points)*
+        #[derive(Debug)]
+        pub struct VertexEntry<const N: usize> {
+            pub entry_point: &'static str,
+            pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+            pub constants: Vec<(&'static str, f64)>,
+        }
+
+        pub fn vertex_state<'a, const N: usize>(
+            module: &'a wgpu::ShaderModule,
+            entry: &'a VertexEntry<N>,
+        ) -> wgpu::VertexState<'a> {
+            wgpu::VertexState {
+                module,
+                entry_point: Some(entry.entry_point),
+                buffers: &entry.buffers,
+                compilation_options: wgpu::PipelineCompilationOptions {
+                    constants: &entry.constants,
+                    ..Default::default()
+                },
+            }
+        }
     }
 }
 
-pub fn vertex_states<F>(module: &naga::Module, demangle: F) -> TokenStream
+pub fn vertex_states<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>
 where
     F: Fn(&str) -> TypePath + Clone,
 {
-    let vertex_entries: Vec<TokenStream> = module
+    module
         .entry_points
         .iter()
         .filter_map(|entry_point| match &entry_point.stage {
             ShaderStage::Vertex => {
-                let name = &demangle(&entry_point.name).name;
+                let name_path = demangle(&entry_point.name);
+                let name = &name_path.name;
 
                 let fn_name = Ident::new(&format!("{name}_entry"), Span::call_site());
                 let const_name =
@@ -75,10 +100,10 @@ where
                 let layout_expressions: Vec<TokenStream> = vertex_inputs
                     .iter()
                     .map(|input| {
-                        let name = Ident::new(&input.name.name, Span::call_site());
+                        let path = name_path.parent.relative_path(&input.name);
                         let step_mode = Ident::new(&input.name.name.to_snake(), Span::call_site());
                         step_mode_params.push(quote!(#step_mode: wgpu::VertexStepMode));
-                        quote!(#name::vertex_buffer_layout(#step_mode))
+                        quote!(#path::vertex_buffer_layout(#step_mode))
                     })
                     .collect();
 
@@ -102,9 +127,15 @@ where
                     quote!(#(#step_mode_params),*, #overrides)
                 };
 
-                Some(quote! {
-                    pub fn #fn_name(#params) -> VertexEntry<#n> {
-                        VertexEntry {
+                let vertex_entry = TypePath {
+                    parent: ModulePath::default(),
+                    name: "VertexEntry".to_string(),
+                };
+                let vertex_entry = name_path.parent.relative_path(&vertex_entry);
+
+                let entry = quote! {
+                    pub fn #fn_name(#params) -> #vertex_entry<#n> {
+                        #vertex_entry {
                             entry_point: #const_name,
                             buffers: [
                                 #(#layout_expressions),*
@@ -112,42 +143,13 @@ where
                             constants: #constants
                         }
                     }
-                })
+                };
+
+                Some((name_path, entry))
             }
             _ => None,
         })
-        .collect();
-
-    // Don't generate unused code.
-    if vertex_entries.is_empty() {
-        quote!()
-    } else {
-        quote! {
-            #[derive(Debug)]
-            pub struct VertexEntry<const N: usize> {
-                pub entry_point: &'static str,
-                pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-                pub constants: Vec<(&'static str, f64)>,
-            }
-
-            pub fn vertex_state<'a, const N: usize>(
-                module: &'a wgpu::ShaderModule,
-                entry: &'a VertexEntry<N>,
-            ) -> wgpu::VertexState<'a> {
-                wgpu::VertexState {
-                    module,
-                    entry_point: Some(entry.entry_point),
-                    buffers: &entry.buffers,
-                    compilation_options: wgpu::PipelineCompilationOptions {
-                        constants: &entry.constants,
-                        ..Default::default()
-                    },
-                }
-            }
-
-            #(#vertex_entries)*
-        }
-    }
+        .collect()
 }
 
 pub fn vertex_struct_methods<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>

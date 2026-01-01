@@ -44,7 +44,8 @@ extern crate wgpu_types as wgpu;
 use std::{
     collections::BTreeMap,
     io::Write,
-    path::Path,
+    iter::once,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -53,7 +54,7 @@ use consts::pipeline_overridable_constants;
 use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
 use naga::{WithSpan, valid::ValidationFlags};
 use proc_macro2::{Literal, Span, TokenStream};
-use quote::quote;
+use quote::{TokenStreamExt, quote};
 use syn::Ident;
 use thiserror::Error;
 
@@ -66,7 +67,7 @@ mod wgsl;
 
 pub use naga::valid::Capabilities as WgslCapabilities;
 
-use crate::compute::compute_module;
+use crate::{compute::compute_module, entry::vertex_states_shared};
 
 /// Errors while generating Rust source for a WGSL shader module.
 #[derive(Debug, Error)]
@@ -347,6 +348,31 @@ pub struct ModulePath {
     pub components: Vec<String>,
 }
 
+impl ModulePath {
+    fn relative_path(&self, target: &TypePath) -> TokenStream {
+        let base_path: PathBuf = self.components.iter().collect();
+        let target_path: PathBuf = target.parent.components.iter().collect();
+        let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
+
+        // TODO: Implement this from scratch with tests?
+        let components = relative_path
+            .components()
+            .filter_map(|c| match c {
+                std::path::Component::Prefix(_) => None,
+                std::path::Component::RootDir => None,
+                std::path::Component::CurDir => None,
+                std::path::Component::ParentDir => Some("super"),
+                std::path::Component::Normal(s) => s.to_str(),
+            })
+            .chain(once(target.name.as_str()))
+            .map(|c| Ident::new(c, Span::call_site()));
+
+        let mut path = TokenStream::new();
+        path.append_separated(components, quote! { :: });
+        path
+    }
+}
+
 /// A fully qualified absolute path like `a::b::Item` split into `["a", "b"]` and `"Item"`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypePath {
@@ -403,16 +429,10 @@ impl Module {
         }
     }
 
-    fn add_module_items(&mut self, structs: &[(TypePath, TokenStream)], root_path: &ModulePath) {
+    fn add_module_items(&mut self, structs: Vec<(TypePath, TokenStream)>) {
         for (item, tokens) in structs {
-            // Replace a "root" path with the specified root module.
-            let components = if item.parent.components.is_empty() {
-                &root_path.components
-            } else {
-                &item.parent.components
-            };
-            let module = self.get_module(components);
-            module.items.insert(item.name.clone(), tokens.clone());
+            let module = self.get_module(&item.parent.components);
+            module.items.insert(item.name, tokens);
         }
     }
 
@@ -499,6 +519,7 @@ impl Module {
     where
         F: Fn(&str) -> TypePath + Clone,
     {
+        let demangle = demangle_with_root(demangle, root_path.clone());
         let module = naga::front::wgsl::parse_str(wgsl_source)
             .map_err(|error| CreateModuleError::ParseError { error })?;
 
@@ -561,10 +582,25 @@ impl Module {
 
         let override_constants = pipeline_overridable_constants(&module, demangle);
 
+        // Add shared code to top level module if the vertex states are not empty.
+        // This code is shared for all shader modules.
+        if !vertex_states.is_empty() {
+            let shared_items = vec![(
+                TypePath {
+                    parent: ModulePath::default(),
+                    name: "__SHARED".to_string(),
+                },
+                vertex_states_shared(),
+            )];
+            self.add_module_items(shared_items);
+        }
+
         // Place items into appropriate modules.
-        self.add_module_items(&consts, &root_path);
-        self.add_module_items(&structs, &root_path);
-        self.add_module_items(&vertex_methods, &root_path);
+        self.add_module_items(consts);
+        self.add_module_items(structs);
+        self.add_module_items(vertex_methods);
+        self.add_module_items(entry_point_constants);
+        self.add_module_items(vertex_states);
 
         // Place items generated for this module in the root module.
         let root_items = vec![(
@@ -576,14 +612,12 @@ impl Module {
                 #override_constants
                 #bind_groups_module
                 #compute_module
-                #entry_point_constants
-                #vertex_states
                 #fragment_states
                 #create_shader_module
                 #create_pipeline_layout
             },
         )];
-        self.add_module_items(&root_items, &root_path);
+        self.add_module_items(root_items);
 
         Ok(())
     }
@@ -663,6 +697,19 @@ fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
         } else {
             quote!(wgpu::ShaderStages::NONE)
         }
+    }
+}
+
+fn demangle_with_root<F: Fn(&str) -> TypePath + Clone>(
+    f: F,
+    root_path: ModulePath,
+) -> impl Fn(&str) -> TypePath + Clone {
+    move |path| {
+        let mut path = f(path);
+        if path.parent.components.is_empty() {
+            path.parent = root_path.clone();
+        }
+        path
     }
 }
 
@@ -885,7 +932,7 @@ mod test {
 
     fn items_to_tokens(items: Vec<(TypePath, TokenStream)>) -> TokenStream {
         let mut root = Module::default();
-        root.add_module_items(&items, &ModulePath::default());
+        root.add_module_items(items);
         root.to_tokens()
     }
 

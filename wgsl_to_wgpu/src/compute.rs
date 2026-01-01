@@ -46,6 +46,8 @@ fn create_compute_pipeline<F>(
 where
     F: Fn(&str) -> TypePath,
 {
+    // Ignore the path, because the compute pipeline requires
+    // the bind groups and layouts from the shader module.
     let name = &demangle(&e.name).name;
 
     // Compute pipeline creation has few parameters and can be generated.
@@ -97,6 +99,7 @@ fn workgroup_size<F>(e: &naga::EntryPoint, demangle: F) -> TokenStream
 where
     F: Fn(&str) -> TypePath + Clone,
 {
+    // Ignore the path, see above for reason.
     let name = &demangle(&e.name).name;
 
     let name = Ident::new(

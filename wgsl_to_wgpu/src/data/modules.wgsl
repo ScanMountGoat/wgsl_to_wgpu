@@ -25,9 +25,13 @@ struct shared_VertexInput {
     @location(0) position: vec3<f32>
 }
 
+struct VertexOffset {
+    @location(1) offset: vec3<f32>
+}
+
 struct shared_VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-};
+}
 
 const shared_TEST: f32 = 1.0;
 
@@ -35,9 +39,16 @@ const shared_TEST: f32 = 1.0;
 var<uniform> bindings_uniforms: uniforms_Uniforms;
 
 @vertex
-fn vert(in: shared_VertexInput) -> shared_VertexOutput {
+fn vert(in: shared_VertexInput, offset: VertexOffset) -> shared_VertexOutput {
     var out: shared_VertexOutput;
-    out.clip_position = vec4(in.position, shared_TEST);
+    out.clip_position = vec4(in.position + offset.offset, shared_TEST);
+    return out;
+}
+
+@vertex
+fn shared_vert(in: shared_VertexInput, offset: VertexOffset) -> shared_VertexOutput {
+    var out: shared_VertexOutput;
+    out.clip_position = vec4(in.position + offset.offset, shared_TEST);
     return out;
 }
 

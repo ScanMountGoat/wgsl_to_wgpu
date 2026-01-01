@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::collections::BTreeMap;
 
 use crate::{MatrixVectorTypes, TypePath};
 use naga::StructMember;
@@ -185,10 +185,7 @@ where
             let member_path = demangle(ty.name.as_ref().unwrap());
 
             // Use relative paths since we don't know the generated code's root path.
-            let name = relative_type_path(path, member_path);
-
-            let name: syn::Path = syn::parse_str(&name).unwrap();
-            quote!(#name)
+            path.parent.relative_path(&member_path)
         }
         naga::TypeInner::BindingArray { base: _, size: _ } => todo!(),
         naga::TypeInner::AccelerationStructure { .. } => todo!(),
@@ -198,27 +195,6 @@ where
             ..
         } => todo!(),
     }
-}
-
-fn relative_type_path(base: &TypePath, target: TypePath) -> String {
-    let base_path: PathBuf = base.parent.components.iter().collect();
-    let target_path: PathBuf = target.parent.components.iter().collect();
-    let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
-
-    // TODO: Implement this from scratch with tests?
-    let mut components: Vec<_> = relative_path
-        .components()
-        .filter_map(|c| match c {
-            std::path::Component::Prefix(_) => None,
-            std::path::Component::RootDir => None,
-            std::path::Component::CurDir => None,
-            std::path::Component::ParentDir => Some("super".to_string()),
-            std::path::Component::Normal(s) => Some(s.to_str()?.to_string()),
-        })
-        .collect();
-    components.push(target.name);
-
-    components.join("::")
 }
 
 fn rust_matrix_type(rows: naga::VectorSize, columns: naga::VectorSize, width: u8) -> TokenStream {
