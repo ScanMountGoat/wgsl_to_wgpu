@@ -1,0 +1,13 @@
+[package]
+name = "test_compile"
+version = "0.0.1"
+edition.workspace = true
+
+[dependencies]
+bytemuck = { version = "1.24", features = ["derive"] }
+encase = "0.12"
+glam = "0.30"
+half = { version = "2.7", features = ["bytemuck"] }
+nalgebra = "0.34"
+serde = { version = "1.0", features = ["derive"] }
+wgpu = "28.0"

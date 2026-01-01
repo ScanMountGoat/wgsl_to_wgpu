@@ -1,0 +1,147 @@
+pub const ENTRY_MAIN: &str = "main";
+#[derive(Debug)]
+pub struct FragmentEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub targets: [Option<wgpu::ColorTargetState>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+pub fn fragment_state<'a, const N: usize>(
+    module: &'a wgpu::ShaderModule,
+    entry: &'a FragmentEntry<N>,
+) -> wgpu::FragmentState<'a> {
+    wgpu::FragmentState {
+        module,
+        entry_point: Some(entry.entry_point),
+        targets: &entry.targets,
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &entry.constants,
+            ..Default::default()
+        },
+    }
+}
+pub fn main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
+    FragmentEntry {
+        entry_point: ENTRY_MAIN,
+        targets,
+        constants: Default::default(),
+    }
+}
+pub const SOURCE: &str = include_str!("types.wgsl");
+pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+    let source = std::borrow::Cow::Borrowed(SOURCE);
+    device
+        .create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(source),
+        })
+}
+pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+    device
+        .create_pipeline_layout(
+            &wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[],
+                immediate_size: 0,
+            },
+        )
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Atomics {
+    pub num: u32,
+    pub numi: i32,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MatricesF16 {
+    pub a: [[half::f16; 4]; 4],
+    pub b: [[half::f16; 4]; 3],
+    pub c: [[half::f16; 4]; 2],
+    pub d: [[half::f16; 3]; 4],
+    pub e: [[half::f16; 3]; 3],
+    pub f: [[half::f16; 3]; 2],
+    pub g: [[half::f16; 2]; 4],
+    pub h: [[half::f16; 2]; 3],
+    pub i: [[half::f16; 2]; 2],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MatricesF32 {
+    pub a: glam::Mat4,
+    pub b: [[f32; 4]; 3],
+    pub c: [[f32; 4]; 2],
+    pub d: [[f32; 3]; 4],
+    pub e: glam::Mat3,
+    pub f: [[f32; 3]; 2],
+    pub g: [[f32; 2]; 4],
+    pub h: [[f32; 2]; 3],
+    pub i: glam::Mat2,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MatricesF64 {
+    pub a: glam::DMat4,
+    pub b: [[f64; 4]; 3],
+    pub c: [[f64; 4]; 2],
+    pub d: [[f64; 3]; 4],
+    pub e: glam::DMat3,
+    pub f: [[f64; 3]; 2],
+    pub g: [[f64; 2]; 4],
+    pub h: [[f64; 2]; 3],
+    pub i: glam::DMat2,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Nested {
+    pub a: MatricesF32,
+    pub b: MatricesF64,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Scalars {
+    pub a: u32,
+    pub b: i32,
+    pub c: f32,
+    pub d: half::f16,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct StaticArrays {
+    pub a: [u32; 5],
+    pub b: [f32; 3],
+    pub c: [glam::Mat4; 512],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsF16 {
+    pub a: [half::f16; 2],
+    pub b: [half::f16; 4],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsF32 {
+    pub a: glam::Vec2,
+    pub b: glam::Vec3,
+    pub c: glam::Vec4,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsF64 {
+    pub a: glam::DVec2,
+    pub b: glam::DVec3,
+    pub c: glam::DVec4,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsI32 {
+    pub a: glam::IVec2,
+    pub b: glam::IVec3,
+    pub c: glam::IVec4,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsU32 {
+    pub a: glam::UVec2,
+    pub b: glam::UVec3,
+    pub c: glam::UVec4,
+}

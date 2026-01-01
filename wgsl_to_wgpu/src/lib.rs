@@ -706,7 +706,7 @@ mod test {
             settings.set_prepend_module_to_snapshot(false);
             settings.set_omit_expression(true);
             settings.bind(|| {
-                insta::assert_snapshot!($output);
+                insta::assert_binary_snapshot!(".rs", $output.into());
             });
         };
     }
