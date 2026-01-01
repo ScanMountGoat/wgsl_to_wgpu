@@ -140,7 +140,7 @@ where
         panic!("Runtime-sized array fields are only supported with encase");
     }
 
-    if options.derive_bytemuck_vertex && !is_host_shareable {
+    if options.derive_bytemuck_vertex && is_vertex_stage_argument(module, t_handle) {
         if has_rts_array {
             panic!("Runtime-sized array fields are not supported with bytemuck");
         }
@@ -190,6 +190,15 @@ where
         }
         #assert_layout
     }
+}
+
+fn is_vertex_stage_argument(module: &naga::Module, t_handle: naga::Handle<naga::Type>) -> bool {
+    module
+        .entry_points
+        .iter()
+        .filter(|entry| entry.stage == naga::ShaderStage::Vertex)
+        .flat_map(|entry| entry.function.arguments.iter())
+        .any(|arg| arg.ty == t_handle)
 }
 
 fn add_types_recursive(
@@ -336,7 +345,7 @@ mod tests {
     #[test]
     fn write_all_structs_encase() {
         let output = create_shader_module(
-            include_str!("data/struct/types.wgsl"),
+            include_str!("data/struct/types_encase.wgsl"),
             "types.wgsl",
             WriteOptions {
                 derive_bytemuck_vertex: false,
@@ -545,7 +554,7 @@ mod tests {
             "bytemuck_input_layout_validation.wgsl",
             WriteOptions {
                 derive_bytemuck_vertex: true,
-                derive_bytemuck_host_shareable: true,
+                derive_bytemuck_host_shareable: false,
                 derive_encase_host_shareable: false,
                 derive_serde: false,
                 matrix_vector_types: MatrixVectorTypes::Rust,

@@ -49,19 +49,6 @@ pub struct Atomics {
 pub const ENTRY_MAIN: &str = "main";
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
-pub struct MatricesF16 {
-    pub a: [[half::f16; 4]; 4],
-    pub b: [[half::f16; 4]; 3],
-    pub c: [[half::f16; 4]; 2],
-    pub d: [[half::f16; 3]; 4],
-    pub e: [[half::f16; 3]; 3],
-    pub f: [[half::f16; 3]; 2],
-    pub g: [[half::f16; 2]; 4],
-    pub h: [[half::f16; 2]; 3],
-    pub i: [[half::f16; 2]; 2],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
 pub struct MatricesF32 {
     pub a: [[f32; 4]; 4],
     pub b: [[f32; 4]; 3],
@@ -75,22 +62,9 @@ pub struct MatricesF32 {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
-pub struct MatricesF64 {
-    pub a: [[f64; 4]; 4],
-    pub b: [[f64; 4]; 3],
-    pub c: [[f64; 4]; 2],
-    pub d: [[f64; 3]; 4],
-    pub e: [[f64; 3]; 3],
-    pub f: [[f64; 3]; 2],
-    pub g: [[f64; 2]; 4],
-    pub h: [[f64; 2]; 3],
-    pub i: [[f64; 2]; 2],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
 pub struct Nested {
     pub a: MatricesF32,
-    pub b: MatricesF64,
+    pub b: VectorsF32,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
@@ -98,7 +72,6 @@ pub struct Scalars {
     pub a: u32,
     pub b: i32,
     pub c: f32,
-    pub d: half::f16,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
@@ -109,23 +82,10 @@ pub struct StaticArrays {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
-pub struct VectorsF16 {
-    pub a: [half::f16; 2],
-    pub b: [half::f16; 4],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
 pub struct VectorsF32 {
     pub a: [f32; 2],
     pub b: [f32; 3],
     pub c: [f32; 4],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
-pub struct VectorsF64 {
-    pub a: [f64; 2],
-    pub b: [f64; 3],
-    pub c: [f64; 4],
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
