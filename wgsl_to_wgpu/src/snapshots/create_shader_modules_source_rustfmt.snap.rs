@@ -1,4 +1,3 @@
-pub const ENTRY_MAIN: &str = "main";
 #[derive(Debug)]
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -41,3 +40,4 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
         immediate_size: 0,
     })
 }
+pub const ENTRY_MAIN: &str = "main";

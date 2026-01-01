@@ -1,4 +1,3 @@
-pub const ENTRY_FS_MULTIPLE: &str = "fs_multiple";
 #[derive(Debug)]
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -47,3 +46,4 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             },
         )
 }
+pub const ENTRY_FS_MULTIPLE: &str = "fs_multiple";

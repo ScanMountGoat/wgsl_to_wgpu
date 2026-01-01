@@ -1,31 +1,3 @@
-pub const ENTRY_MAIN: &str = "main";
-#[derive(Debug)]
-pub struct VertexEntry<const N: usize> {
-    pub entry_point: &'static str,
-    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-    pub constants: Vec<(&'static str, f64)>,
-}
-pub fn vertex_state<'a, const N: usize>(
-    module: &'a wgpu::ShaderModule,
-    entry: &'a VertexEntry<N>,
-) -> wgpu::VertexState<'a> {
-    wgpu::VertexState {
-        module,
-        entry_point: Some(entry.entry_point),
-        buffers: &entry.buffers,
-        compilation_options: wgpu::PipelineCompilationOptions {
-            constants: &entry.constants,
-            ..Default::default()
-        },
-    }
-}
-pub fn main_entry(input0: wgpu::VertexStepMode) -> VertexEntry<1> {
-    VertexEntry {
-        entry_point: ENTRY_MAIN,
-        buffers: [Input0::vertex_buffer_layout(input0)],
-        constants: Default::default(),
-    }
-}
 pub const SOURCE: &str = include_str!("bytemuck_input_layout_validation.wgsl");
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
     let source = std::borrow::Cow::Borrowed(SOURCE);
@@ -41,6 +13,7 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
         immediate_size: 0,
     })
 }
+pub const ENTRY_MAIN: &str = "main";
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck :: Pod, bytemuck :: Zeroable)]
 pub struct Inner {
@@ -118,3 +91,30 @@ const _: () = assert!(
     std::mem::offset_of!(Outer, inner) == 0,
     "offset of Outer.inner does not match WGSL"
 );
+#[derive(Debug)]
+pub struct VertexEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+pub fn vertex_state<'a, const N: usize>(
+    module: &'a wgpu::ShaderModule,
+    entry: &'a VertexEntry<N>,
+) -> wgpu::VertexState<'a> {
+    wgpu::VertexState {
+        module,
+        entry_point: Some(entry.entry_point),
+        buffers: &entry.buffers,
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &entry.constants,
+            ..Default::default()
+        },
+    }
+}
+pub fn main_entry(input0: wgpu::VertexStepMode) -> VertexEntry<1> {
+    VertexEntry {
+        entry_point: ENTRY_MAIN,
+        buffers: [Input0::vertex_buffer_layout(input0)],
+        constants: Default::default(),
+    }
+}

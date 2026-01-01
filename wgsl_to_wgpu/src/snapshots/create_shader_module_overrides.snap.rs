@@ -45,7 +45,6 @@ impl OverrideConstants {
         entries
     }
 }
-pub const ENTRY_MAIN: &str = "main";
 #[derive(Debug)]
 pub struct FragmentEntry<const N: usize> {
     pub entry_point: &'static str,
@@ -95,3 +94,4 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             },
         )
 }
+pub const ENTRY_MAIN: &str = "main";

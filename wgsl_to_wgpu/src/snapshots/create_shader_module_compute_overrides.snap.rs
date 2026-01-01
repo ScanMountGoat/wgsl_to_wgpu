@@ -134,7 +134,6 @@ pub mod compute {
             )
     }
 }
-pub const ENTRY_MAIN: &str = "main";
 pub const SOURCE: &str = include_str!("shader.wgsl");
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
     let source = std::borrow::Cow::Borrowed(SOURCE);
@@ -156,6 +155,7 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             },
         )
 }
+pub const ENTRY_MAIN: &str = "main";
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Uniforms {
