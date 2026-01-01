@@ -63,8 +63,8 @@ pub fn vertex_states_shared() -> TokenStream {
         }
 
         pub fn vertex_state<'a, const N: usize>(
-            entry: &'a VertexEntry<N>,
             module: &'a wgpu::ShaderModule,
+            entry: &'a VertexEntry<N>,
         ) -> wgpu::VertexState<'a> {
             wgpu::VertexState {
                 module,
