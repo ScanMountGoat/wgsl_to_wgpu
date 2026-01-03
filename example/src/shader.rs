@@ -14,7 +14,7 @@ impl OverrideConstants {
     }
 }
 pub mod bind_groups {
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct BindGroup0(wgpu::BindGroup);
     #[derive(Debug)]
     pub struct BindGroupLayout0<'a> {
@@ -67,8 +67,11 @@ pub mod bind_groups {
         pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
             pass.set_bind_group(0, &self.0, &[]);
         }
+        pub fn inner(&self) -> &wgpu::BindGroup {
+            &self.0
+        }
     }
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct BindGroup1(wgpu::BindGroup);
     #[derive(Debug)]
     pub struct BindGroupLayout1<'a> {
@@ -105,6 +108,9 @@ pub mod bind_groups {
         }
         pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
             pass.set_bind_group(1, &self.0, &[]);
+        }
+        pub fn inner(&self) -> &wgpu::BindGroup {
+            &self.0
         }
     }
     #[derive(Debug, Copy, Clone)]
