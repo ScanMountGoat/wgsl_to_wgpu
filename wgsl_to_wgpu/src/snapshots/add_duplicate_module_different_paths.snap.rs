@@ -20,7 +20,7 @@ pub fn vertex_state<'a, const N: usize>(
 }
 pub mod shader1 {
     pub mod bind_groups {
-        #[derive(Debug)]
+        #[derive(Debug, Clone)]
         pub struct BindGroup0(wgpu::BindGroup);
         #[derive(Debug)]
         pub struct BindGroupLayout0<'a> {
@@ -58,6 +58,9 @@ pub mod shader1 {
             }
             pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
                 pass.set_bind_group(0, &self.0, &[]);
+            }
+            pub fn inner(&self) -> &wgpu::BindGroup {
+                &self.0
             }
         }
         #[derive(Debug, Copy, Clone)]
@@ -201,7 +204,7 @@ pub mod shader1 {
 pub mod shaders {
     pub mod shader2 {
         pub mod bind_groups {
-            #[derive(Debug)]
+            #[derive(Debug, Clone)]
             pub struct BindGroup0(wgpu::BindGroup);
             #[derive(Debug)]
             pub struct BindGroupLayout0<'a> {
@@ -239,6 +242,9 @@ pub mod shaders {
                 }
                 pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
                     pass.set_bind_group(0, &self.0, &[]);
+                }
+                pub fn inner(&self) -> &wgpu::BindGroup {
+                    &self.0
                 }
             }
             #[derive(Debug, Copy, Clone)]
