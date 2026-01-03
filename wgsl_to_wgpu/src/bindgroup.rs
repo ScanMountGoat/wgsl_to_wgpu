@@ -33,7 +33,7 @@ pub fn bind_groups_module(
             let group_impl = bind_group(module, *group_no, group);
 
             quote! {
-                #[derive(Debug)]
+                #[derive(Debug, Clone)]
                 pub struct #group_name(wgpu::BindGroup);
                 #layout
                 #layout_descriptor
@@ -420,6 +420,10 @@ fn bind_group(module: &naga::Module, group_no: u32, group: &GroupData) -> TokenS
 
             pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
                 pass.set_bind_group(#group_no, &self.0, &[]);
+            }
+
+            pub fn inner(&self) -> &wgpu::BindGroup {
+                &self.0
             }
         }
     }
