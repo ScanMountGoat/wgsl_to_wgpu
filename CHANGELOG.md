@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## unreleased
+### Added
+* Added derive for Clone for generated bind group structs.
+* Added `inner` method for generated bind group structs for accessing the inner `wgpu::BindGroup`.
+
 ### Changed
 * Moved generated entry point code to the appropriate module for generated code with modules.
 
