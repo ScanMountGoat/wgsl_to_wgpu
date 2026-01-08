@@ -46,8 +46,7 @@ fn create_compute_pipeline<F>(
 where
     F: Fn(&str) -> TypePath,
 {
-    // Ignore the path, because the compute pipeline requires
-    // the bind groups and layouts from the shader module.
+    // Ignore the path because the compute pipeline requires the bind groups and layouts from the shader module.
     let name = &demangle(&e.name).name;
 
     // Compute pipeline creation has few parameters and can be generated.
