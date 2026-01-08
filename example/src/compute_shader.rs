@@ -55,7 +55,7 @@ pub mod bind_groups {
             });
             Self(bind_group)
         }
-        pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
+        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
             pass.set_bind_group(0, &self.0, &[]);
         }
         pub fn inner(&self) -> &wgpu::BindGroup {
@@ -67,53 +67,12 @@ pub mod bind_groups {
         pub bind_group0: &'a BindGroup0,
     }
     impl BindGroups<'_> {
-        pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
+        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
             self.bind_group0.set(pass);
         }
     }
-    pub trait SetBindGroup {
-        fn set_bind_group(
-            &mut self,
-            index: u32,
-            bind_group: &wgpu::BindGroup,
-            offsets: &[wgpu::DynamicOffset],
-        );
-    }
-    impl SetBindGroup for wgpu::ComputePass<'_> {
-        fn set_bind_group(
-            &mut self,
-            index: u32,
-            bind_group: &wgpu::BindGroup,
-            offsets: &[wgpu::DynamicOffset],
-        ) {
-            self.set_bind_group(index, bind_group, offsets);
-        }
-    }
-    impl SetBindGroup for wgpu::RenderPass<'_> {
-        fn set_bind_group(
-            &mut self,
-            index: u32,
-            bind_group: &wgpu::BindGroup,
-            offsets: &[wgpu::DynamicOffset],
-        ) {
-            self.set_bind_group(index, bind_group, offsets);
-        }
-    }
-    impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
-        fn set_bind_group(
-            &mut self,
-            index: u32,
-            bind_group: &wgpu::BindGroup,
-            offsets: &[wgpu::DynamicOffset],
-        ) {
-            self.set_bind_group(index, bind_group, offsets);
-        }
-    }
 }
-pub fn set_bind_groups<P: bind_groups::SetBindGroup>(
-    pass: &mut P,
-    bind_group0: &bind_groups::BindGroup0,
-) {
+pub fn set_bind_groups<P: SetBindGroup>(pass: &mut P, bind_group0: &bind_groups::BindGroup0) {
     bind_group0.set(pass);
 }
 pub mod compute {
@@ -151,4 +110,42 @@ pub const ENTRY_MAIN: &str = "main";
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
 pub struct Uniforms {
     pub color_rgb: glam::Vec3,
+}
+pub trait SetBindGroup {
+    fn set_bind_group(
+        &mut self,
+        index: u32,
+        bind_group: &wgpu::BindGroup,
+        offsets: &[wgpu::DynamicOffset],
+    );
+}
+impl SetBindGroup for wgpu::ComputePass<'_> {
+    fn set_bind_group(
+        &mut self,
+        index: u32,
+        bind_group: &wgpu::BindGroup,
+        offsets: &[wgpu::DynamicOffset],
+    ) {
+        self.set_bind_group(index, bind_group, offsets);
+    }
+}
+impl SetBindGroup for wgpu::RenderPass<'_> {
+    fn set_bind_group(
+        &mut self,
+        index: u32,
+        bind_group: &wgpu::BindGroup,
+        offsets: &[wgpu::DynamicOffset],
+    ) {
+        self.set_bind_group(index, bind_group, offsets);
+    }
+}
+impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
+    fn set_bind_group(
+        &mut self,
+        index: u32,
+        bind_group: &wgpu::BindGroup,
+        offsets: &[wgpu::DynamicOffset],
+    ) {
+        self.set_bind_group(index, bind_group, offsets);
+    }
 }

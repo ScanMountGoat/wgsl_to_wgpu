@@ -1,5 +1,5 @@
 use crate::{
-    CreateModuleError, TypePath, indexed_name_to_ident, quote_shader_stages,
+    CreateModuleError, ModulePath, TypePath, indexed_name_to_ident, quote_shader_stages,
     wgsl::buffer_binding_type,
 };
 use proc_macro2::{Literal, Span, TokenStream};
@@ -22,7 +22,20 @@ pub struct GroupBinding<'a> {
 pub fn bind_groups_module(
     module: &naga::Module,
     bind_group_data: &BTreeMap<u32, GroupData>,
+    root_module: &ModulePath,
 ) -> TokenStream {
+    // TODO: Is there a better to way to get paths to shared items in the root module?
+    let mut root_components = root_module.components.clone();
+    root_components.push("bindgroups".to_string());
+    let this_module = ModulePath {
+        components: root_components,
+    };
+
+    let set_bind_groups_trait = this_module.relative_path(&TypePath {
+        parent: ModulePath::default(),
+        name: "SetBindGroup".to_string(),
+    });
+
     let bind_groups: Vec<_> = bind_group_data
         .iter()
         .map(|(group_no, group)| {
@@ -30,7 +43,7 @@ pub fn bind_groups_module(
 
             let layout = bind_group_layout(module, *group_no, group);
             let layout_descriptor = bind_group_layout_descriptor(module, *group_no, group);
-            let group_impl = bind_group(module, *group_no, group);
+            let group_impl = bind_group(module, *group_no, group, &set_bind_groups_trait);
 
             quote! {
                 #[derive(Debug, Clone)]
@@ -51,6 +64,93 @@ pub fn bind_groups_module(
         })
         .collect();
 
+    // The set function for each bind group already sets the index.
+    let set_groups: Vec<_> = bind_group_data
+        .keys()
+        .map(|group_no| {
+            let group = indexed_name_to_ident("bind_group", *group_no);
+            quote!(#group.set(pass);)
+        })
+        .collect();
+
+    if bind_groups.is_empty() {
+        // Don't include empty modules.
+        quote!()
+    } else {
+        // Create a module to avoid name conflicts with user structs.
+        quote! {
+            pub mod bind_groups {
+                #(#bind_groups)*
+
+                #[derive(Debug, Copy, Clone)]
+                pub struct BindGroups<'a> {
+                    #(#bind_group_fields),*
+                }
+
+                impl BindGroups<'_> {
+                    pub fn set<P: #set_bind_groups_trait>(&self, pass: &mut P) {
+                        #(self.#set_groups)*
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn set_bind_groups_trait() -> TokenStream {
+    quote! {
+        // Support both compute and render passes.
+        pub trait SetBindGroup {
+            fn set_bind_group(
+                &mut self,
+                index: u32,
+                bind_group: &wgpu::BindGroup,
+                offsets: &[wgpu::DynamicOffset],
+            );
+        }
+        impl SetBindGroup for wgpu::ComputePass<'_> {
+            fn set_bind_group(
+                &mut self,
+                index: u32,
+                bind_group: &wgpu::BindGroup,
+                offsets: &[wgpu::DynamicOffset],
+            ) {
+                self.set_bind_group(index, bind_group, offsets);
+            }
+        }
+        impl SetBindGroup for wgpu::RenderPass<'_> {
+            fn set_bind_group(
+                &mut self,
+                index: u32,
+                bind_group: &wgpu::BindGroup,
+                offsets: &[wgpu::DynamicOffset],
+            ) {
+                self.set_bind_group(index, bind_group, offsets);
+            }
+        }
+        impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
+            fn set_bind_group(
+                &mut self,
+                index: u32,
+                bind_group: &wgpu::BindGroup,
+                offsets: &[wgpu::DynamicOffset],
+            ) {
+                self.set_bind_group(index, bind_group, offsets);
+            }
+        }
+    }
+}
+
+pub fn set_bind_groups_func(
+    bind_group_data: &BTreeMap<u32, GroupData>,
+    this_module: &ModulePath,
+) -> TokenStream {
+    // TODO: Is there a better to way to get paths to shared items in the root module?
+    let set_bind_groups_trait = this_module.relative_path(&TypePath {
+        parent: ModulePath::default(),
+        name: "SetBindGroup".to_string(),
+    });
+
     let group_parameters: Vec<_> = bind_group_data
         .keys()
         .map(|group_no| {
@@ -69,76 +169,12 @@ pub fn bind_groups_module(
         })
         .collect();
 
-    let set_bind_groups = quote! {
-        pub fn set_bind_groups<P: bind_groups::SetBindGroup>(
+    quote! {
+        pub fn set_bind_groups<P: #set_bind_groups_trait>(
             pass: &mut P,
             #(#group_parameters),*
         ) {
             #(#set_groups)*
-        }
-    };
-
-    if bind_groups.is_empty() {
-        // Don't include empty modules.
-        quote!()
-    } else {
-        // Create a module to avoid name conflicts with user structs.
-        quote! {
-            pub mod bind_groups {
-                #(#bind_groups)*
-
-                #[derive(Debug, Copy, Clone)]
-                pub struct BindGroups<'a> {
-                    #(#bind_group_fields),*
-                }
-
-                impl BindGroups<'_> {
-                    pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
-                        #(self.#set_groups)*
-                    }
-                }
-
-                // Support both compute and render passes.
-                pub trait SetBindGroup {
-                    fn set_bind_group(
-                        &mut self,
-                        index: u32,
-                        bind_group: &wgpu::BindGroup,
-                        offsets: &[wgpu::DynamicOffset],
-                    );
-                }
-                impl SetBindGroup for wgpu::ComputePass<'_> {
-                    fn set_bind_group(
-                        &mut self,
-                        index: u32,
-                        bind_group: &wgpu::BindGroup,
-                        offsets: &[wgpu::DynamicOffset],
-                    ) {
-                        self.set_bind_group(index, bind_group, offsets);
-                    }
-                }
-                impl SetBindGroup for wgpu::RenderPass<'_> {
-                    fn set_bind_group(
-                        &mut self,
-                        index: u32,
-                        bind_group: &wgpu::BindGroup,
-                        offsets: &[wgpu::DynamicOffset],
-                    ) {
-                        self.set_bind_group(index, bind_group, offsets);
-                    }
-                }
-                impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
-                    fn set_bind_group(
-                        &mut self,
-                        index: u32,
-                        bind_group: &wgpu::BindGroup,
-                        offsets: &[wgpu::DynamicOffset],
-                    ) {
-                        self.set_bind_group(index, bind_group, offsets);
-                    }
-                }
-            }
-            #set_bind_groups
         }
     }
 }
@@ -371,7 +407,12 @@ fn storage_access(access: naga::StorageAccess) -> TokenStream {
     }
 }
 
-fn bind_group(module: &naga::Module, group_no: u32, group: &GroupData) -> TokenStream {
+fn bind_group(
+    module: &naga::Module,
+    group_no: u32,
+    group: &GroupData,
+    set_bind_group_trait: &TokenStream,
+) -> TokenStream {
     let entries: Vec<_> = group
         .bindings
         .iter()
@@ -418,7 +459,7 @@ fn bind_group(module: &naga::Module, group_no: u32, group: &GroupData) -> TokenS
                 Self(bind_group)
             }
 
-            pub fn set<P: SetBindGroup>(&self, pass: &mut P) {
+            pub fn set<P: #set_bind_group_trait>(&self, pass: &mut P) {
                 pass.set_bind_group(#group_no, &self.0, &[]);
             }
 
@@ -629,7 +670,16 @@ mod tests {
             let bind_group_data =
                 get_bind_group_data(&module, &global_stages, demangle_identity).unwrap();
 
-            let actual = bind_groups_module(&module, &bind_group_data);
+            let mut actual = bind_groups_module(&module, &bind_group_data, &ModulePath::default());
+
+            // Add any bind group specific code that isn't part of the bind groups module.
+            // TODO: Is there a better way to test this?
+            let set_trait = set_bind_groups_trait();
+            actual.extend(set_trait);
+
+            let set_func = set_bind_groups_func(&bind_group_data, &ModulePath::default());
+            actual.extend(set_func);
+
             assert_tokens_snapshot!(actual);
         };
     }

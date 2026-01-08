@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 * Moved generated entry point code to the appropriate module for generated code with modules.
+* Moved the generated `SetBindGroup` trait from the `bind_groups` module for each shader to the root module.
 
 ### Fixed
 * Fixed an issue where entry points would not use correct type paths for generated code with modules in some cases.

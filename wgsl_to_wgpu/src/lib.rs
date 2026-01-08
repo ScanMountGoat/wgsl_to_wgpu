@@ -49,9 +49,12 @@ use std::{
     process::{Command, Stdio},
 };
 
-use bindgroup::{bind_groups_module, get_bind_group_data};
+use bindgroup::{bind_groups_module, get_bind_group_data, set_bind_groups_func};
 use consts::pipeline_overridable_constants;
-use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
+use entry::{
+    entry_point_constants, fragment_states, vertex_states, vertex_states_shared,
+    vertex_struct_methods,
+};
 use naga::{WithSpan, valid::ValidationFlags};
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::{TokenStreamExt, quote};
@@ -67,7 +70,7 @@ mod wgsl;
 
 pub use naga::valid::Capabilities as WgslCapabilities;
 
-use crate::{compute::compute_module, entry::vertex_states_shared};
+use crate::{bindgroup::set_bind_groups_trait, compute::compute_module};
 
 /// Errors while generating Rust source for a WGSL shader module.
 #[derive(Debug, Error)]
@@ -378,7 +381,9 @@ impl ModulePath {
 pub struct TypePath {
     /// The parent components like `["a", "b"]` in `a::b::Item`.
     pub parent: ModulePath,
-    /// The name of the item like `"Item"` for `a::b::Item`.
+    /// The unique name of the item like `"Item"` for `a::b::Item`.
+    ///
+    /// This should be unique for all distinct items in a module.
     pub name: String,
 }
 
@@ -535,7 +540,7 @@ impl Module {
         // Collect tokens for each item.
         let structs = structs::structs(&module, options, demangle.clone());
         let consts = consts::consts(&module, demangle.clone());
-        let bind_groups_module = bind_groups_module(&module, &bind_group_data);
+        let bind_groups_module = bind_groups_module(&module, &bind_group_data, &root_path);
         let vertex_methods = vertex_struct_methods(&module, demangle.clone());
         let compute_module = compute_module(&module, demangle.clone());
         let entry_point_constants = entry_point_constants(&module, demangle.clone());
@@ -582,18 +587,32 @@ impl Module {
 
         let override_constants = pipeline_overridable_constants(&module, demangle);
 
-        // Add shared code to top level module if the vertex states are not empty.
-        // This code is shared for all shader modules.
+        let set_bind_groups = if !bind_group_data.is_empty() {
+            Some(set_bind_groups_func(&bind_group_data, &root_path))
+        } else {
+            None
+        };
+
+        // Add shared code to the top level module to use with all shader modules.
+        let mut root_items = quote!();
         if !vertex_states.is_empty() {
-            let shared_items = vec![(
-                TypePath {
-                    parent: ModulePath::default(),
-                    name: "__SHARED".to_string(),
-                },
-                vertex_states_shared(),
-            )];
-            self.add_module_items(shared_items);
+            let vertex_states_shared = vertex_states_shared();
+            root_items.extend(vertex_states_shared);
         }
+        if !bind_group_data.is_empty() {
+            let bind_groups_root = set_bind_groups_trait();
+            root_items.extend(bind_groups_root);
+        }
+
+        // The type path name here just needs to be unique.
+        let shared_items = vec![(
+            TypePath {
+                parent: ModulePath::default(),
+                name: "__SHARED".to_string(),
+            },
+            root_items,
+        )];
+        self.add_module_items(shared_items);
 
         // Place items into appropriate modules.
         self.add_module_items(consts);
@@ -611,6 +630,7 @@ impl Module {
             quote! {
                 #override_constants
                 #bind_groups_module
+                #set_bind_groups
                 #compute_module
                 #fragment_states
                 #create_shader_module
