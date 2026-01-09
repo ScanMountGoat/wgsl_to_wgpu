@@ -1,0 +1,147 @@
+#[derive(Debug)]
+pub struct FragmentEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub targets: [Option<wgpu::ColorTargetState>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+pub fn fragment_state<'a, const N: usize>(
+    module: &'a wgpu::ShaderModule,
+    entry: &'a FragmentEntry<N>,
+) -> wgpu::FragmentState<'a> {
+    wgpu::FragmentState {
+        module,
+        entry_point: Some(entry.entry_point),
+        targets: &entry.targets,
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &entry.constants,
+            ..Default::default()
+        },
+    }
+}
+pub fn main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
+    FragmentEntry {
+        entry_point: ENTRY_MAIN,
+        targets,
+        constants: Default::default(),
+    }
+}
+pub const SOURCE: &str = include_str!("types.wgsl");
+pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+    let source = std::borrow::Cow::Borrowed(SOURCE);
+    device
+        .create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(source),
+        })
+}
+pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+    device
+        .create_pipeline_layout(
+            &wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[],
+                immediate_size: 0,
+            },
+        )
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Atomics {
+    pub num: u32,
+    pub numi: i32,
+}
+pub const ENTRY_MAIN: &str = "main";
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MatricesF16 {
+    pub a: nalgebra::SMatrix<half::f16, 4, 4>,
+    pub b: nalgebra::SMatrix<half::f16, 3, 4>,
+    pub c: nalgebra::SMatrix<half::f16, 2, 4>,
+    pub d: nalgebra::SMatrix<half::f16, 4, 3>,
+    pub e: nalgebra::SMatrix<half::f16, 3, 3>,
+    pub f: nalgebra::SMatrix<half::f16, 2, 3>,
+    pub g: nalgebra::SMatrix<half::f16, 4, 2>,
+    pub h: nalgebra::SMatrix<half::f16, 3, 2>,
+    pub i: nalgebra::SMatrix<half::f16, 2, 2>,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MatricesF32 {
+    pub a: nalgebra::SMatrix<f32, 4, 4>,
+    pub b: nalgebra::SMatrix<f32, 3, 4>,
+    pub c: nalgebra::SMatrix<f32, 2, 4>,
+    pub d: nalgebra::SMatrix<f32, 4, 3>,
+    pub e: nalgebra::SMatrix<f32, 3, 3>,
+    pub f: nalgebra::SMatrix<f32, 2, 3>,
+    pub g: nalgebra::SMatrix<f32, 4, 2>,
+    pub h: nalgebra::SMatrix<f32, 3, 2>,
+    pub i: nalgebra::SMatrix<f32, 2, 2>,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MatricesF64 {
+    pub a: nalgebra::SMatrix<f64, 4, 4>,
+    pub b: nalgebra::SMatrix<f64, 3, 4>,
+    pub c: nalgebra::SMatrix<f64, 2, 4>,
+    pub d: nalgebra::SMatrix<f64, 4, 3>,
+    pub e: nalgebra::SMatrix<f64, 3, 3>,
+    pub f: nalgebra::SMatrix<f64, 2, 3>,
+    pub g: nalgebra::SMatrix<f64, 4, 2>,
+    pub h: nalgebra::SMatrix<f64, 3, 2>,
+    pub i: nalgebra::SMatrix<f64, 2, 2>,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Nested {
+    pub a: MatricesF32,
+    pub b: MatricesF64,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Scalars {
+    pub a: u32,
+    pub b: i32,
+    pub c: f32,
+    pub d: half::f16,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct StaticArrays {
+    pub a: [u32; 5],
+    pub b: [f32; 3],
+    pub c: [nalgebra::SMatrix<f32, 4, 4>; 512],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsF16 {
+    pub a: nalgebra::SVector<half::f16, 2>,
+    pub b: nalgebra::SVector<half::f16, 4>,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsF32 {
+    pub a: nalgebra::SVector<f32, 2>,
+    pub b: nalgebra::SVector<f32, 3>,
+    pub c: nalgebra::SVector<f32, 4>,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsF64 {
+    pub a: nalgebra::SVector<f64, 2>,
+    pub b: nalgebra::SVector<f64, 3>,
+    pub c: nalgebra::SVector<f64, 4>,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsI32 {
+    pub a: nalgebra::SVector<i32, 2>,
+    pub b: nalgebra::SVector<i32, 3>,
+    pub c: nalgebra::SVector<i32, 4>,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VectorsU32 {
+    pub a: nalgebra::SVector<u32, 2>,
+    pub b: nalgebra::SVector<u32, 3>,
+    pub c: nalgebra::SVector<u32, 4>,
+}

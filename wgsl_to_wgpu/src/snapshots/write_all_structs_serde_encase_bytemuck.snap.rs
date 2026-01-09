@@ -1,0 +1,92 @@
+pub mod compute {
+    pub const MAIN_WORKGROUP_SIZE: [u32; 3] = [64, 1, 1];
+    pub fn create_main_pipeline(device: &wgpu::Device) -> wgpu::ComputePipeline {
+        let module = super::create_shader_module(device);
+        let layout = super::create_pipeline_layout(device);
+        device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute Pipeline main"),
+            layout: Some(&layout),
+            module: &module,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: Default::default(),
+        })
+    }
+}
+pub const SOURCE: &str = include_str!("serde_encase_bytemuck.wgsl");
+pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+    let source = std::borrow::Cow::Borrowed(SOURCE);
+    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(source),
+    })
+}
+pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        immediate_size: 0,
+    })
+}
+pub const ENTRY_MAIN: &str = "main";
+#[repr(C)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    bytemuck :: Pod,
+    bytemuck :: Zeroable,
+    encase :: ShaderType,
+    serde :: Serialize,
+    serde :: Deserialize,
+)]
+pub struct Input0 {
+    pub a: u32,
+    pub b: i32,
+    pub c: f32,
+}
+const _: () = assert!(
+    std::mem::size_of::<Input0>() == 12,
+    "size of Input0 does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(Input0, a) == 0,
+    "offset of Input0.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(Input0, b) == 4,
+    "offset of Input0.b does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(Input0, c) == 8,
+    "offset of Input0.c does not match WGSL"
+);
+#[repr(C)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    bytemuck :: Pod,
+    bytemuck :: Zeroable,
+    encase :: ShaderType,
+    serde :: Serialize,
+    serde :: Deserialize,
+)]
+pub struct Nested {
+    pub a: Input0,
+    pub b: f32,
+}
+const _: () = assert!(
+    std::mem::size_of::<Nested>() == 16,
+    "size of Nested does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(Nested, a) == 0,
+    "offset of Nested.a does not match WGSL"
+);
+const _: () = assert!(
+    std::mem::offset_of!(Nested, b) == 12,
+    "offset of Nested.b does not match WGSL"
+);

@@ -1,0 +1,69 @@
+#[derive(Debug)]
+pub struct FragmentEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub targets: [Option<wgpu::ColorTargetState>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+pub fn fragment_state<'a, const N: usize>(
+    module: &'a wgpu::ShaderModule,
+    entry: &'a FragmentEntry<N>,
+) -> wgpu::FragmentState<'a> {
+    wgpu::FragmentState {
+        module,
+        entry_point: Some(entry.entry_point),
+        targets: &entry.targets,
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &entry.constants,
+            ..Default::default()
+        },
+    }
+}
+pub fn fs_main_entry(targets: [Option<wgpu::ColorTargetState>; 1]) -> FragmentEntry<1> {
+    FragmentEntry {
+        entry_point: ENTRY_FS_MAIN,
+        targets,
+        constants: Default::default(),
+    }
+}
+pub const SOURCE : & str = "enable wgpu_mesh_shader;\n\nconst positions = array(\n    vec4(0.0, 1.0, 0.0, 1.0),\n    vec4(-1.0, -1.0, 0.0, 1.0),\n    vec4(1.0, -1.0, 0.0, 1.0)\n);\nconst colors = array(\n    vec4(0.0, 1.0, 0.0, 1.0),\n    vec4(0.0, 0.0, 1.0, 1.0),\n    vec4(1.0, 0.0, 0.0, 1.0)\n);\n\nstruct TaskPayload {\n    colorMask: vec4<f32>,\n    visible: bool,\n}\nstruct VertexOutput {\n    @builtin(position) position: vec4<f32>,\n    @location(0) color: vec4<f32>,\n}\nstruct PrimitiveOutput {\n    @builtin(triangle_indices) indices: vec3<u32>,\n    @builtin(cull_primitive) cull: bool,\n    @per_primitive @location(1) colorMask: vec4<f32>,\n}\nstruct PrimitiveInput {\n    @per_primitive @location(1) colorMask: vec4<f32>,\n}\n\nvar<task_payload> taskPayload: TaskPayload;\nvar<workgroup> workgroupData: f32;\n\n@task\n@payload(taskPayload)\n@workgroup_size(1)\nfn ts_main() -> @builtin(mesh_task_size) vec3<u32> {\n    workgroupData = 1.0;\n    taskPayload.colorMask = vec4(1.0, 1.0, 0.0, 1.0);\n    taskPayload.visible = true;\n    return vec3(1, 1, 1);\n}\n\nstruct MeshOutput {\n    @builtin(vertices) vertices: array<VertexOutput, 3>,\n    @builtin(primitives) primitives: array<PrimitiveOutput, 1>,\n    @builtin(vertex_count) vertex_count: u32,\n    @builtin(primitive_count) primitive_count: u32,\n}\n\nvar<workgroup> mesh_output: MeshOutput;\n\n@mesh(mesh_output)\n@payload(taskPayload)\n@workgroup_size(1)\nfn ms_main() {\n    mesh_output.vertex_count = 3;\n    mesh_output.primitive_count = 1;\n    workgroupData = 2.0;\n\n    mesh_output.vertices[0].position = positions[0];\n    mesh_output.vertices[0].color = colors[0] * taskPayload.colorMask;\n\n    mesh_output.vertices[1].position = positions[1];\n    mesh_output.vertices[1].color = colors[1] * taskPayload.colorMask;\n\n    mesh_output.vertices[2].position = positions[2];\n    mesh_output.vertices[2].color = colors[2] * taskPayload.colorMask;\n\n    mesh_output.primitives[0].indices = vec3<u32>(0, 1, 2);\n    mesh_output.primitives[0].cull = !taskPayload.visible;\n    mesh_output.primitives[0].colorMask = vec4<f32>(1.0, 0.0, 1.0, 1.0);\n}\n\n@fragment\nfn fs_main(vertex: VertexOutput, primitive: PrimitiveInput) -> @location(0) vec4<f32> {\n    return vertex.color * primitive.colorMask;\n}\n" ;
+pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+    let source = std::borrow::Cow::Borrowed(SOURCE);
+    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(source),
+    })
+}
+pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        immediate_size: 0,
+    })
+}
+pub const ENTRY_FS_MAIN: &str = "fs_main";
+pub const ENTRY_MS_MAIN: &str = "ms_main";
+pub const ENTRY_TS_MAIN: &str = "ts_main";
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MeshOutput {}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct PrimitiveInput {
+    pub colorMask: [f32; 4],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct PrimitiveOutput {
+    pub colorMask: [f32; 4],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct TaskPayload {
+    pub colorMask: [f32; 4],
+    pub visible: bool,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct VertexOutput {
+    pub color: [f32; 4],
+}
