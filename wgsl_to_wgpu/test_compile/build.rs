@@ -16,7 +16,7 @@ fn main() {
         }
 
         let name = path.file_prefix().unwrap().to_str().unwrap();
-        let module = format!("#[path = \"{}\"] pub mod {};\n", path.display(), name);
+        let module = format!("#[path = r\"{}\"] pub mod {};\n", path.display(), name);
         import_snapshots.push_str(&module);
     }
 
