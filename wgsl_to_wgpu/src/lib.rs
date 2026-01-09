@@ -45,114 +45,33 @@ use std::{
     collections::BTreeMap,
     io::Write,
     iter::once,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Command, Stdio},
 };
 
-use bindgroup::{bind_groups_module, get_bind_group_data};
+use bindgroup::{bind_groups_module, get_bind_group_data, set_bind_groups_func};
 use consts::pipeline_overridable_constants;
-use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
-use naga::{WithSpan, valid::ValidationFlags};
+use entry::{
+    entry_point_constants, fragment_states, vertex_states, vertex_states_shared,
+    vertex_struct_methods,
+};
+use naga::valid::ValidationFlags;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::{TokenStreamExt, quote};
 use syn::Ident;
-use thiserror::Error;
 
 mod bindgroup;
 mod compute;
 mod consts;
 mod entry;
+mod error;
 mod structs;
 mod wgsl;
 
+pub use error::CreateModuleError;
 pub use naga::valid::Capabilities as WgslCapabilities;
 
-use crate::{compute::compute_module, entry::vertex_states_shared};
-
-/// Errors while generating Rust source for a WGSL shader module.
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum CreateModuleError {
-    /// Bind group sets must be consecutive and start from 0.
-    /// See `bind_group_layouts` for
-    /// [PipelineLayoutDescriptor](https://docs.rs/wgpu/latest/wgpu/struct.PipelineLayoutDescriptor.html#).
-    #[error("bind groups are non-consecutive or do not start from 0")]
-    NonConsecutiveBindGroups,
-
-    /// Each binding resource must be associated with exactly one binding index.
-    #[error("duplicate binding found with index `{binding}`")]
-    DuplicateBinding { binding: u32 },
-
-    /// The shader source could not be parsed.
-    #[error("failed to parse: {error}")]
-    ParseError {
-        error: naga::front::wgsl::ParseError,
-    },
-
-    /// The shader source could not be validated.
-    #[error("failed to validate: {error}")]
-    ValidationError {
-        error: WithSpan<naga::valid::ValidationError>,
-    },
-}
-
-impl CreateModuleError {
-    /// Writes a diagnostic error to stderr.
-    pub fn emit_to_stderr(&self, wgsl_source: &str) {
-        match self {
-            CreateModuleError::ParseError { error } => error.emit_to_stderr(wgsl_source),
-            CreateModuleError::ValidationError { error } => error.emit_to_stderr(wgsl_source),
-            other => {
-                eprintln!("{other}")
-            }
-        }
-    }
-
-    /// Writes a diagnostic error to stderr, including a source path.
-    pub fn emit_to_stderr_with_path(&self, wgsl_source: &str, path: impl AsRef<Path>) {
-        let path = path.as_ref();
-        match self {
-            CreateModuleError::ParseError { error } => {
-                error.emit_to_stderr_with_path(wgsl_source, path)
-            }
-            CreateModuleError::ValidationError { error } => {
-                let path = path.to_string_lossy();
-                error.emit_to_stderr_with_path(wgsl_source, &path)
-            }
-            other => {
-                eprintln!("{}: {}", path.to_string_lossy(), other)
-            }
-        }
-    }
-
-    /// Creates a diagnostic string from the error.
-    pub fn emit_to_string(&self, wgsl_source: &str) -> String {
-        match self {
-            CreateModuleError::ParseError { error } => error.emit_to_string(wgsl_source),
-            CreateModuleError::ValidationError { error } => error.emit_to_string(wgsl_source),
-            other => {
-                format!("{other}")
-            }
-        }
-    }
-
-    /// Creates a diagnostic string from the error, including a source path.
-    pub fn emit_to_string_with_path(&self, wgsl_source: &str, path: impl AsRef<Path>) -> String {
-        let path = path.as_ref();
-        match self {
-            CreateModuleError::ParseError { error } => {
-                error.emit_to_string_with_path(wgsl_source, path)
-            }
-            CreateModuleError::ValidationError { error } => {
-                let path = path.to_string_lossy();
-                error.emit_to_string_with_path(wgsl_source, &path)
-            }
-            other => {
-                format!("{}: {}", path.to_string_lossy(), other)
-            }
-        }
-    }
-}
+use crate::{bindgroup::set_bind_groups_trait, compute::compute_module};
 
 /// Options for configuring the generated bindings to work with additional dependencies.
 /// Use [WriteOptions::default] for only requiring WGPU itself.
@@ -378,7 +297,9 @@ impl ModulePath {
 pub struct TypePath {
     /// The parent components like `["a", "b"]` in `a::b::Item`.
     pub parent: ModulePath,
-    /// The name of the item like `"Item"` for `a::b::Item`.
+    /// The unique name of the item like `"Item"` for `a::b::Item`.
+    ///
+    /// This should be unique for all distinct items in a module.
     pub name: String,
 }
 
@@ -429,10 +350,14 @@ impl Module {
         }
     }
 
-    fn add_module_items(&mut self, structs: Vec<(TypePath, TokenStream)>) {
-        for (item, tokens) in structs {
-            let module = self.get_module(&item.parent.components);
-            module.items.insert(item.name, tokens);
+    fn add_module_item(&mut self, path: TypePath, tokens: TokenStream) {
+        let module = self.get_module(&path.parent.components);
+        module.items.insert(path.name, tokens);
+    }
+
+    fn add_module_items(&mut self, items: Vec<(TypePath, TokenStream)>) {
+        for (item, tokens) in items {
+            self.add_module_item(item, tokens);
         }
     }
 
@@ -535,92 +460,133 @@ impl Module {
         // Collect tokens for each item.
         let structs = structs::structs(&module, options, demangle.clone());
         let consts = consts::consts(&module, demangle.clone());
-        let bind_groups_module = bind_groups_module(&module, &bind_group_data);
         let vertex_methods = vertex_struct_methods(&module, demangle.clone());
-        let compute_module = compute_module(&module, demangle.clone());
         let entry_point_constants = entry_point_constants(&module, demangle.clone());
         let vertex_states = vertex_states(&module, demangle.clone());
-        let fragment_states = fragment_states(&module, demangle.clone());
 
-        // Use a string literal if no include path is provided.
-        let included_source = wgsl_include_path
-            .map(|p| quote!(include_str!(#p)))
-            .unwrap_or_else(|| quote!(#wgsl_source));
+        let (shared_path, shared_items) = shared_root_module(&bind_group_data, &vertex_states);
 
-        let create_shader_module = quote! {
-            pub const SOURCE: &str = #included_source;
-            pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
-                let source = std::borrow::Cow::Borrowed(SOURCE);
-                device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                    label: None,
-                    source: wgpu::ShaderSource::Wgsl(source)
-                })
-            }
-        };
-
-        let bind_group_layouts: Vec<_> = bind_group_data
-            .keys()
-            .map(|group_no| {
-                let group = indexed_name_to_ident("BindGroup", *group_no);
-                quote!(bind_groups::#group::get_bind_group_layout(device))
-            })
-            .collect();
-
-        let immediate_size = immediate_data_size(&module).unwrap_or(quote!(0));
-
-        let create_pipeline_layout = quote! {
-            pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
-                device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: None,
-                    bind_group_layouts: &[
-                        #(&#bind_group_layouts),*
-                    ],
-                    immediate_size: #immediate_size,
-                })
-            }
-        };
-
-        let override_constants = pipeline_overridable_constants(&module, demangle);
-
-        // Add shared code to top level module if the vertex states are not empty.
-        // This code is shared for all shader modules.
-        if !vertex_states.is_empty() {
-            let shared_items = vec![(
-                TypePath {
-                    parent: ModulePath::default(),
-                    name: "__SHARED".to_string(),
-                },
-                vertex_states_shared(),
-            )];
-            self.add_module_items(shared_items);
-        }
+        let (root_item_path, root_items) = shader_root_module(
+            &module,
+            wgsl_source,
+            wgsl_include_path,
+            root_path,
+            &bind_group_data,
+            demangle,
+        );
 
         // Place items into appropriate modules.
+        self.add_module_item(shared_path, shared_items);
         self.add_module_items(consts);
         self.add_module_items(structs);
         self.add_module_items(vertex_methods);
         self.add_module_items(entry_point_constants);
         self.add_module_items(vertex_states);
-
-        // Place items generated for this module in the root module.
-        let root_items = vec![(
-            TypePath {
-                parent: root_path.clone(),
-                name: String::new(),
-            },
-            quote! {
-                #override_constants
-                #bind_groups_module
-                #compute_module
-                #fragment_states
-                #create_shader_module
-                #create_pipeline_layout
-            },
-        )];
-        self.add_module_items(root_items);
+        self.add_module_item(root_item_path, root_items);
 
         Ok(())
     }
+}
+
+fn shader_root_module<F>(
+    module: &naga::Module,
+    wgsl_source: &str,
+    wgsl_include_path: Option<&str>,
+    root_path: ModulePath,
+    bind_group_data: &BTreeMap<u32, bindgroup::GroupData<'_>>,
+    demangle: F,
+) -> (TypePath, TokenStream)
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
+    let bind_groups_module = bind_groups_module(module, bind_group_data, &root_path);
+    let compute_module = compute_module(module, demangle.clone());
+    let fragment_states = fragment_states(module, demangle.clone());
+
+    // Use a string literal if no include path is provided.
+    let included_source = wgsl_include_path
+        .map(|p| quote!(include_str!(#p)))
+        .unwrap_or_else(|| quote!(#wgsl_source));
+
+    let create_shader_module = quote! {
+        pub const SOURCE: &str = #included_source;
+        pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+            let source = std::borrow::Cow::Borrowed(SOURCE);
+            device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(source)
+            })
+        }
+    };
+
+    let bind_group_layouts: Vec<_> = bind_group_data
+        .keys()
+        .map(|group_no| {
+            let group = indexed_name_to_ident("BindGroup", *group_no);
+            quote!(bind_groups::#group::get_bind_group_layout(device))
+        })
+        .collect();
+
+    let immediate_size = immediate_data_size(module).unwrap_or(quote!(0));
+
+    let create_pipeline_layout = quote! {
+        pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[
+                    #(&#bind_group_layouts),*
+                ],
+                immediate_size: #immediate_size,
+            })
+        }
+    };
+
+    let override_constants = pipeline_overridable_constants(module, demangle);
+
+    let set_bind_groups = if !bind_group_data.is_empty() {
+        Some(set_bind_groups_func(bind_group_data, &root_path))
+    } else {
+        None
+    };
+
+    // Place items in the root module for this shader.
+    let root_item_path = TypePath {
+        parent: root_path.clone(),
+        name: String::new(),
+    };
+    let root_items = quote! {
+        #override_constants
+        #bind_groups_module
+        #set_bind_groups
+        #compute_module
+        #fragment_states
+        #create_shader_module
+        #create_pipeline_layout
+    };
+    (root_item_path, root_items)
+}
+
+fn shared_root_module(
+    bind_group_data: &BTreeMap<u32, bindgroup::GroupData<'_>>,
+    vertex_states: &[(TypePath, TokenStream)],
+) -> (TypePath, TokenStream) {
+    // Add shared code to the top level module to use with all shader modules.
+    let mut shared_items = quote!();
+    if !vertex_states.is_empty() {
+        let vertex_states_shared = vertex_states_shared();
+        shared_items.extend(vertex_states_shared);
+    }
+    if !bind_group_data.is_empty() {
+        let bind_groups_root = set_bind_groups_trait();
+        shared_items.extend(bind_groups_root);
+    }
+
+    // The type path name here just needs to be unique.
+    let shared_path = TypePath {
+        parent: ModulePath::default(),
+        name: "__SHARED".to_string(),
+    };
+    (shared_path, shared_items)
 }
 
 fn immediate_data_size(module: &naga::Module) -> Option<TokenStream> {
