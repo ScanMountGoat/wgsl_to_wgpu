@@ -2,7 +2,6 @@
 name = "example"
 version = "0.17.1"
 edition.workspace = true
-
 publish = false
 
 [dependencies]
