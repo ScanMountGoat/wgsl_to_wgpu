@@ -602,7 +602,7 @@ where
         .map(|(group_no, group)| {
             let path = match &group.name {
                 GroupName::Module(module) => root_path.relative_module_path(module),
-                _ => quote! {bind_groups},
+                _ => quote! { bind_groups },
             };
 
             let group_type = group.camel_case_ident("BindGroup", *group_no);
@@ -1269,34 +1269,34 @@ mod test {
 
     macro_rules! bind_group_named_tests {
         (
-        	Settings { named: $named:expr, shared: $shared:expr },
-        	$(($test_name:ident, $file_name:expr),)*
+            Settings { named: $named:expr, shared: $shared:expr, },
+            $(($test_name:ident, $file_name:expr),)*
         ) => {
-        	$(
-	         	#[test]
-		         fn $test_name() {
-		             let output = create_shader_modules(
-                		include_str!(concat!("data/bindgroup/named_", $file_name, ".wgsl")),
-		                 WriteOptions {
-		                     rustfmt: true,
-		                     named_bind_groups: $named,
-                             shared_bind_groups: $shared,
-		                     ..Default::default()
-		                 },
-		                 demangle_underscore,
-		             )
-		             .unwrap();
+            $(
+                #[test]
+                 fn $test_name() {
+                    let output = create_shader_modules(
+                        include_str!(concat!("data/bindgroup/named_", $file_name, ".wgsl")),
+                        WriteOptions {
+                            rustfmt: true,
+                            named_bind_groups: $named,
+                            shared_bind_groups: $shared,
+                            ..Default::default()
+                        },
+                        demangle_underscore,
+                    )
+                    .unwrap();
 
-		             assert_rust_snapshot!(output);
-				}
-         	)*
+                    assert_rust_snapshot!(output);
+                }
+            )*
         };
     }
 
     bind_group_named_tests!(
         Settings {
             named: true,
-            shared: false
+            shared: false,
         },
         (bind_group_named_simple, "simple"),
         (bind_group_named_multiple_bindings, "multiple_bindings"),
@@ -1306,7 +1306,7 @@ mod test {
     bind_group_named_tests!(
         Settings {
             named: false,
-            shared: true
+            shared: true,
         },
         (bind_group_shared_simple, "simple"),
         (bind_group_shared_multiple_bindings, "multiple_bindings"),

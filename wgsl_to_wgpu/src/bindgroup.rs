@@ -661,7 +661,11 @@ where
         if let Some(binding) = &global.binding {
             let group = groups.entry(binding.group).or_insert(GroupData {
                 bindings: Vec::new(),
-                name: GroupName::Numbered,
+                name: if named_bind_groups {
+                    GroupName::Named
+                } else {
+                    GroupName::Numbered
+                },
             });
             let binding_type = &module.types[module.global_variables[global_handle.0].ty];
 
@@ -696,12 +700,6 @@ where
                 });
             }
             group.bindings.push(group_binding);
-        }
-    }
-
-    if named_bind_groups {
-        for group in groups.values_mut() {
-            group.name = GroupName::Named;
         }
     }
 
