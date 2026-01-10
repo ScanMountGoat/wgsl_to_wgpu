@@ -166,7 +166,6 @@ pub fn bind_group_modules(
         quote!(pub #field: &'a #path #group_name)
     });
 
-    // The set function for each bind group already sets the index.
     let set_groups = bind_group_data.iter().map(|(group_no, group)| {
         let index_arg = group.group_number_argument(*group_no);
         let group = group.snake_case_ident("bind_group", *group_no);
@@ -271,29 +270,22 @@ pub fn set_bind_groups_func(
         name: "SetBindGroup".to_string(),
     });
 
-    let group_parameters: Vec<_> = bind_group_data
-        .iter()
-        .map(|(group_no, group)| {
-            let module = match &group.name {
-                GroupName::Module(module) => this_module.relative_module_path(module),
-                _ => quote! {bind_groups},
-            };
+    let group_parameters = bind_group_data.iter().map(|(group_no, group)| {
+        let module = match &group.name {
+            GroupName::Module(module) => this_module.relative_module_path(module),
+            _ => quote! {bind_groups},
+        };
 
-            let group_name = group.snake_case_ident("bind_group", *group_no);
-            let group_type = group.camel_case_ident("BindGroup", *group_no);
-            quote!(#group_name: &#module::#group_type)
-        })
-        .collect();
+        let group_name = group.snake_case_ident("bind_group", *group_no);
+        let group_type = group.camel_case_ident("BindGroup", *group_no);
+        quote!(#group_name: &#module::#group_type)
+    });
 
-    // The set function for each bind group already sets the index.
-    let set_groups: Vec<_> = bind_group_data
-        .iter()
-        .map(|(group_no, group)| {
-            let index_arg = group.group_number_argument(*group_no);
-            let group = group.snake_case_ident("bind_group", *group_no);
-            quote!(#group.set(pass, #index_arg);)
-        })
-        .collect();
+    let set_groups = bind_group_data.iter().map(|(group_no, group)| {
+        let index_arg = group.group_number_argument(*group_no);
+        let group = group.snake_case_ident("bind_group", *group_no);
+        quote!(#group.set(pass, #index_arg);)
+    });
 
     quote! {
         pub fn set_bind_groups<P: #set_bind_groups_trait>(
@@ -306,16 +298,12 @@ pub fn set_bind_groups_func(
 }
 
 fn bind_group_layout(module: &naga::Module, group_no: u32, group: &GroupData) -> TokenStream {
-    let fields: Vec<_> = group
-        .bindings
-        .iter()
-        .map(|binding| {
-            let binding_name = &binding.name;
-            let field_name = Ident::new(binding_name, Span::call_site());
-            let field_type = binding_field_type(module, &binding.binding_type.inner, binding_name);
-            quote!(pub #field_name: #field_type)
-        })
-        .collect();
+    let fields = group.bindings.iter().map(|binding| {
+        let binding_name = &binding.name;
+        let field_name = Ident::new(binding_name, Span::call_site());
+        let field_type = binding_field_type(module, &binding.binding_type.inner, binding_name);
+        quote!(pub #field_name: #field_type)
+    });
 
     let name = group.camel_case_ident("BindGroupLayout", group_no);
     quote! {
@@ -358,11 +346,10 @@ fn bind_group_layout_descriptor(
     group_no: u32,
     group: &GroupData,
 ) -> TokenStream {
-    let entries: Vec<_> = group
+    let entries = group
         .bindings
         .iter()
-        .map(|binding| bind_group_layout_entry(module, binding))
-        .collect();
+        .map(|binding| bind_group_layout_entry(module, binding));
 
     let name = group.upper_snake_case_ident("LAYOUT_DESCRIPTOR", group_no);
     let label = group.camel_case_name("LayoutDescriptor", group_no);
@@ -539,24 +526,19 @@ fn bind_group_implementation(
     group: &GroupData,
     set_bind_group_trait: &TokenStream,
 ) -> TokenStream {
-    let entries: Vec<_> = group
-        .bindings
-        .iter()
-        .map(|binding| {
-            let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
-            let binding_name = &binding.name;
-            let field_name = Ident::new(&binding.name, Span::call_site());
-            let resource_type =
-                resource_ty(module, binding, &binding_index, binding_name, field_name);
+    let entries = group.bindings.iter().map(|binding| {
+        let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
+        let binding_name = &binding.name;
+        let field_name = Ident::new(&binding.name, Span::call_site());
+        let resource_type = resource_ty(module, binding, &binding_index, binding_name, field_name);
 
-            quote! {
-                wgpu::BindGroupEntry {
-                    binding: #binding_index,
-                    resource: #resource_type,
-                }
+        quote! {
+            wgpu::BindGroupEntry {
+                binding: #binding_index,
+                resource: #resource_type,
             }
-        })
-        .collect();
+        }
+    });
 
     let bind_group_name = group.camel_case_ident("BindGroup", group_no);
     let bind_group_layout_name = group.camel_case_ident("BindGroupLayout", group_no);
