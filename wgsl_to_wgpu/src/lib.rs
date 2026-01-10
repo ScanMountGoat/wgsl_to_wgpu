@@ -44,12 +44,10 @@ extern crate wgpu_types as wgpu;
 use std::{
     collections::BTreeMap,
     io::Write,
-    iter::once,
-    path::PathBuf,
     process::{Command, Stdio},
 };
 
-use bindgroup::{bind_groups_module, get_bind_group_data, set_bind_groups_func};
+use bindgroup::{bind_group_modules, get_bind_group_data, set_bind_groups_func};
 use consts::pipeline_overridable_constants;
 use entry::{
     entry_point_constants, fragment_states, vertex_states, vertex_states_shared,
@@ -71,7 +69,10 @@ mod wgsl;
 pub use error::CreateModuleError;
 pub use naga::valid::Capabilities as WgslCapabilities;
 
-use crate::{bindgroup::set_bind_groups_trait, compute::compute_module};
+use crate::{
+    bindgroup::{GroupName, set_bind_groups_trait},
+    compute::compute_module,
+};
 
 /// Options for configuring the generated bindings to work with additional dependencies.
 /// Use [WriteOptions::default] for only requiring WGPU itself.
@@ -115,6 +116,53 @@ pub struct WriteOptions {
 
     /// Perform semantic validation on the code.
     pub validate: Option<ValidationOptions>,
+
+    /// Use the names of the bind group bindings to name the bind group.
+    ///
+    /// ### Example
+    ///
+    /// ```wgsl
+    /// @group(0) @binding(0)
+    /// var<uniform> camera: Camera;
+    /// @group(0) @binding(1)
+    /// var<uniform> settings: GlobalSettings;
+    ///
+    /// @group(1) @binding(0)
+    /// var texture: texture_2d<f32>;
+    /// @group(1) @binding(1)
+    /// var sampler: sampler;
+    /// ```
+    ///
+    /// ```rust
+    /// struct BindGroupCameraSettings { /*...*/ }
+    /// struct BindGroupTextureSampler { /*...*/ }
+    /// ```
+    pub named_bind_groups: bool,
+
+    /// Place shared bind groups in the corresponding module, not the `bind_groups`-module.
+    ///
+    /// The module for a bind group is calculated from the binding names with the demangle function.
+    /// The bind group is placed in the deepest common module.
+    /// If no common module exists, the bind group is placed in the `bind_groups`-module.
+    ///
+    /// The bind group is always named based on the binding names (see `named_bind_groups`),
+    /// because the bind group could be used in different shader modules with different group indices.
+    ///
+    /// ### Example
+    ///
+    /// ```wgsl
+    /// @group(0) @binding(0)
+    /// var<uniform> shared_camera: Camera;
+    /// @group(0) @binding(1)
+    /// var<uniform> shared_settings: Settings;
+    /// ```
+    ///
+    /// ```rust
+    /// mod shared {
+    ///     struct BindGroupCameraSettings { /*...*/ }
+    /// }
+    /// ```
+    pub shared_bind_groups: bool,
 }
 
 /// Options for semantic validation.
@@ -269,26 +317,47 @@ pub struct ModulePath {
 
 impl ModulePath {
     fn relative_path(&self, target: &TypePath) -> TokenStream {
-        let base_path: PathBuf = self.components.iter().collect();
-        let target_path: PathBuf = target.parent.components.iter().collect();
-        let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
+        let path = self.relative_module_path(&target.parent);
+        let name = Ident::new(&target.name, Span::call_site());
+        if path.is_empty() {
+            quote! { #name }
+        } else {
+            quote! { #path::#name }
+        }
+    }
 
-        // TODO: Implement this from scratch with tests?
-        let components = relative_path
-            .components()
-            .filter_map(|c| match c {
-                std::path::Component::Prefix(_) => None,
-                std::path::Component::RootDir => None,
-                std::path::Component::CurDir => None,
-                std::path::Component::ParentDir => Some("super"),
-                std::path::Component::Normal(s) => s.to_str(),
-            })
-            .chain(once(target.name.as_str()))
+    fn relative_module_path(&self, target: &ModulePath) -> TokenStream {
+        let common = self.common_length(target);
+
+        let to_common = self.components[common..].iter().map(|_| "super");
+        let from_common = target.components[common..].iter().map(|c| c.as_str());
+
+        let components = to_common
+            .chain(from_common)
             .map(|c| Ident::new(c, Span::call_site()));
 
         let mut path = TokenStream::new();
         path.append_separated(components, quote! { :: });
         path
+    }
+
+    fn module(mut self, module: &str) -> Self {
+        self.components.push(module.to_string());
+        self
+    }
+
+    fn common_prefix(&mut self, other: &ModulePath) {
+        let common = self.common_length(other);
+        self.components.truncate(common);
+    }
+
+    fn common_length(&self, other: &ModulePath) -> usize {
+        self.components
+            .iter()
+            .zip(other.components.iter())
+            .position(|(a, b)| a != b)
+            .unwrap_or(self.components.len())
+            .min(other.components.len())
     }
 }
 
@@ -455,7 +524,13 @@ impl Module {
         }
 
         let global_stages = wgsl::global_shader_stages(&module);
-        let bind_group_data = get_bind_group_data(&module, &global_stages, demangle.clone())?;
+        let bind_group_data = get_bind_group_data(
+            &module,
+            &global_stages,
+            demangle.clone(),
+            options.named_bind_groups,
+            options.shared_bind_groups,
+        )?;
 
         // Collect tokens for each item.
         let structs = structs::structs(&module, options, demangle.clone());
@@ -463,6 +538,7 @@ impl Module {
         let vertex_methods = vertex_struct_methods(&module, demangle.clone());
         let entry_point_constants = entry_point_constants(&module, demangle.clone());
         let vertex_states = vertex_states(&module, demangle.clone());
+        let bind_group_modules = bind_group_modules(&module, &bind_group_data, &root_path);
 
         let (shared_path, shared_items) = shared_root_module(&bind_group_data, &vertex_states);
 
@@ -473,6 +549,7 @@ impl Module {
             root_path,
             &bind_group_data,
             demangle,
+            bind_group_modules.root,
         );
 
         // Place items into appropriate modules.
@@ -482,6 +559,7 @@ impl Module {
         self.add_module_items(vertex_methods);
         self.add_module_items(entry_point_constants);
         self.add_module_items(vertex_states);
+        self.add_module_items(bind_group_modules.modules);
         self.add_module_item(root_item_path, root_items);
 
         Ok(())
@@ -495,11 +573,11 @@ fn shader_root_module<F>(
     root_path: ModulePath,
     bind_group_data: &BTreeMap<u32, bindgroup::GroupData<'_>>,
     demangle: F,
+    bind_groups_module: TokenStream,
 ) -> (TypePath, TokenStream)
 where
     F: Fn(&str) -> TypePath + Clone,
 {
-    let bind_groups_module = bind_groups_module(module, bind_group_data, &root_path);
     let compute_module = compute_module(module, demangle.clone());
     let fragment_states = fragment_states(module, demangle.clone());
 
@@ -520,10 +598,15 @@ where
     };
 
     let bind_group_layouts: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("BindGroup", *group_no);
-            quote!(bind_groups::#group::get_bind_group_layout(device))
+        .iter()
+        .map(|(group_no, group)| {
+            let path = match &group.name {
+                GroupName::Module(module) => root_path.relative_module_path(module),
+                _ => quote! { bind_groups },
+            };
+
+            let group_type = group.camel_case_ident("BindGroup", *group_no);
+            quote!(#path::#group_type::get_bind_group_layout(device))
         })
         .collect();
 
@@ -629,10 +712,6 @@ fn pretty_print_rustfmt(tokens: TokenStream) -> String {
         }
     }
     value.to_string()
-}
-
-fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
-    Ident::new(&format!("{name}{index}"), Span::call_site())
 }
 
 fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
@@ -766,7 +845,7 @@ mod test {
     #[test]
     fn create_shader_module_compute_overrides() {
         let source = indoc! {r#"
-            struct Uniforms { 
+            struct Uniforms {
                 color_rgb: vec3<f32>,
             }
 
@@ -1187,4 +1266,50 @@ mod test {
 
         assert_rust_snapshot!(output);
     }
+
+    macro_rules! bind_group_named_tests {
+        (
+            Settings { named: $named:expr, shared: $shared:expr, },
+            $(($test_name:ident, $file_name:expr),)*
+        ) => {
+            $(
+                #[test]
+                 fn $test_name() {
+                    let output = create_shader_modules(
+                        include_str!(concat!("data/bindgroup/named_", $file_name, ".wgsl")),
+                        WriteOptions {
+                            rustfmt: true,
+                            named_bind_groups: $named,
+                            shared_bind_groups: $shared,
+                            ..Default::default()
+                        },
+                        demangle_underscore,
+                    )
+                    .unwrap();
+
+                    assert_rust_snapshot!(output);
+                }
+            )*
+        };
+    }
+
+    bind_group_named_tests!(
+        Settings {
+            named: true,
+            shared: false,
+        },
+        (bind_group_named_simple, "simple"),
+        (bind_group_named_multiple_bindings, "multiple_bindings"),
+        (bind_group_named_different_modules, "different_modules"),
+    );
+
+    bind_group_named_tests!(
+        Settings {
+            named: false,
+            shared: true,
+        },
+        (bind_group_shared_simple, "simple"),
+        (bind_group_shared_multiple_bindings, "multiple_bindings"),
+        (bind_group_shared_different_modules, "different_modules"),
+    );
 }

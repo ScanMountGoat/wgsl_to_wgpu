@@ -1,7 +1,7 @@
 use crate::{
-    CreateModuleError, ModulePath, TypePath, indexed_name_to_ident, quote_shader_stages,
-    wgsl::buffer_binding_type,
+    CreateModuleError, ModulePath, TypePath, quote_shader_stages, wgsl::buffer_binding_type,
 };
+use case::CaseExt;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use std::{collections::BTreeMap, num::NonZeroU32};
@@ -9,91 +9,213 @@ use syn::Ident;
 
 pub struct GroupData<'a> {
     pub bindings: Vec<GroupBinding<'a>>,
+    pub name: GroupName,
+}
+
+pub enum GroupName {
+    /// Use the index as name suffix (`BindGroup0`, ...)
+    Numbered,
+    // Use the binding names as suffix (`BindGroupMemberMember`, ...)
+    Named,
+    // Same as named, but place the bind group in another module
+    Module(ModulePath),
+}
+
+impl GroupData<'_> {
+    pub fn named(&self) -> bool {
+        matches!(self.name, GroupName::Named | GroupName::Module(..))
+    }
+
+    pub fn formatted_name(
+        &self,
+        name: &str,
+        index: u32,
+        seperator: &str,
+        map_part: impl Fn(&str) -> String,
+    ) -> String {
+        if self.named() {
+            let mut suffix = String::new();
+            for binding in self.bindings.iter() {
+                suffix.push_str(seperator);
+                suffix.push_str(&map_part(&binding.name));
+            }
+            format!("{name}{suffix}")
+        } else {
+            format!("{name}{index}")
+        }
+    }
+
+    pub fn camel_case_name(&self, name: &str, index: u32) -> String {
+        self.formatted_name(name, index, "", |part| part.to_camel())
+    }
+
+    pub fn camel_case_ident(&self, name: &str, index: u32) -> Ident {
+        let name = self.camel_case_name(name, index);
+        Ident::new(&name, Span::call_site())
+    }
+
+    pub fn upper_snake_case_ident(&self, name: &str, index: u32) -> Ident {
+        let name = self.formatted_name(name, index, "_", |part| part.to_uppercase());
+        Ident::new(&name, Span::call_site())
+    }
+
+    pub fn snake_case_ident(&self, name: &str, index: u32) -> Ident {
+        let name = self.formatted_name(name, index, "_", |part| part.to_lowercase());
+        Ident::new(&name, Span::call_site())
+    }
+
+    pub fn group_number_parameter(&self) -> TokenStream {
+        match &self.name {
+            GroupName::Module(..) => quote! { index: u32, },
+            _ => quote! {},
+        }
+    }
+
+    pub fn group_number_argument(&self, index: u32) -> TokenStream {
+        match &self.name {
+            GroupName::Module(..) => {
+                let group_no = Literal::u32_unsuffixed(index);
+                quote! {#group_no, }
+            }
+            _ => quote! {},
+        }
+    }
+
+    pub fn group_number_value(&self, index: u32) -> TokenStream {
+        match &self.name {
+            GroupName::Module(..) => {
+                quote! { index }
+            }
+            _ => {
+                let group_no = Literal::u32_unsuffixed(index);
+                quote! {#group_no }
+            }
+        }
+    }
 }
 
 pub struct GroupBinding<'a> {
     pub name: String,
+    pub module_path: ModulePath,
     pub binding_index: u32,
     pub binding_type: &'a naga::Type,
     pub address_space: naga::AddressSpace,
     pub visibility: wgpu::ShaderStages,
 }
 
-pub fn bind_groups_module(
+pub struct BindGroupModules {
+    pub root: TokenStream,
+    pub modules: Vec<(TypePath, TokenStream)>,
+}
+
+pub fn bind_group_modules(
     module: &naga::Module,
     bind_group_data: &BTreeMap<u32, GroupData>,
     root_module: &ModulePath,
-) -> TokenStream {
-    // TODO: Is there a better to way to get paths to shared items in the root module?
-    let mut root_components = root_module.components.clone();
-    root_components.push("bindgroups".to_string());
-    let this_module = ModulePath {
-        components: root_components,
-    };
+) -> BindGroupModules {
+    // Don't include empty modules.
+    if bind_group_data.is_empty() {
+        return BindGroupModules {
+            root: TokenStream::new(),
+            modules: Vec::new(),
+        };
+    }
 
-    let set_bind_groups_trait = this_module.relative_path(&TypePath {
+    // TODO: Is there a better to way to get paths to shared items in the root module?
+    let bind_groups_module = root_module.clone().module("bind_groups");
+
+    let mut modules = Vec::new();
+    let set_bind_groups_type_path = TypePath {
         parent: ModulePath::default(),
         name: "SetBindGroup".to_string(),
+    };
+    let set_bind_groups_trait = bind_groups_module.relative_path(&set_bind_groups_type_path);
+
+    // bind groups in the root::bind_groups module
+    let bind_groups = bind_group_data
+        .iter()
+        .filter(|(_, group)| matches!(group.name, GroupName::Numbered | GroupName::Named))
+        .map(|(group_no, group)| {
+            bind_group_definition(module, &set_bind_groups_trait, *group_no, group)
+        });
+
+    // bind groups in other modules
+    let module_bind_groups = bind_group_data.iter().filter_map(|(group_no, group)| {
+        let GroupName::Module(group_module) = &group.name else {
+            return None;
+        };
+        let type_path = TypePath {
+            parent: group_module.clone(),
+            name: group.camel_case_name("BindGroup", *group_no),
+        };
+        let set_bind_groups_trait = group_module.relative_path(&set_bind_groups_type_path);
+        let tokens = bind_group_definition(module, &set_bind_groups_trait, *group_no, group);
+        Some((type_path, tokens))
+    });
+    modules.extend(module_bind_groups);
+
+    let bind_group_fields = bind_group_data.iter().map(|(group_no, group)| {
+        let path = match &group.name {
+            GroupName::Module(module) => {
+                let mut path = bind_groups_module.relative_module_path(module);
+                path.extend(quote! {::});
+                path
+            }
+            _ => quote! {},
+        };
+
+        let group_name = group.camel_case_ident("BindGroup", *group_no);
+        let field = group.snake_case_ident("bind_group", *group_no);
+        quote!(pub #field: &'a #path #group_name)
     });
 
-    let bind_groups: Vec<_> = bind_group_data
-        .iter()
-        .map(|(group_no, group)| {
-            let group_name = indexed_name_to_ident("BindGroup", *group_no);
+    let set_groups = bind_group_data.iter().map(|(group_no, group)| {
+        let index_arg = group.group_number_argument(*group_no);
+        let group = group.snake_case_ident("bind_group", *group_no);
+        quote!(#group.set(pass, #index_arg);)
+    });
 
-            let layout = bind_group_layout(module, *group_no, group);
-            let layout_descriptor = bind_group_layout_descriptor(module, *group_no, group);
-            let group_impl = bind_group(module, *group_no, group, &set_bind_groups_trait);
+    let root_bind_groups = quote! {
+        pub mod bind_groups {
+             #(#bind_groups)*
 
-            quote! {
-                #[derive(Debug, Clone)]
-                pub struct #group_name(wgpu::BindGroup);
-                #layout
-                #layout_descriptor
-                #group_impl
-            }
-        })
-        .collect();
+             #[derive(Debug, Copy, Clone)]
+             pub struct BindGroups<'a> {
+                 #(#bind_group_fields),*
+             }
 
-    let bind_group_fields: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group_name = indexed_name_to_ident("BindGroup", *group_no);
-            let field = indexed_name_to_ident("bind_group", *group_no);
-            quote!(pub #field: &'a #group_name)
-        })
-        .collect();
-
-    // The set function for each bind group already sets the index.
-    let set_groups: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("bind_group", *group_no);
-            quote!(#group.set(pass);)
-        })
-        .collect();
-
-    if bind_groups.is_empty() {
-        // Don't include empty modules.
-        quote!()
-    } else {
-        // Create a module to avoid name conflicts with user structs.
-        quote! {
-            pub mod bind_groups {
-                #(#bind_groups)*
-
-                #[derive(Debug, Copy, Clone)]
-                pub struct BindGroups<'a> {
-                    #(#bind_group_fields),*
-                }
-
-                impl BindGroups<'_> {
-                    pub fn set<P: #set_bind_groups_trait>(&self, pass: &mut P) {
-                        #(self.#set_groups)*
-                    }
-                }
-            }
+             impl BindGroups<'_> {
+                 pub fn set<P: #set_bind_groups_trait>(&self, pass: &mut P) {
+                     #(self.#set_groups)*
+                 }
+             }
         }
+    };
+
+    BindGroupModules {
+        root: root_bind_groups,
+        modules,
+    }
+}
+
+fn bind_group_definition(
+    module: &naga::Module,
+    set_bind_groups_trait: &TokenStream,
+    group_no: u32,
+    group: &GroupData<'_>,
+) -> TokenStream {
+    let group_name = group.camel_case_ident("BindGroup", group_no);
+
+    let layout = bind_group_layout(module, group_no, group);
+    let layout_descriptor = bind_group_layout_descriptor(module, group_no, group);
+    let group_impl = bind_group_implementation(module, group_no, group, set_bind_groups_trait);
+
+    quote! {
+        #[derive(Debug, Clone)]
+        pub struct #group_name(wgpu::BindGroup);
+        #layout
+        #layout_descriptor
+        #group_impl
     }
 }
 
@@ -151,23 +273,22 @@ pub fn set_bind_groups_func(
         name: "SetBindGroup".to_string(),
     });
 
-    let group_parameters: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("bind_group", *group_no);
-            let group_type = indexed_name_to_ident("BindGroup", *group_no);
-            quote!(#group: &bind_groups::#group_type)
-        })
-        .collect();
+    let group_parameters = bind_group_data.iter().map(|(group_no, group)| {
+        let module = match &group.name {
+            GroupName::Module(module) => this_module.relative_module_path(module),
+            _ => quote! {bind_groups},
+        };
 
-    // The set function for each bind group already sets the index.
-    let set_groups: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("bind_group", *group_no);
-            quote!(#group.set(pass);)
-        })
-        .collect();
+        let group_name = group.snake_case_ident("bind_group", *group_no);
+        let group_type = group.camel_case_ident("BindGroup", *group_no);
+        quote!(#group_name: &#module::#group_type)
+    });
+
+    let set_groups = bind_group_data.iter().map(|(group_no, group)| {
+        let index_arg = group.group_number_argument(*group_no);
+        let group = group.snake_case_ident("bind_group", *group_no);
+        quote!(#group.set(pass, #index_arg);)
+    });
 
     quote! {
         pub fn set_bind_groups<P: #set_bind_groups_trait>(
@@ -180,18 +301,14 @@ pub fn set_bind_groups_func(
 }
 
 fn bind_group_layout(module: &naga::Module, group_no: u32, group: &GroupData) -> TokenStream {
-    let fields: Vec<_> = group
-        .bindings
-        .iter()
-        .map(|binding| {
-            let binding_name = &binding.name;
-            let field_name = Ident::new(binding_name, Span::call_site());
-            let field_type = binding_field_type(module, &binding.binding_type.inner, binding_name);
-            quote!(pub #field_name: #field_type)
-        })
-        .collect();
+    let fields = group.bindings.iter().map(|binding| {
+        let binding_name = &binding.name;
+        let field_name = Ident::new(binding_name, Span::call_site());
+        let field_type = binding_field_type(module, &binding.binding_type.inner, binding_name);
+        quote!(pub #field_name: #field_type)
+    });
 
-    let name = indexed_name_to_ident("BindGroupLayout", group_no);
+    let name = group.camel_case_ident("BindGroupLayout", group_no);
     quote! {
         #[derive(Debug)]
         pub struct #name<'a> {
@@ -232,14 +349,13 @@ fn bind_group_layout_descriptor(
     group_no: u32,
     group: &GroupData,
 ) -> TokenStream {
-    let entries: Vec<_> = group
+    let entries = group
         .bindings
         .iter()
-        .map(|binding| bind_group_layout_entry(module, binding))
-        .collect();
+        .map(|binding| bind_group_layout_entry(module, binding));
 
-    let name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
-    let label = format!("LayoutDescriptor{group_no}");
+    let name = group.upper_snake_case_ident("LAYOUT_DESCRIPTOR", group_no);
+    let label = group.camel_case_name("LayoutDescriptor", group_no);
     quote! {
         const #name: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
             label: Some(#label),
@@ -407,39 +523,33 @@ fn storage_access(access: naga::StorageAccess) -> TokenStream {
     }
 }
 
-fn bind_group(
+fn bind_group_implementation(
     module: &naga::Module,
     group_no: u32,
     group: &GroupData,
     set_bind_group_trait: &TokenStream,
 ) -> TokenStream {
-    let entries: Vec<_> = group
-        .bindings
-        .iter()
-        .map(|binding| {
-            let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
-            let binding_name = &binding.name;
-            let field_name = Ident::new(&binding.name, Span::call_site());
-            let resource_type =
-                resource_ty(module, binding, &binding_index, binding_name, field_name);
+    let entries = group.bindings.iter().map(|binding| {
+        let binding_index = Literal::usize_unsuffixed(binding.binding_index as usize);
+        let binding_name = &binding.name;
+        let field_name = Ident::new(&binding.name, Span::call_site());
+        let resource_type = resource_ty(module, binding, &binding_index, binding_name, field_name);
 
-            quote! {
-                wgpu::BindGroupEntry {
-                    binding: #binding_index,
-                    resource: #resource_type,
-                }
+        quote! {
+            wgpu::BindGroupEntry {
+                binding: #binding_index,
+                resource: #resource_type,
             }
-        })
-        .collect();
+        }
+    });
 
-    let bind_group_name = indexed_name_to_ident("BindGroup", group_no);
-    let bind_group_layout_name = indexed_name_to_ident("BindGroupLayout", group_no);
+    let bind_group_name = group.camel_case_ident("BindGroup", group_no);
+    let bind_group_layout_name = group.camel_case_ident("BindGroupLayout", group_no);
+    let layout_descriptor_name = group.upper_snake_case_ident("LAYOUT_DESCRIPTOR", group_no);
+    let label = group.camel_case_name("BindGroup", group_no);
 
-    let layout_descriptor_name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
-
-    let label = format!("BindGroup{group_no}");
-
-    let group_no = Literal::usize_unsuffixed(group_no as usize);
+    let group_parameter = group.group_number_parameter();
+    let group_value = group.group_number_value(group_no);
 
     quote! {
         impl #bind_group_name {
@@ -459,8 +569,8 @@ fn bind_group(
                 Self(bind_group)
             }
 
-            pub fn set<P: #set_bind_group_trait>(&self, pass: &mut P) {
-                pass.set_bind_group(#group_no, &self.0, &[]);
+            pub fn set<P: #set_bind_group_trait>(&self, pass: &mut P, #group_parameter) {
+                pass.set_bind_group(#group_value, &self.0, &[]);
             }
 
             pub fn inner(&self) -> &wgpu::BindGroup {
@@ -539,6 +649,8 @@ pub fn get_bind_group_data<'a, F>(
     module: &'a naga::Module,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
     demangle: F,
+    named_bind_groups: bool,
+    shared_bind_groups: bool,
 ) -> Result<BTreeMap<u32, GroupData<'a>>, CreateModuleError>
 where
     F: Fn(&str) -> TypePath,
@@ -552,6 +664,11 @@ where
         if let Some(binding) = &global.binding {
             let group = groups.entry(binding.group).or_insert(GroupData {
                 bindings: Vec::new(),
+                name: if named_bind_groups {
+                    GroupName::Named
+                } else {
+                    GroupName::Numbered
+                },
             });
             let binding_type = &module.types[module.global_variables[global_handle.0].ty];
 
@@ -568,6 +685,7 @@ where
 
             let group_binding = GroupBinding {
                 name: path.name,
+                module_path: path.parent,
                 binding_index: binding.binding,
                 binding_type,
                 address_space: global.space,
@@ -585,6 +703,26 @@ where
                 });
             }
             group.bindings.push(group_binding);
+        }
+    }
+
+    if shared_bind_groups {
+        for group in groups.values_mut() {
+            let mut bindings = group.bindings.iter();
+            let mut path = bindings
+                .next()
+                .expect("bind group has bindings")
+                .module_path
+                .clone();
+
+            while !path.components.is_empty()
+                && let Some(binding) = bindings.next()
+            {
+                path.common_prefix(&binding.module_path);
+            }
+            if !path.components.is_empty() {
+                group.name = GroupName::Module(path)
+            }
         }
     }
 
@@ -617,7 +755,7 @@ mod tests {
         let global_stages = wgsl::global_shader_stages(&module);
         assert_eq!(
             3,
-            get_bind_group_data(&module, &global_stages, demangle_identity)
+            get_bind_group_data(&module, &global_stages, demangle_identity, false, false)
                 .unwrap()
                 .len()
         );
@@ -636,7 +774,7 @@ mod tests {
         let global_stages = wgsl::global_shader_stages(&module);
 
         assert!(matches!(
-            get_bind_group_data(&module, &global_stages, demangle_identity),
+            get_bind_group_data(&module, &global_stages, demangle_identity, false, false),
             Err(CreateModuleError::NonConsecutiveBindGroups)
         ));
     }
@@ -656,7 +794,7 @@ mod tests {
         let global_stages = wgsl::global_shader_stages(&module);
 
         assert!(matches!(
-            get_bind_group_data(&module, &global_stages, demangle_identity),
+            get_bind_group_data(&module, &global_stages, demangle_identity, false, false),
             Err(CreateModuleError::NonConsecutiveBindGroups)
         ));
     }
@@ -668,9 +806,12 @@ mod tests {
 
             let global_stages = wgsl::global_shader_stages(&module);
             let bind_group_data =
-                get_bind_group_data(&module, &global_stages, demangle_identity).unwrap();
+                get_bind_group_data(&module, &global_stages, demangle_identity, false, false)
+                    .unwrap();
 
-            let mut actual = bind_groups_module(&module, &bind_group_data, &ModulePath::default());
+            let actual = bind_group_modules(&module, &bind_group_data, &ModulePath::default());
+            assert!(actual.modules.is_empty());
+            let mut actual = actual.root;
 
             // Add any bind group specific code that isn't part of the bind groups module.
             // TODO: Is there a better way to test this?

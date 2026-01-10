@@ -1,0 +1,5 @@
+---
+source: wgsl_to_wgpu/src/lib.rs
+extension: rs
+snapshot_kind: binary
+---
