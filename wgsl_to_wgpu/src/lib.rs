@@ -285,6 +285,11 @@ impl ModulePath {
     }
 
     fn relative_path_impl(&self, module: &ModulePath, name: Option<&str>) -> TokenStream {
+        let common = self.common_length(module);
+
+        let to_common = self.components[common..].iter().map(|_| "super");
+        let from_common = module.components[common..].iter();
+
         let base_path: PathBuf = self.components.iter().collect();
         let target_path: PathBuf = module.components.iter().collect();
         let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
@@ -307,14 +312,18 @@ impl ModulePath {
         path
     }
 
-    pub fn common_prefix(&mut self, other: &ModulePath) {
-        let common = self
-            .components
+    fn common_prefix(&mut self, other: &ModulePath) {
+        let common = self.common_length(other);
+        self.components.truncate(common);
+    }
+
+    fn common_length(&self, other: &ModulePath) -> usize {
+        self.components
             .iter()
             .zip(other.components.iter())
             .position(|(a, b)| a != b)
-            .unwrap_or(other.components.len());
-        self.components.truncate(common);
+            .unwrap_or(self.components.len())
+            .min(other.components.len())
     }
 }
 
@@ -1257,8 +1266,7 @@ mod test {
         },
         (bind_group_named_simple, "simple"),
         (bind_group_named_multiple_bindings, "multiple_bindings"),
-        (bind_group_named_name_modules, "name_modules"),
-        (bind_group_named_types_modules, "types_modules"),
+        (bind_group_named_different_modules, "different_modules"),
     );
 
     bind_group_named_tests!(
@@ -1268,7 +1276,6 @@ mod test {
         },
         (bind_group_shared_simple, "simple"),
         (bind_group_shared_multiple_bindings, "multiple_bindings"),
-        (bind_group_shared_name_modules, "name_modules"),
-        (bind_group_shared_types_modules, "types_modules"),
+        (bind_group_shared_different_modules, "different_modules"),
     );
 }

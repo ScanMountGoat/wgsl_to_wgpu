@@ -1,62 +1,3 @@
-pub fn set_bind_groups<P: SetBindGroup>(
-    pass: &mut P,
-    bind_group_texture_sampler: &bind_groups::BindGroupTextureSampler,
-) {
-    bind_group_texture_sampler.set(pass);
-}
-pub const SOURCE : & str = "@group(0) @binding(0)\nvar atlas_texture: texture_2d<f32>;\n@group(0) @binding(1)\nvar atlas_sampler: sampler;\n" ;
-pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
-    let source = std::borrow::Cow::Borrowed(SOURCE);
-    device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(source),
-    })
-}
-pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
-    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: None,
-        bind_group_layouts: &[&bind_groups::BindGroupTextureSampler::get_bind_group_layout(device)],
-        immediate_size: 0,
-    })
-}
-pub trait SetBindGroup {
-    fn set_bind_group(
-        &mut self,
-        index: u32,
-        bind_group: &wgpu::BindGroup,
-        offsets: &[wgpu::DynamicOffset],
-    );
-}
-impl SetBindGroup for wgpu::ComputePass<'_> {
-    fn set_bind_group(
-        &mut self,
-        index: u32,
-        bind_group: &wgpu::BindGroup,
-        offsets: &[wgpu::DynamicOffset],
-    ) {
-        self.set_bind_group(index, bind_group, offsets);
-    }
-}
-impl SetBindGroup for wgpu::RenderPass<'_> {
-    fn set_bind_group(
-        &mut self,
-        index: u32,
-        bind_group: &wgpu::BindGroup,
-        offsets: &[wgpu::DynamicOffset],
-    ) {
-        self.set_bind_group(index, bind_group, offsets);
-    }
-}
-impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
-    fn set_bind_group(
-        &mut self,
-        index: u32,
-        bind_group: &wgpu::BindGroup,
-        offsets: &[wgpu::DynamicOffset],
-    ) {
-        self.set_bind_group(index, bind_group, offsets);
-    }
-}
 pub mod bind_groups {
     #[derive(Debug, Clone)]
     pub struct BindGroupTextureSampler(wgpu::BindGroup);
@@ -128,5 +69,64 @@ pub mod bind_groups {
         pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
             self.bind_group_texture_sampler.set(pass);
         }
+    }
+}
+pub fn set_bind_groups<P: SetBindGroup>(
+    pass: &mut P,
+    bind_group_texture_sampler: &bind_groups::BindGroupTextureSampler,
+) {
+    bind_group_texture_sampler.set(pass);
+}
+pub const SOURCE : & str = "@group(0) @binding(0)\nvar atlas_texture: texture_2d<f32>;\n@group(0) @binding(1)\nvar atlas_sampler: sampler;\n" ;
+pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
+    let source = std::borrow::Cow::Borrowed(SOURCE);
+    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(source),
+    })
+}
+pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
+    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[&bind_groups::BindGroupTextureSampler::get_bind_group_layout(device)],
+        immediate_size: 0,
+    })
+}
+pub trait SetBindGroup {
+    fn set_bind_group(
+        &mut self,
+        index: u32,
+        bind_group: &wgpu::BindGroup,
+        offsets: &[wgpu::DynamicOffset],
+    );
+}
+impl SetBindGroup for wgpu::ComputePass<'_> {
+    fn set_bind_group(
+        &mut self,
+        index: u32,
+        bind_group: &wgpu::BindGroup,
+        offsets: &[wgpu::DynamicOffset],
+    ) {
+        self.set_bind_group(index, bind_group, offsets);
+    }
+}
+impl SetBindGroup for wgpu::RenderPass<'_> {
+    fn set_bind_group(
+        &mut self,
+        index: u32,
+        bind_group: &wgpu::BindGroup,
+        offsets: &[wgpu::DynamicOffset],
+    ) {
+        self.set_bind_group(index, bind_group, offsets);
+    }
+}
+impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
+    fn set_bind_group(
+        &mut self,
+        index: u32,
+        bind_group: &wgpu::BindGroup,
+        offsets: &[wgpu::DynamicOffset],
+    ) {
+        self.set_bind_group(index, bind_group, offsets);
     }
 }

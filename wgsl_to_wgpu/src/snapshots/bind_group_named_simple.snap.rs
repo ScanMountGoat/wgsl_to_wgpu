@@ -1,3 +1,57 @@
+pub mod bind_groups {
+    #[derive(Debug, Clone)]
+    pub struct BindGroupCamera(wgpu::BindGroup);
+    #[derive(Debug)]
+    pub struct BindGroupLayoutCamera<'a> {
+        pub camera: wgpu::BufferBinding<'a>,
+    }
+    const LAYOUT_DESCRIPTOR_CAMERA: wgpu::BindGroupLayoutDescriptor =
+        wgpu::BindGroupLayoutDescriptor {
+            label: Some("LayoutDescriptorCamera"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::NONE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        };
+    impl BindGroupCamera {
+        pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR_CAMERA)
+        }
+        pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayoutCamera) -> Self {
+            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR_CAMERA);
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(bindings.camera),
+                }],
+                label: Some("BindGroupCamera"),
+            });
+            Self(bind_group)
+        }
+        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
+            pass.set_bind_group(0, &self.0, &[]);
+        }
+        pub fn inner(&self) -> &wgpu::BindGroup {
+            &self.0
+        }
+    }
+    #[derive(Debug, Copy, Clone)]
+    pub struct BindGroups<'a> {
+        pub bind_group_camera: &'a BindGroupCamera,
+    }
+    impl BindGroups<'_> {
+        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
+            self.bind_group_camera.set(pass);
+        }
+    }
+}
 pub fn set_bind_groups<P: SetBindGroup>(
     pass: &mut P,
     bind_group_camera: &bind_groups::BindGroupCamera,
@@ -55,60 +109,6 @@ impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
         offsets: &[wgpu::DynamicOffset],
     ) {
         self.set_bind_group(index, bind_group, offsets);
-    }
-}
-pub mod bind_groups {
-    #[derive(Debug, Clone)]
-    pub struct BindGroupCamera(wgpu::BindGroup);
-    #[derive(Debug)]
-    pub struct BindGroupLayoutCamera<'a> {
-        pub camera: wgpu::BufferBinding<'a>,
-    }
-    const LAYOUT_DESCRIPTOR_CAMERA: wgpu::BindGroupLayoutDescriptor =
-        wgpu::BindGroupLayoutDescriptor {
-            label: Some("LayoutDescriptorCamera"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::NONE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        };
-    impl BindGroupCamera {
-        pub fn get_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-            device.create_bind_group_layout(&LAYOUT_DESCRIPTOR_CAMERA)
-        }
-        pub fn from_bindings(device: &wgpu::Device, bindings: BindGroupLayoutCamera) -> Self {
-            let bind_group_layout = device.create_bind_group_layout(&LAYOUT_DESCRIPTOR_CAMERA);
-            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(bindings.camera),
-                }],
-                label: Some("BindGroupCamera"),
-            });
-            Self(bind_group)
-        }
-        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
-            pass.set_bind_group(0, &self.0, &[]);
-        }
-        pub fn inner(&self) -> &wgpu::BindGroup {
-            &self.0
-        }
-    }
-    #[derive(Debug, Copy, Clone)]
-    pub struct BindGroups<'a> {
-        pub bind_group_camera: &'a BindGroupCamera,
-    }
-    impl BindGroups<'_> {
-        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
-            self.bind_group_camera.set(pass);
-        }
     }
 }
 pub mod shared {
