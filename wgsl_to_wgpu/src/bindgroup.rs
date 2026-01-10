@@ -1,7 +1,7 @@
 use crate::{
-    CreateModuleError, ModulePath, TypePath, indexed_name_to_ident, quote_shader_stages,
-    wgsl::buffer_binding_type,
+    CreateModuleError, ModulePath, TypePath, quote_shader_stages, wgsl::buffer_binding_type,
 };
+use case::CaseExt;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use std::{collections::BTreeMap, num::NonZeroU32};
@@ -9,10 +9,60 @@ use syn::Ident;
 
 pub struct GroupData<'a> {
     pub bindings: Vec<GroupBinding<'a>>,
+    pub named: bool,
+}
+
+impl GroupData<'_> {
+    pub fn camel_case_ident(&self, name: &str, index: u32) -> Ident {
+        let name = self.camel_case_name(name, index);
+        Ident::new(&name, Span::call_site())
+    }
+
+    pub fn camel_case_name(&self, name: &str, index: u32) -> String {
+        if self.named {
+            let suffix = self
+                .bindings
+                .iter()
+                .map(|binding| binding.name.to_camel())
+                .collect::<String>();
+            format!("{name}{suffix}")
+        } else {
+            format!("{name}{index}")
+        }
+    }
+
+    pub fn upper_snake_case_ident(&self, name: &str, index: u32) -> Ident {
+        if self.named {
+            let mut suffix = String::new();
+            for binding in self.bindings.iter() {
+                suffix.push('_');
+                suffix.extend(binding.name.chars().flat_map(|c| c.to_uppercase()));
+            }
+            Ident::new(&format!("{name}{suffix}"), Span::call_site())
+        } else {
+            Ident::new(&format!("{name}{index}"), Span::call_site())
+        }
+    }
+
+    pub fn snake_case_ident(&self, name: &str, index: u32) -> Ident {
+        if self.named {
+            let mut suffix = String::new();
+            for binding in self.bindings.iter() {
+                suffix.push('_');
+                suffix.extend(binding.name.chars());
+            }
+            Ident::new(&format!("{name}{suffix}"), Span::call_site())
+        } else {
+            // todo: use bind_group0 or bind_group_0?
+            // current is the group0, I pref group_0
+            Ident::new(&format!("{name}{index}"), Span::call_site())
+        }
+    }
 }
 
 pub struct GroupBinding<'a> {
     pub name: String,
+    pub module_path: ModulePath,
     pub binding_index: u32,
     pub binding_type: &'a naga::Type,
     pub address_space: naga::AddressSpace,
@@ -39,7 +89,7 @@ pub fn bind_groups_module(
     let bind_groups: Vec<_> = bind_group_data
         .iter()
         .map(|(group_no, group)| {
-            let group_name = indexed_name_to_ident("BindGroup", *group_no);
+            let group_name = group.camel_case_ident("BindGroup", *group_no);
 
             let layout = bind_group_layout(module, *group_no, group);
             let layout_descriptor = bind_group_layout_descriptor(module, *group_no, group);
@@ -56,19 +106,19 @@ pub fn bind_groups_module(
         .collect();
 
     let bind_group_fields: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group_name = indexed_name_to_ident("BindGroup", *group_no);
-            let field = indexed_name_to_ident("bind_group", *group_no);
+        .iter()
+        .map(|(group_no, group)| {
+            let group_name = group.camel_case_ident("BindGroup", *group_no);
+            let field = group.snake_case_ident("bind_group", *group_no);
             quote!(pub #field: &'a #group_name)
         })
         .collect();
 
     // The set function for each bind group already sets the index.
     let set_groups: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("bind_group", *group_no);
+        .iter()
+        .map(|(group_no, group)| {
+            let group = group.snake_case_ident("bind_group", *group_no);
             quote!(#group.set(pass);)
         })
         .collect();
@@ -152,19 +202,19 @@ pub fn set_bind_groups_func(
     });
 
     let group_parameters: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("bind_group", *group_no);
-            let group_type = indexed_name_to_ident("BindGroup", *group_no);
-            quote!(#group: &bind_groups::#group_type)
+        .iter()
+        .map(|(group_no, group)| {
+            let group_name = group.snake_case_ident("bind_group", *group_no);
+            let group_type = group.camel_case_ident("BindGroup", *group_no);
+            quote!(#group_name: &bind_groups::#group_type)
         })
         .collect();
 
     // The set function for each bind group already sets the index.
     let set_groups: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("bind_group", *group_no);
+        .iter()
+        .map(|(group_no, group)| {
+            let group = group.snake_case_ident("bind_group", *group_no);
             quote!(#group.set(pass);)
         })
         .collect();
@@ -191,7 +241,7 @@ fn bind_group_layout(module: &naga::Module, group_no: u32, group: &GroupData) ->
         })
         .collect();
 
-    let name = indexed_name_to_ident("BindGroupLayout", group_no);
+    let name = group.camel_case_ident("BindGroupLayout", group_no);
     quote! {
         #[derive(Debug)]
         pub struct #name<'a> {
@@ -238,8 +288,8 @@ fn bind_group_layout_descriptor(
         .map(|binding| bind_group_layout_entry(module, binding))
         .collect();
 
-    let name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
-    let label = format!("LayoutDescriptor{group_no}");
+    let name = group.upper_snake_case_ident("LAYOUT_DESCRIPTOR", group_no);
+    let label = group.camel_case_name("LayoutDescriptor", group_no);
     quote! {
         const #name: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
             label: Some(#label),
@@ -432,12 +482,10 @@ fn bind_group(
         })
         .collect();
 
-    let bind_group_name = indexed_name_to_ident("BindGroup", group_no);
-    let bind_group_layout_name = indexed_name_to_ident("BindGroupLayout", group_no);
-
-    let layout_descriptor_name = indexed_name_to_ident("LAYOUT_DESCRIPTOR", group_no);
-
-    let label = format!("BindGroup{group_no}");
+    let bind_group_name = group.camel_case_ident("BindGroup", group_no);
+    let bind_group_layout_name = group.camel_case_ident("BindGroupLayout", group_no);
+    let layout_descriptor_name = group.upper_snake_case_ident("LAYOUT_DESCRIPTOR", group_no);
+    let label = group.camel_case_name("BindGroup", group_no);
 
     let group_no = Literal::usize_unsuffixed(group_no as usize);
 
@@ -539,6 +587,7 @@ pub fn get_bind_group_data<'a, F>(
     module: &'a naga::Module,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
     demangle: F,
+    named_bindgroups: bool,
 ) -> Result<BTreeMap<u32, GroupData<'a>>, CreateModuleError>
 where
     F: Fn(&str) -> TypePath,
@@ -552,6 +601,7 @@ where
         if let Some(binding) = &global.binding {
             let group = groups.entry(binding.group).or_insert(GroupData {
                 bindings: Vec::new(),
+                named: false,
             });
             let binding_type = &module.types[module.global_variables[global_handle.0].ty];
 
@@ -568,6 +618,7 @@ where
 
             let group_binding = GroupBinding {
                 name: path.name,
+                module_path: path.parent,
                 binding_index: binding.binding,
                 binding_type,
                 address_space: global.space,
@@ -585,6 +636,14 @@ where
                 });
             }
             group.bindings.push(group_binding);
+        }
+    }
+
+    // setup named parameters
+    // todo: add bindgroups in modules, which are always named
+    if named_bindgroups {
+        for group in groups.values_mut() {
+            group.named = true;
         }
     }
 
@@ -617,7 +676,7 @@ mod tests {
         let global_stages = wgsl::global_shader_stages(&module);
         assert_eq!(
             3,
-            get_bind_group_data(&module, &global_stages, demangle_identity)
+            get_bind_group_data(&module, &global_stages, demangle_identity, false)
                 .unwrap()
                 .len()
         );
@@ -636,7 +695,7 @@ mod tests {
         let global_stages = wgsl::global_shader_stages(&module);
 
         assert!(matches!(
-            get_bind_group_data(&module, &global_stages, demangle_identity),
+            get_bind_group_data(&module, &global_stages, demangle_identity, false),
             Err(CreateModuleError::NonConsecutiveBindGroups)
         ));
     }
@@ -656,7 +715,7 @@ mod tests {
         let global_stages = wgsl::global_shader_stages(&module);
 
         assert!(matches!(
-            get_bind_group_data(&module, &global_stages, demangle_identity),
+            get_bind_group_data(&module, &global_stages, demangle_identity, false),
             Err(CreateModuleError::NonConsecutiveBindGroups)
         ));
     }
@@ -668,7 +727,7 @@ mod tests {
 
             let global_stages = wgsl::global_shader_stages(&module);
             let bind_group_data =
-                get_bind_group_data(&module, &global_stages, demangle_identity).unwrap();
+                get_bind_group_data(&module, &global_stages, demangle_identity, false).unwrap();
 
             let mut actual = bind_groups_module(&module, &bind_group_data, &ModulePath::default());
 

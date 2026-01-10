@@ -115,6 +115,12 @@ pub struct WriteOptions {
 
     /// Perform semantic validation on the code.
     pub validate: Option<ValidationOptions>,
+
+    /// Todo: Documentation
+    pub named_bindgroups: bool,
+
+    /// Todo: Documentation
+    pub shared_bind_groups: bool,
 }
 
 /// Options for semantic validation.
@@ -455,7 +461,12 @@ impl Module {
         }
 
         let global_stages = wgsl::global_shader_stages(&module);
-        let bind_group_data = get_bind_group_data(&module, &global_stages, demangle.clone())?;
+        let bind_group_data = get_bind_group_data(
+            &module,
+            &global_stages,
+            demangle.clone(),
+            options.named_bindgroups,
+        )?;
 
         // Collect tokens for each item.
         let structs = structs::structs(&module, options, demangle.clone());
@@ -520,10 +531,10 @@ where
     };
 
     let bind_group_layouts: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("BindGroup", *group_no);
-            quote!(bind_groups::#group::get_bind_group_layout(device))
+        .iter()
+        .map(|(group_no, group)| {
+            let group_type = group.camel_case_ident("BindGroup", *group_no);
+            quote!(bind_groups::#group_type::get_bind_group_layout(device))
         })
         .collect();
 
@@ -629,10 +640,6 @@ fn pretty_print_rustfmt(tokens: TokenStream) -> String {
         }
     }
     value.to_string()
-}
-
-fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
-    Ident::new(&format!("{name}{index}"), Span::call_site())
 }
 
 fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
@@ -766,7 +773,7 @@ mod test {
     #[test]
     fn create_shader_module_compute_overrides() {
         let source = indoc! {r#"
-            struct Uniforms { 
+            struct Uniforms {
                 color_rgb: vec3<f32>,
             }
 
@@ -1187,4 +1194,35 @@ mod test {
 
         assert_rust_snapshot!(output);
     }
+
+    macro_rules! bind_group_named_tests {
+        (
+        	$(($test_name:ident, $file_name:expr),)*
+        ) => {
+        	$(
+	         	#[test]
+		         fn $test_name() {
+		             let output = create_shader_modules(
+                		include_str!(concat!("data/bindgroup/named_", $file_name, ".wgsl")),
+		                 WriteOptions {
+		                     rustfmt: true,
+		                     named_bindgroups: true,
+		                     ..Default::default()
+		                 },
+		                 demangle_underscore,
+		             )
+		             .unwrap();
+
+		             assert_rust_snapshot!(output);
+				}
+         	)*
+        };
+    }
+
+    bind_group_named_tests!(
+        (bind_group_named_simple, "simple"),
+        (bind_group_named_multiple_bindings, "multiple_bindings"),
+        (bind_group_named_name_modules, "name_modules"),
+        (bind_group_named_types_modules, "types_modules"),
+    );
 }
