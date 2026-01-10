@@ -341,7 +341,7 @@ impl ModulePath {
         path
     }
 
-    fn extented(mut self, module: &str) -> Self {
+    fn module(mut self, module: &str) -> Self {
         self.components.push(module.to_string());
         self
     }

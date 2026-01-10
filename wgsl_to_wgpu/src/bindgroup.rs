@@ -13,8 +13,11 @@ pub struct GroupData<'a> {
 }
 
 pub enum GroupName {
+    /// Use the index as name suffix (`BindGroup0`, ...)
     Numbered,
+    // Use the binding names as suffix (`BindGroupMemberMember`, ...)
     Named,
+    // Same as named, but place the bind group in another module
     Module(ModulePath),
 }
 
@@ -119,7 +122,7 @@ pub fn bind_group_modules(
     }
 
     // TODO: Is there a better to way to get paths to shared items in the root module?
-    let bind_groups_module = root_module.clone().extented("bind_groups");
+    let bind_groups_module = root_module.clone().module("bind_groups");
 
     let mut modules = Vec::new();
     let set_bind_groups_type_path = TypePath {
