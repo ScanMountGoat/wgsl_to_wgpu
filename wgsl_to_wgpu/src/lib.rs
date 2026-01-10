@@ -44,7 +44,6 @@ extern crate wgpu_types as wgpu;
 use std::{
     collections::BTreeMap,
     io::Write,
-    path::PathBuf,
     process::{Command, Stdio},
 };
 
@@ -118,10 +117,51 @@ pub struct WriteOptions {
     /// Perform semantic validation on the code.
     pub validate: Option<ValidationOptions>,
 
-    /// Todo: Documentation
+    /// Use the names of the bind group bindings to name the bind group.
+    ///
+    /// ### Example
+    ///
+    /// ```wgsl
+    /// @group(0) @binding(0)
+    /// var<uniform> camera: Camera;
+    /// @group(0) @binding(1)
+    /// var<uniform> settings: GlobalSettings;
+    ///
+    /// @group(1) @binding(0)
+    /// var texture: texture_2d<f32>;
+    /// @group(1) @binding(1)
+    /// var sampler: sampler;
+    /// ```
+    ///
+    /// ```rust
+    /// struct BindGroupCameraSettings { /*...*/ }
+    /// struct BindGroupTextureSampler { /*...*/ }
+    /// ```
     pub named_bind_groups: bool,
 
-    /// Todo: Documentation
+    /// Place shared bind groups in the corresponding module, not the `bind_groups`-module.
+    ///
+    /// The module for a bind group is calculated from the binding names with the demangle function.
+    /// The bind group is placed in the deepest common module.
+    /// If no common module exists, the bind group is placed in the `bind_groups`-module.
+    ///
+    /// The bind group is always named based on the binding names (see `named_bind_groups`),
+    /// because the bind group could be used in different shader modules with different group indices.
+    ///
+    /// ### Example
+    ///
+    /// ```wgsl
+    /// @group(0) @binding(0)
+    /// var<uniform> shared_camera: Camera;
+    /// @group(0) @binding(1)
+    /// var<uniform> shared_settings: Settings;
+    /// ```
+    ///
+    /// ```rust
+    /// mod shared {
+    ///     struct BindGroupCameraSettings { /*...*/ }
+    /// }
+    /// ```
     pub shared_bind_groups: bool,
 }
 
@@ -288,22 +328,10 @@ impl ModulePath {
         let common = self.common_length(module);
 
         let to_common = self.components[common..].iter().map(|_| "super");
-        let from_common = module.components[common..].iter();
+        let from_common = module.components[common..].iter().map(|c| c.as_str());
 
-        let base_path: PathBuf = self.components.iter().collect();
-        let target_path: PathBuf = module.components.iter().collect();
-        let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
-
-        // TODO: Implement this from scratch with tests?
-        let components = relative_path
-            .components()
-            .filter_map(|c| match c {
-                std::path::Component::Prefix(_) => None,
-                std::path::Component::RootDir => None,
-                std::path::Component::CurDir => None,
-                std::path::Component::ParentDir => Some("super"),
-                std::path::Component::Normal(s) => s.to_str(),
-            })
+        let components = to_common
+            .chain(from_common)
             .chain(name)
             .map(|c| Ident::new(c, Span::call_site()));
 
