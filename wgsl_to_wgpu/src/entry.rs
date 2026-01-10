@@ -213,16 +213,17 @@ where
     }).collect()
 }
 
-pub fn fragment_states<F>(module: &naga::Module, demangle: F) -> TokenStream
+pub fn fragment_states<F>(module: &naga::Module, demangle: F) -> Vec<TokenStream>
 where
     F: Fn(&str) -> TypePath + Clone,
 {
-    let entries: Vec<TokenStream> = module
+    module
         .entry_points
         .iter()
         .filter_map(|entry_point| match &entry_point.stage {
             ShaderStage::Fragment => {
-                let name = &demangle(&entry_point.name).name;
+                let name_path = &demangle(&entry_point.name);
+                let name = &name_path.name;
 
                 let fn_name = Ident::new(&format!("{name}_entry"), Span::call_site());
 
@@ -244,12 +245,18 @@ where
                     quote!(Default::default())
                 };
 
+                let fragment_entry = TypePath {
+                    parent: ModulePath::default(),
+                    name: "FragmentEntry".to_string(),
+                };
+                let fragment_entry = name_path.parent.relative_path(&fragment_entry);
+
                 Some(quote! {
                     pub fn #fn_name(
                         targets: [Option<wgpu::ColorTargetState>; #target_count],
                         #overrides
-                    ) -> FragmentEntry<#target_count> {
-                        FragmentEntry {
+                    ) -> #fragment_entry<#target_count> {
+                        #fragment_entry {
                             entry_point: #const_name,
                             targets,
                             constants: #constants
@@ -259,36 +266,31 @@ where
             }
             _ => None,
         })
-        .collect();
+        .collect()
+}
 
-    // Don't generate unused code.
-    if entries.is_empty() {
-        quote!()
-    } else {
-        quote! {
-            #[derive(Debug)]
-            pub struct FragmentEntry<const N: usize> {
-                pub entry_point: &'static str,
-                pub targets: [Option<wgpu::ColorTargetState>; N],
-                pub constants: Vec<(&'static str, f64)>,
+pub fn fragment_states_shared() -> TokenStream {
+    quote! {
+        #[derive(Debug)]
+        pub struct FragmentEntry<const N: usize> {
+            pub entry_point: &'static str,
+            pub targets: [Option<wgpu::ColorTargetState>; N],
+            pub constants: Vec<(&'static str, f64)>,
+        }
+
+        pub fn fragment_state<'a, const N: usize>(
+            module: &'a wgpu::ShaderModule,
+            entry: &'a FragmentEntry<N>,
+        ) -> wgpu::FragmentState<'a> {
+            wgpu::FragmentState {
+                module,
+                entry_point: Some(entry.entry_point),
+                targets: &entry.targets,
+                compilation_options: wgpu::PipelineCompilationOptions {
+                    constants: &entry.constants,
+                    ..Default::default()
+                },
             }
-
-            pub fn fragment_state<'a, const N: usize>(
-                module: &'a wgpu::ShaderModule,
-                entry: &'a FragmentEntry<N>,
-            ) -> wgpu::FragmentState<'a> {
-                wgpu::FragmentState {
-                    module,
-                    entry_point: Some(entry.entry_point),
-                    targets: &entry.targets,
-                    compilation_options: wgpu::PipelineCompilationOptions {
-                        constants: &entry.constants,
-                        ..Default::default()
-                    },
-                }
-            }
-
-            #(#entries)*
         }
     }
 }

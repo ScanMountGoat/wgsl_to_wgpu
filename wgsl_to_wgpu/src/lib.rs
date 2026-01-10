@@ -71,7 +71,9 @@ mod wgsl;
 pub use error::CreateModuleError;
 pub use naga::valid::Capabilities as WgslCapabilities;
 
-use crate::{bindgroup::set_bind_groups_trait, compute::compute_module};
+use crate::{
+    bindgroup::set_bind_groups_trait, compute::compute_module, entry::fragment_states_shared,
+};
 
 /// Options for configuring the generated bindings to work with additional dependencies.
 /// Use [WriteOptions::default] for only requiring WGPU itself.
@@ -463,8 +465,10 @@ impl Module {
         let vertex_methods = vertex_struct_methods(&module, demangle.clone());
         let entry_point_constants = entry_point_constants(&module, demangle.clone());
         let vertex_states = vertex_states(&module, demangle.clone());
+        let fragment_states = fragment_states(&module, demangle.clone());
 
-        let (shared_path, shared_items) = shared_root_module(&bind_group_data, &vertex_states);
+        let (shared_path, shared_items) =
+            shared_root_module(&bind_group_data, &vertex_states, &fragment_states);
 
         let (root_item_path, root_items) = shader_root_module(
             &module,
@@ -472,6 +476,7 @@ impl Module {
             wgsl_include_path,
             root_path,
             &bind_group_data,
+            &fragment_states,
             demangle,
         );
 
@@ -494,6 +499,7 @@ fn shader_root_module<F>(
     wgsl_include_path: Option<&str>,
     root_path: ModulePath,
     bind_group_data: &BTreeMap<u32, bindgroup::GroupData<'_>>,
+    fragment_states: &[TokenStream],
     demangle: F,
 ) -> (TypePath, TokenStream)
 where
@@ -501,7 +507,6 @@ where
 {
     let bind_groups_module = bind_groups_module(module, bind_group_data, &root_path);
     let compute_module = compute_module(module, demangle.clone());
-    let fragment_states = fragment_states(module, demangle.clone());
 
     // Use a string literal if no include path is provided.
     let included_source = wgsl_include_path
@@ -559,7 +564,7 @@ where
         #bind_groups_module
         #set_bind_groups
         #compute_module
-        #fragment_states
+        #(#fragment_states)*
         #create_shader_module
         #create_pipeline_layout
     };
@@ -569,12 +574,17 @@ where
 fn shared_root_module(
     bind_group_data: &BTreeMap<u32, bindgroup::GroupData<'_>>,
     vertex_states: &[(TypePath, TokenStream)],
+    fragment_states: &[TokenStream],
 ) -> (TypePath, TokenStream) {
     // Add shared code to the top level module to use with all shader modules.
     let mut shared_items = quote!();
     if !vertex_states.is_empty() {
         let vertex_states_shared = vertex_states_shared();
         shared_items.extend(vertex_states_shared);
+    }
+    if !fragment_states.is_empty() {
+        let fragment_states_shared = fragment_states_shared();
+        shared_items.extend(fragment_states_shared);
     }
     if !bind_group_data.is_empty() {
         let bind_groups_root = set_bind_groups_trait();

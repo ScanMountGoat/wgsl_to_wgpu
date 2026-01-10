@@ -1,23 +1,3 @@
-#[derive(Debug)]
-pub struct FragmentEntry<const N: usize> {
-    pub entry_point: &'static str,
-    pub targets: [Option<wgpu::ColorTargetState>; N],
-    pub constants: Vec<(&'static str, f64)>,
-}
-pub fn fragment_state<'a, const N: usize>(
-    module: &'a wgpu::ShaderModule,
-    entry: &'a FragmentEntry<N>,
-) -> wgpu::FragmentState<'a> {
-    wgpu::FragmentState {
-        module,
-        entry_point: Some(entry.entry_point),
-        targets: &entry.targets,
-        compilation_options: wgpu::PipelineCompilationOptions {
-            constants: &entry.constants,
-            ..Default::default()
-        },
-    }
-}
 pub fn main_entry(targets: [Option<wgpu::ColorTargetState>; 0]) -> FragmentEntry<0> {
     FragmentEntry {
         entry_point: ENTRY_MAIN,
@@ -467,3 +447,23 @@ const _: () = assert!(
     std::mem::offset_of!(VectorsU32, c) == 32,
     "offset of VectorsU32.c does not match WGSL"
 );
+#[derive(Debug)]
+pub struct FragmentEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub targets: [Option<wgpu::ColorTargetState>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+pub fn fragment_state<'a, const N: usize>(
+    module: &'a wgpu::ShaderModule,
+    entry: &'a FragmentEntry<N>,
+) -> wgpu::FragmentState<'a> {
+    wgpu::FragmentState {
+        module,
+        entry_point: Some(entry.entry_point),
+        targets: &entry.targets,
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &entry.constants,
+            ..Default::default()
+        },
+    }
+}
