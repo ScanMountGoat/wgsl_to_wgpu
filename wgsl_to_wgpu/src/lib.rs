@@ -317,27 +317,33 @@ pub struct ModulePath {
 
 impl ModulePath {
     fn relative_path(&self, target: &TypePath) -> TokenStream {
-        self.relative_path_impl(&target.parent, Some(&target.name))
+        let path = self.relative_module_path(&target.parent);
+        let name = Ident::new(&target.name, Span::call_site());
+        if path.is_empty() {
+            quote! { #name }
+        } else {
+            quote! { #path::#name }
+        }
     }
 
     fn relative_module_path(&self, target: &ModulePath) -> TokenStream {
-        self.relative_path_impl(target, None)
-    }
-
-    fn relative_path_impl(&self, module: &ModulePath, name: Option<&str>) -> TokenStream {
-        let common = self.common_length(module);
+        let common = self.common_length(target);
 
         let to_common = self.components[common..].iter().map(|_| "super");
-        let from_common = module.components[common..].iter().map(|c| c.as_str());
+        let from_common = target.components[common..].iter().map(|c| c.as_str());
 
         let components = to_common
             .chain(from_common)
-            .chain(name)
             .map(|c| Ident::new(c, Span::call_site()));
 
         let mut path = TokenStream::new();
         path.append_separated(components, quote! { :: });
         path
+    }
+
+    fn extented(mut self, module: &str) -> Self {
+        self.components.push(module.to_string());
+        self
     }
 
     fn common_prefix(&mut self, other: &ModulePath) {

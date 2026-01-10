@@ -23,48 +23,42 @@ impl GroupData<'_> {
         matches!(self.name, GroupName::Named | GroupName::Module(..))
     }
 
-    pub fn camel_case_ident(&self, name: &str, index: u32) -> Ident {
-        let name = self.camel_case_name(name, index);
-        Ident::new(&name, Span::call_site())
-    }
-
-    pub fn camel_case_name(&self, name: &str, index: u32) -> String {
+    pub fn formatted_name(
+        &self,
+        name: &str,
+        index: u32,
+        seperator: &str,
+        map_part: impl Fn(&str) -> String,
+    ) -> String {
         if self.named() {
-            let suffix = self
-                .bindings
-                .iter()
-                .map(|binding| binding.name.to_camel())
-                .collect::<String>();
+            let mut suffix = String::new();
+            for binding in self.bindings.iter() {
+                suffix.push_str(seperator);
+                suffix.push_str(&map_part(&binding.name));
+            }
             format!("{name}{suffix}")
         } else {
             format!("{name}{index}")
         }
     }
 
+    pub fn camel_case_name(&self, name: &str, index: u32) -> String {
+        self.formatted_name(name, index, "", |part| part.to_camel())
+    }
+
+    pub fn camel_case_ident(&self, name: &str, index: u32) -> Ident {
+        let name = self.camel_case_name(name, index);
+        Ident::new(&name, Span::call_site())
+    }
+
     pub fn upper_snake_case_ident(&self, name: &str, index: u32) -> Ident {
-        if self.named() {
-            let mut suffix = String::new();
-            for binding in self.bindings.iter() {
-                suffix.push('_');
-                suffix.extend(binding.name.chars().flat_map(|c| c.to_uppercase()));
-            }
-            Ident::new(&format!("{name}{suffix}"), Span::call_site())
-        } else {
-            Ident::new(&format!("{name}{index}"), Span::call_site())
-        }
+        let name = self.formatted_name(name, index, "_", |part| part.to_uppercase());
+        Ident::new(&name, Span::call_site())
     }
 
     pub fn snake_case_ident(&self, name: &str, index: u32) -> Ident {
-        if self.named() {
-            let mut suffix = String::new();
-            for binding in self.bindings.iter() {
-                suffix.push('_');
-                suffix.push_str(&binding.name);
-            }
-            Ident::new(&format!("{name}{suffix}"), Span::call_site())
-        } else {
-            Ident::new(&format!("{name}{index}"), Span::call_site())
-        }
+        let name = self.formatted_name(name, index, "_", |part| part.to_lowercase());
+        Ident::new(&name, Span::call_site())
     }
 
     pub fn group_number_parameter(&self) -> TokenStream {
@@ -125,11 +119,7 @@ pub fn bind_group_modules(
     }
 
     // TODO: Is there a better to way to get paths to shared items in the root module?
-    let mut root_components = root_module.components.clone();
-    root_components.push("bind_groups".to_string());
-    let bind_groups_module = ModulePath {
-        components: root_components,
-    };
+    let bind_groups_module = root_module.clone().extented("bind_groups");
 
     let mut modules = Vec::new();
     let set_bind_groups_type_path = TypePath {
@@ -138,6 +128,7 @@ pub fn bind_group_modules(
     };
     let set_bind_groups_trait = bind_groups_module.relative_path(&set_bind_groups_type_path);
 
+    // bind groups in the root::bind_groups module
     let bind_groups = bind_group_data
         .iter()
         .filter(|(_, group)| matches!(group.name, GroupName::Numbered | GroupName::Named))
@@ -145,6 +136,7 @@ pub fn bind_group_modules(
             bind_group_definition(module, &set_bind_groups_trait, *group_no, group)
         });
 
+    // bind groups in other modules
     let module_bind_groups = bind_group_data.iter().filter_map(|(group_no, group)| {
         let GroupName::Module(group_module) = &group.name else {
             return None;
