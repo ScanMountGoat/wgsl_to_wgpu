@@ -1,10 +1,21 @@
+pub mod bind_groups {
+    #[derive(Debug, Copy, Clone)]
+    pub struct BindGroups<'a> {
+        pub bind_group_texture_sampler: &'a super::atlas::BindGroupTextureSampler,
+    }
+    impl BindGroups<'_> {
+        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
+            self.bind_group_texture_sampler.set(pass, 0);
+        }
+    }
+}
 pub fn set_bind_groups<P: SetBindGroup>(
     pass: &mut P,
-    bind_group_texture_sampler: &bind_groups::BindGroupTextureSampler,
+    bind_group_texture_sampler: &atlas::BindGroupTextureSampler,
 ) {
-    bind_group_texture_sampler.set(pass);
+    bind_group_texture_sampler.set(pass, 0);
 }
-pub const SOURCE : & str = "@group(0) @binding(0)\nvar atlas_a_texture: texture_2d<f32>;\n@group(0) @binding(1)\nvar atlas_b_sampler: sampler;\n" ;
+pub const SOURCE : & str = "@group(0) @binding(0)\nvar atlas_texture: texture_2d<f32>;\n@group(0) @binding(1)\nvar atlas_sampler: sampler;\n" ;
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
     let source = std::borrow::Cow::Borrowed(SOURCE);
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -15,7 +26,9 @@ pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
 pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&bind_groups::BindGroupTextureSampler::get_bind_group_layout(device)],
+        bind_group_layouts: &[&atlas::BindGroupTextureSampler::get_bind_group_layout(
+            device,
+        )],
         immediate_size: 0,
     })
 }
@@ -57,7 +70,7 @@ impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
         self.set_bind_group(index, bind_group, offsets);
     }
 }
-pub mod bind_groups {
+pub mod atlas {
     #[derive(Debug, Clone)]
     pub struct BindGroupTextureSampler(wgpu::BindGroup);
     #[derive(Debug)]
@@ -113,20 +126,11 @@ pub mod bind_groups {
             });
             Self(bind_group)
         }
-        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
-            pass.set_bind_group(0, &self.0, &[]);
+        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P, index: u32) {
+            pass.set_bind_group(index, &self.0, &[]);
         }
         pub fn inner(&self) -> &wgpu::BindGroup {
             &self.0
-        }
-    }
-    #[derive(Debug, Copy, Clone)]
-    pub struct BindGroups<'a> {
-        pub bind_group_texture_sampler: &'a BindGroupTextureSampler,
-    }
-    impl BindGroups<'_> {
-        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
-            self.bind_group_texture_sampler.set(pass);
         }
     }
 }

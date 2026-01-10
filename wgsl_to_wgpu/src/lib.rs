@@ -44,12 +44,11 @@ extern crate wgpu_types as wgpu;
 use std::{
     collections::BTreeMap,
     io::Write,
-    iter::once,
     path::PathBuf,
     process::{Command, Stdio},
 };
 
-use bindgroup::{bind_groups_module, get_bind_group_data, set_bind_groups_func};
+use bindgroup::{bind_group_modules, get_bind_group_data, set_bind_groups_func};
 use consts::pipeline_overridable_constants;
 use entry::{
     entry_point_constants, fragment_states, vertex_states, vertex_states_shared,
@@ -71,7 +70,10 @@ mod wgsl;
 pub use error::CreateModuleError;
 pub use naga::valid::Capabilities as WgslCapabilities;
 
-use crate::{bindgroup::set_bind_groups_trait, compute::compute_module};
+use crate::{
+    bindgroup::{GroupName, set_bind_groups_trait},
+    compute::compute_module,
+};
 
 /// Options for configuring the generated bindings to work with additional dependencies.
 /// Use [WriteOptions::default] for only requiring WGPU itself.
@@ -117,7 +119,7 @@ pub struct WriteOptions {
     pub validate: Option<ValidationOptions>,
 
     /// Todo: Documentation
-    pub named_bindgroups: bool,
+    pub named_bind_groups: bool,
 
     /// Todo: Documentation
     pub shared_bind_groups: bool,
@@ -275,8 +277,16 @@ pub struct ModulePath {
 
 impl ModulePath {
     fn relative_path(&self, target: &TypePath) -> TokenStream {
+        self.relative_path_impl(&target.parent, Some(&target.name))
+    }
+
+    fn relative_module_path(&self, target: &ModulePath) -> TokenStream {
+        self.relative_path_impl(target, None)
+    }
+
+    fn relative_path_impl(&self, module: &ModulePath, name: Option<&str>) -> TokenStream {
         let base_path: PathBuf = self.components.iter().collect();
-        let target_path: PathBuf = target.parent.components.iter().collect();
+        let target_path: PathBuf = module.components.iter().collect();
         let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
 
         // TODO: Implement this from scratch with tests?
@@ -289,12 +299,22 @@ impl ModulePath {
                 std::path::Component::ParentDir => Some("super"),
                 std::path::Component::Normal(s) => s.to_str(),
             })
-            .chain(once(target.name.as_str()))
+            .chain(name)
             .map(|c| Ident::new(c, Span::call_site()));
 
         let mut path = TokenStream::new();
         path.append_separated(components, quote! { :: });
         path
+    }
+
+    pub fn common_prefix(&mut self, other: &ModulePath) {
+        let common = self
+            .components
+            .iter()
+            .zip(other.components.iter())
+            .position(|(a, b)| a != b)
+            .unwrap_or(other.components.len());
+        self.components.truncate(common);
     }
 }
 
@@ -465,7 +485,8 @@ impl Module {
             &module,
             &global_stages,
             demangle.clone(),
-            options.named_bindgroups,
+            options.named_bind_groups,
+            options.shared_bind_groups,
         )?;
 
         // Collect tokens for each item.
@@ -474,6 +495,7 @@ impl Module {
         let vertex_methods = vertex_struct_methods(&module, demangle.clone());
         let entry_point_constants = entry_point_constants(&module, demangle.clone());
         let vertex_states = vertex_states(&module, demangle.clone());
+        let bind_group_modules = bind_group_modules(&module, &bind_group_data, &root_path);
 
         let (shared_path, shared_items) = shared_root_module(&bind_group_data, &vertex_states);
 
@@ -484,6 +506,7 @@ impl Module {
             root_path,
             &bind_group_data,
             demangle,
+            bind_group_modules.root,
         );
 
         // Place items into appropriate modules.
@@ -493,6 +516,7 @@ impl Module {
         self.add_module_items(vertex_methods);
         self.add_module_items(entry_point_constants);
         self.add_module_items(vertex_states);
+        self.add_module_items(bind_group_modules.modules);
         self.add_module_item(root_item_path, root_items);
 
         Ok(())
@@ -506,11 +530,11 @@ fn shader_root_module<F>(
     root_path: ModulePath,
     bind_group_data: &BTreeMap<u32, bindgroup::GroupData<'_>>,
     demangle: F,
+    bind_groups_module: TokenStream,
 ) -> (TypePath, TokenStream)
 where
     F: Fn(&str) -> TypePath + Clone,
 {
-    let bind_groups_module = bind_groups_module(module, bind_group_data, &root_path);
     let compute_module = compute_module(module, demangle.clone());
     let fragment_states = fragment_states(module, demangle.clone());
 
@@ -533,8 +557,13 @@ where
     let bind_group_layouts: Vec<_> = bind_group_data
         .iter()
         .map(|(group_no, group)| {
+            let path = match &group.name {
+                GroupName::Module(module) => root_path.relative_module_path(module),
+                _ => quote! {bind_groups},
+            };
+
             let group_type = group.camel_case_ident("BindGroup", *group_no);
-            quote!(bind_groups::#group_type::get_bind_group_layout(device))
+            quote!(#path::#group_type::get_bind_group_layout(device))
         })
         .collect();
 
@@ -1197,6 +1226,7 @@ mod test {
 
     macro_rules! bind_group_named_tests {
         (
+        	Settings { named: $named:expr, shared: $shared:expr },
         	$(($test_name:ident, $file_name:expr),)*
         ) => {
         	$(
@@ -1206,7 +1236,8 @@ mod test {
                 		include_str!(concat!("data/bindgroup/named_", $file_name, ".wgsl")),
 		                 WriteOptions {
 		                     rustfmt: true,
-		                     named_bindgroups: true,
+		                     named_bind_groups: $named,
+                             shared_bind_groups: $shared,
 		                     ..Default::default()
 		                 },
 		                 demangle_underscore,
@@ -1220,9 +1251,24 @@ mod test {
     }
 
     bind_group_named_tests!(
+        Settings {
+            named: true,
+            shared: false
+        },
         (bind_group_named_simple, "simple"),
         (bind_group_named_multiple_bindings, "multiple_bindings"),
         (bind_group_named_name_modules, "name_modules"),
         (bind_group_named_types_modules, "types_modules"),
+    );
+
+    bind_group_named_tests!(
+        Settings {
+            named: false,
+            shared: true
+        },
+        (bind_group_shared_simple, "simple"),
+        (bind_group_shared_multiple_bindings, "multiple_bindings"),
+        (bind_group_shared_name_modules, "name_modules"),
+        (bind_group_shared_types_modules, "types_modules"),
     );
 }

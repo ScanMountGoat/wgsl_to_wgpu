@@ -1,8 +1,16 @@
-pub fn set_bind_groups<P: SetBindGroup>(
-    pass: &mut P,
-    bind_group_camera: &bind_groups::BindGroupCamera,
-) {
-    bind_group_camera.set(pass);
+pub mod bind_groups {
+    #[derive(Debug, Copy, Clone)]
+    pub struct BindGroups<'a> {
+        pub bind_group_camera: &'a super::shared::BindGroupCamera,
+    }
+    impl BindGroups<'_> {
+        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
+            self.bind_group_camera.set(pass, 0);
+        }
+    }
+}
+pub fn set_bind_groups<P: SetBindGroup>(pass: &mut P, bind_group_camera: &shared::BindGroupCamera) {
+    bind_group_camera.set(pass, 0);
 }
 pub const SOURCE : & str = "struct shared_Camera {\n\tmatrix: mat4x4<f32>,\n}\n\n@group(0) @binding(0)\nvar<uniform> shared_camera : shared_Camera;\n" ;
 pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
@@ -15,7 +23,7 @@ pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
 pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&bind_groups::BindGroupCamera::get_bind_group_layout(device)],
+        bind_group_layouts: &[&shared::BindGroupCamera::get_bind_group_layout(device)],
         immediate_size: 0,
     })
 }
@@ -57,7 +65,7 @@ impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
         self.set_bind_group(index, bind_group, offsets);
     }
 }
-pub mod bind_groups {
+pub mod shared {
     #[derive(Debug, Clone)]
     pub struct BindGroupCamera(wgpu::BindGroup);
     #[derive(Debug)]
@@ -94,24 +102,13 @@ pub mod bind_groups {
             });
             Self(bind_group)
         }
-        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
-            pass.set_bind_group(0, &self.0, &[]);
+        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P, index: u32) {
+            pass.set_bind_group(index, &self.0, &[]);
         }
         pub fn inner(&self) -> &wgpu::BindGroup {
             &self.0
         }
     }
-    #[derive(Debug, Copy, Clone)]
-    pub struct BindGroups<'a> {
-        pub bind_group_camera: &'a BindGroupCamera,
-    }
-    impl BindGroups<'_> {
-        pub fn set<P: super::SetBindGroup>(&self, pass: &mut P) {
-            self.bind_group_camera.set(pass);
-        }
-    }
-}
-pub mod shared {
     #[repr(C)]
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Camera {
