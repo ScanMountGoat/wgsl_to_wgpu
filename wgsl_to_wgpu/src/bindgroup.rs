@@ -4,7 +4,7 @@ use crate::{
 use case::CaseExt;
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
-use std::{collections::BTreeMap, num::NonZeroU32, ops::Not};
+use std::{collections::BTreeMap, num::NonZeroU32};
 use syn::Ident;
 
 pub struct GroupData<'a> {
@@ -59,7 +59,7 @@ impl GroupData<'_> {
             let mut suffix = String::new();
             for binding in self.bindings.iter() {
                 suffix.push('_');
-                suffix.extend(binding.name.chars());
+                suffix.push_str(&binding.name);
             }
             Ident::new(&format!("{name}{suffix}"), Span::call_site())
         } else {
@@ -740,12 +740,12 @@ where
                 .module_path
                 .clone();
 
-            while path.components.is_empty().not()
+            while !path.components.is_empty()
                 && let Some(binding) = bindings.next()
             {
                 path.common_prefix(&binding.module_path);
             }
-            if path.components.is_empty().not() {
+            if !path.components.is_empty() {
                 group.name = GroupName::Module(path)
             }
         }
