@@ -1,23 +1,3 @@
-#[derive(Debug)]
-pub struct VertexEntry<const N: usize> {
-    pub entry_point: &'static str,
-    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
-    pub constants: Vec<(&'static str, f64)>,
-}
-pub fn vertex_state<'a, const N: usize>(
-    module: &'a wgpu::ShaderModule,
-    entry: &'a VertexEntry<N>,
-) -> wgpu::VertexState<'a> {
-    wgpu::VertexState {
-        module,
-        entry_point: Some(entry.entry_point),
-        buffers: &entry.buffers,
-        compilation_options: wgpu::PipelineCompilationOptions {
-            constants: &entry.constants,
-            ..Default::default()
-        },
-    }
-}
 pub trait SetBindGroup {
     fn set_bind_group(
         &mut self,
@@ -54,6 +34,26 @@ impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
         offsets: &[wgpu::DynamicOffset],
     ) {
         self.set_bind_group(index, bind_group, offsets);
+    }
+}
+#[derive(Debug)]
+pub struct VertexEntry<const N: usize> {
+    pub entry_point: &'static str,
+    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub constants: Vec<(&'static str, f64)>,
+}
+pub fn vertex_state<'a, const N: usize>(
+    module: &'a wgpu::ShaderModule,
+    entry: &'a VertexEntry<N>,
+) -> wgpu::VertexState<'a> {
+    wgpu::VertexState {
+        module,
+        entry_point: Some(entry.entry_point),
+        buffers: &entry.buffers,
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &entry.constants,
+            ..Default::default()
+        },
     }
 }
 pub mod shader1 {

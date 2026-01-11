@@ -162,6 +162,11 @@ pub struct WriteOptions {
     ///     struct BindGroupCameraSettings { /*...*/ }
     /// }
     /// ```
+    ///
+    /// ### Caveats
+    ///
+    /// If the bind group is used in different shader stages (Vertex, Fragment, Compute)
+    /// by different shader modules, the pipeline creation will fail with a validation error.
     pub shared_bind_groups: bool,
 }
 
@@ -372,12 +377,18 @@ pub struct TypePath {
     pub name: String,
 }
 
+impl TypePath {
+    fn shared_root(name: &str) -> Self {
+        Self {
+            parent: ModulePath::default(),
+            name: name.to_string(),
+        }
+    }
+}
+
 /// An identity demangling function that treats `name` as an item in the root module.
 pub fn demangle_identity(name: &str) -> TypePath {
-    TypePath {
-        parent: ModulePath::default(),
-        name: name.to_string(),
-    }
+    TypePath::shared_root(name)
 }
 
 /// Generated code for a Rust module and its submodules.
@@ -528,6 +539,7 @@ impl Module {
             &module,
             &global_stages,
             demangle.clone(),
+            &root_path,
             options.named_bind_groups,
             options.shared_bind_groups,
         )?;
@@ -540,7 +552,7 @@ impl Module {
         let vertex_states = vertex_states(&module, demangle.clone());
         let bind_group_modules = bind_group_modules(&module, &bind_group_data, &root_path);
 
-        let (shared_path, shared_items) = shared_root_module(&bind_group_data, &vertex_states);
+        let shared_items = shared_root_items(&bind_group_data, &vertex_states);
 
         let (root_item_path, root_items) = shader_root_module(
             &module,
@@ -553,7 +565,7 @@ impl Module {
         );
 
         // Place items into appropriate modules.
-        self.add_module_item(shared_path, shared_items);
+        self.add_module_items(shared_items);
         self.add_module_items(consts);
         self.add_module_items(structs);
         self.add_module_items(vertex_methods);
@@ -649,27 +661,23 @@ where
     (root_item_path, root_items)
 }
 
-fn shared_root_module(
+fn shared_root_items(
     bind_group_data: &BTreeMap<u32, bindgroup::GroupData<'_>>,
     vertex_states: &[(TypePath, TokenStream)],
-) -> (TypePath, TokenStream) {
+) -> Vec<(TypePath, TokenStream)> {
+    let mut items = Vec::new();
     // Add shared code to the top level module to use with all shader modules.
-    let mut shared_items = quote!();
     if !vertex_states.is_empty() {
         let vertex_states_shared = vertex_states_shared();
-        shared_items.extend(vertex_states_shared);
+        let path = TypePath::shared_root("__VERTEX_STATES");
+        items.push((path, vertex_states_shared));
     }
     if !bind_group_data.is_empty() {
         let bind_groups_root = set_bind_groups_trait();
-        shared_items.extend(bind_groups_root);
+        let path = TypePath::shared_root("__BIND_GROUPS_TRAIT");
+        items.push((path, bind_groups_root));
     }
-
-    // The type path name here just needs to be unique.
-    let shared_path = TypePath {
-        parent: ModulePath::default(),
-        name: "__SHARED".to_string(),
-    };
-    (shared_path, shared_items)
+    items
 }
 
 fn immediate_data_size(module: &naga::Module) -> Option<TokenStream> {

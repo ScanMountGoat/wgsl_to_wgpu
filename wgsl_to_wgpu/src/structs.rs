@@ -289,16 +289,13 @@ mod tests {
     use super::*;
 
     use crate::{
-        MatrixVectorTypes, ModulePath, WriteOptions, assert_rust_snapshot, assert_tokens_eq,
-        create_shader_module,
+        MatrixVectorTypes, WriteOptions, assert_rust_snapshot, assert_tokens_eq,
+        create_shader_module, demangle_identity,
     };
     use indoc::indoc;
 
     fn struct_tokens(module: &naga::Module, options: WriteOptions) -> TokenStream {
-        let structs = structs(module, options, |s| TypePath {
-            parent: ModulePath::default(),
-            name: s.to_string(),
-        });
+        let structs = structs(module, options, demangle_identity);
         let structs = structs.iter().map(|(_, s)| s);
         quote!(#(#structs)*)
     }

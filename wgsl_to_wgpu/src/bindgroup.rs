@@ -125,10 +125,7 @@ pub fn bind_group_modules(
     let bind_groups_module = root_module.clone().module("bind_groups");
 
     let mut modules = Vec::new();
-    let set_bind_groups_type_path = TypePath {
-        parent: ModulePath::default(),
-        name: "SetBindGroup".to_string(),
-    };
+    let set_bind_groups_type_path = TypePath::shared_root("SetBindGroup");
     let set_bind_groups_trait = bind_groups_module.relative_path(&set_bind_groups_type_path);
 
     // bind groups in the root::bind_groups module
@@ -268,10 +265,7 @@ pub fn set_bind_groups_func(
     this_module: &ModulePath,
 ) -> TokenStream {
     // TODO: Is there a better to way to get paths to shared items in the root module?
-    let set_bind_groups_trait = this_module.relative_path(&TypePath {
-        parent: ModulePath::default(),
-        name: "SetBindGroup".to_string(),
-    });
+    let set_bind_groups_trait = this_module.relative_path(&TypePath::shared_root("SetBindGroup"));
 
     let group_parameters = bind_group_data.iter().map(|(group_no, group)| {
         let module = match &group.name {
@@ -649,6 +643,7 @@ pub fn get_bind_group_data<'a, F>(
     module: &'a naga::Module,
     global_stages: &BTreeMap<String, wgpu::ShaderStages>,
     demangle: F,
+    root_module: &ModulePath,
     named_bind_groups: bool,
     shared_bind_groups: bool,
 ) -> Result<BTreeMap<u32, GroupData<'a>>, CreateModuleError>
@@ -720,9 +715,16 @@ where
             {
                 path.common_prefix(&binding.module_path);
             }
-            if !path.components.is_empty() {
-                group.name = GroupName::Module(path)
+
+            // no common root module, skip
+            if path.components.is_empty() {
+                continue;
             }
+            // common module is root, skip
+            if &path == root_module {
+                continue;
+            }
+            group.name = GroupName::Module(path);
         }
     }
 
@@ -755,9 +757,16 @@ mod tests {
         let global_stages = wgsl::global_shader_stages(&module);
         assert_eq!(
             3,
-            get_bind_group_data(&module, &global_stages, demangle_identity, false, false)
-                .unwrap()
-                .len()
+            get_bind_group_data(
+                &module,
+                &global_stages,
+                demangle_identity,
+                &ModulePath::default(),
+                false,
+                false
+            )
+            .unwrap()
+            .len()
         );
     }
 
@@ -774,7 +783,14 @@ mod tests {
         let global_stages = wgsl::global_shader_stages(&module);
 
         assert!(matches!(
-            get_bind_group_data(&module, &global_stages, demangle_identity, false, false),
+            get_bind_group_data(
+                &module,
+                &global_stages,
+                demangle_identity,
+                &ModulePath::default(),
+                false,
+                false
+            ),
             Err(CreateModuleError::NonConsecutiveBindGroups)
         ));
     }
@@ -794,7 +810,14 @@ mod tests {
         let global_stages = wgsl::global_shader_stages(&module);
 
         assert!(matches!(
-            get_bind_group_data(&module, &global_stages, demangle_identity, false, false),
+            get_bind_group_data(
+                &module,
+                &global_stages,
+                demangle_identity,
+                &ModulePath::default(),
+                false,
+                false
+            ),
             Err(CreateModuleError::NonConsecutiveBindGroups)
         ));
     }
@@ -805,9 +828,15 @@ mod tests {
             let module = naga::front::wgsl::parse_str(wgsl).unwrap();
 
             let global_stages = wgsl::global_shader_stages(&module);
-            let bind_group_data =
-                get_bind_group_data(&module, &global_stages, demangle_identity, false, false)
-                    .unwrap();
+            let bind_group_data = get_bind_group_data(
+                &module,
+                &global_stages,
+                demangle_identity,
+                &ModulePath::default(),
+                false,
+                false,
+            )
+            .unwrap();
 
             let actual = bind_group_modules(&module, &bind_group_data, &ModulePath::default());
             assert!(actual.modules.is_empty());

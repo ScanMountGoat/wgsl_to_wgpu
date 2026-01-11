@@ -5,8 +5,8 @@ use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
+use crate::TypePath;
 use crate::wgsl::vertex_entry_structs;
-use crate::{ModulePath, TypePath};
 
 pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     match &f.result {
@@ -127,10 +127,7 @@ where
                     quote!(#(#step_mode_params),*, #overrides)
                 };
 
-                let vertex_entry = TypePath {
-                    parent: ModulePath::default(),
-                    name: "VertexEntry".to_string(),
-                };
+                let vertex_entry = TypePath::shared_root("VertexEntry");
                 let vertex_entry = name_path.parent.relative_path(&vertex_entry);
 
                 let entry = quote! {

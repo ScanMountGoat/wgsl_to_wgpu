@@ -1,8 +1,8 @@
-struct Uniforms {
+struct shared__Uniforms {
     color_rgb: vec3<f32>,
 }
 
-@group(0) @binding(0) var<storage, read_write> uniforms: Uniforms;
+@group(0) @binding(0) var<storage, read_write> uniforms: shared__Uniforms;
 @group(0) @binding(1) var<storage, read_write> invocation_count: atomic<u32>;
 
 @compute

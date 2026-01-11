@@ -21,12 +21,12 @@ var color_texture: texture_2d<f32>;
 @group(0) @binding(1)
 var color_sampler: sampler;
 
-struct Uniforms {
+struct shared__Uniforms {
     color_rgb: vec3<f32>,
 }
 
 @group(1) @binding(0)
-var<uniform> uniforms: Uniforms;
+var<uniform> shared__uniforms: shared__Uniforms;
 
 struct PushConstants {
     color_matrix: mat4x4<f32>
@@ -43,6 +43,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if force_black {
         return vec4(0.0);
     } else {
-        return constants.color_matrix * vec4(color * uniforms.color_rgb.rgb * scale, 1.0);
+        return constants.color_matrix * vec4(color * shared__uniforms.color_rgb.rgb * scale, 1.0);
     }
 }
