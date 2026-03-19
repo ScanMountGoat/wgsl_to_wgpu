@@ -528,7 +528,7 @@ where
         .keys()
         .map(|group_no| {
             let group = indexed_name_to_ident("BindGroup", *group_no);
-            quote!(bind_groups::#group::get_bind_group_layout(device))
+            quote!(Some(&bind_groups::#group::get_bind_group_layout(device)))
         })
         .collect();
 
@@ -539,7 +539,7 @@ where
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
                 bind_group_layouts: &[
-                    #(&#bind_group_layouts),*
+                    #(#bind_group_layouts),*
                 ],
                 immediate_size: #immediate_size,
             })

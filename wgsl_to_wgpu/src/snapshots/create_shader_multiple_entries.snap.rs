@@ -106,7 +106,11 @@ pub mod bind_groups {
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 8,
-                visibility: wgpu::ShaderStages::all(),
+                visibility: wgpu::ShaderStages::VERTEX
+                    .union(wgpu::ShaderStages::FRAGMENT)
+                    .union(wgpu::ShaderStages::COMPUTE)
+                    .union(wgpu::ShaderStages::TASK)
+                    .union(wgpu::ShaderStages::MESH),
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -290,7 +294,7 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             &wgpu::PipelineLayoutDescriptor {
                 label: None,
                 bind_group_layouts: &[
-                    &bind_groups::BindGroup0::get_bind_group_layout(device),
+                    Some(&bind_groups::BindGroup0::get_bind_group_layout(device)),
                 ],
                 immediate_size: 0,
             },

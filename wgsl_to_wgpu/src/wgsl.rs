@@ -25,6 +25,10 @@ const fn naga_stages(stage: naga::ShaderStage) -> wgpu::ShaderStages {
         naga::ShaderStage::Compute => wgpu::ShaderStages::COMPUTE,
         naga::ShaderStage::Task => wgpu::ShaderStages::TASK,
         naga::ShaderStage::Mesh => wgpu::ShaderStages::MESH,
+        naga::ShaderStage::RayGeneration => todo!(),
+        naga::ShaderStage::Miss => todo!(),
+        naga::ShaderStage::AnyHit => todo!(),
+        naga::ShaderStage::ClosestHit => todo!(),
     }
 }
 
@@ -194,6 +198,7 @@ where
             size: naga::ArraySize::Pending(_),
             ..
         } => todo!(),
+        naga::TypeInner::CooperativeMatrix { .. } => todo!(),
     }
 }
 

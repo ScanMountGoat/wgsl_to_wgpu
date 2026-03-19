@@ -155,8 +155,8 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[
-            &bind_groups::BindGroup0::get_bind_group_layout(device),
-            &bind_groups::BindGroup1::get_bind_group_layout(device),
+            Some(&bind_groups::BindGroup0::get_bind_group_layout(device)),
+            Some(&bind_groups::BindGroup1::get_bind_group_layout(device)),
         ],
         immediate_size: 64,
     })

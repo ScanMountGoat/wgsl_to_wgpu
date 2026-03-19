@@ -34,11 +34,13 @@ struct State {
 }
 
 impl State {
-    async fn new(window: Window) -> Self {
+    async fn new(window: Window, event_loop: &winit::event_loop::ActiveEventLoop) -> Self {
         let window = Arc::new(window);
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
-            ..Default::default()
+            ..wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
+                event_loop.owned_display_handle(),
+            ))
         });
         let surface = instance.create_surface(window.clone()).unwrap();
         let adapter = instance
@@ -256,8 +258,7 @@ impl State {
         }
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
+    fn render(&mut self, output: wgpu::SurfaceTexture) {
         let output_view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -336,8 +337,6 @@ impl State {
 
         // Actually draw the frame.
         output.present();
-
-        Ok(())
     }
 
     fn read_invocation_count(&self) -> u32 {
@@ -388,7 +387,7 @@ impl ApplicationHandler<()> for App {
             .create_window(Window::default_attributes().with_title("wgsl_to_wgpu"))
             .unwrap();
 
-        self.state = Some(block_on(State::new(window)));
+        self.state = Some(block_on(State::new(window, event_loop)));
     }
 
     fn window_event(
@@ -415,11 +414,14 @@ impl ApplicationHandler<()> for App {
                 }
                 WindowEvent::ScaleFactorChanged { .. } => {}
                 WindowEvent::RedrawRequested => {
-                    match state.render() {
-                        Ok(_) => {}
-                        Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
-                        Err(wgpu::SurfaceError::OutOfMemory) => event_loop.exit(),
-                        Err(e) => eprintln!("{e:?}"),
+                    match state.surface.get_current_texture() {
+                        wgpu::CurrentSurfaceTexture::Success(output) => state.render(output),
+                        wgpu::CurrentSurfaceTexture::Suboptimal(_) => state.resize(state.size),
+                        wgpu::CurrentSurfaceTexture::Timeout => {}
+                        wgpu::CurrentSurfaceTexture::Occluded => {}
+                        wgpu::CurrentSurfaceTexture::Outdated => state.resize(state.size),
+                        wgpu::CurrentSurfaceTexture::Lost => state.resize(state.size),
+                        wgpu::CurrentSurfaceTexture::Validation => {}
                     }
                     state.window.request_redraw();
                 }

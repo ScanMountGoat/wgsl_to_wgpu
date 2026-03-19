@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added `inner` method for generated bind group structs for accessing the inner `wgpu::BindGroup`.
 
 ### Changed
+* Updated wgpu to 29.0.
 * Moved generated entry point code to the appropriate module for generated code with modules.
 * Moved the generated `SetBindGroup` trait from the `bind_groups` module for each shader to the root module.
 * Moved the generated code for `VertexEntry`, `FragmentEntry`, `vertex_state`, and `fragment_state` to the root module.
