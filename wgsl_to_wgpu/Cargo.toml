@@ -12,8 +12,8 @@ exclude = ["/test_compile"]
 publish = true
 
 [dependencies]
-naga = { version = "29.0", features = ["wgsl-in", "stderr"] }
-wgpu-types = "29.0"
+naga = { workspace = true, features = ["wgsl-in", "stderr"] }
+wgpu-types.workspace = true
 syn = "2.0"
 quote = "1.0"
 proc-macro2 = "1.0"

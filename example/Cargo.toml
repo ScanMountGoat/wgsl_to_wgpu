@@ -6,11 +6,11 @@ publish = false
 
 [dependencies]
 winit = "0.30"
-wgpu = "29.0"
+wgpu.workspace = true
 futures = "0.3"
-bytemuck = { version = "1.23", features = ["derive"] }
-encase = "0.12"
-glam = { version = "0.32.1", features = ["bytemuck", "encase"] }
+bytemuck = { workspace = true, features = ["derive"] }
+encase.workspace = true
+glam = { workspace = true, features = ["bytemuck", "encase"] }
 
 [build-dependencies]
 wgsl_to_wgpu = { path = "../wgsl_to_wgpu" }

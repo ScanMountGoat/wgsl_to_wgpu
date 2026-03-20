@@ -6,6 +6,14 @@ members = ["wgsl_to_wgpu", "example", "wgsl_to_wgpu/test_compile"]
 [workspace.package]
 edition = "2024"
 
+[workspace.dependencies]
+wgpu = "29.0"
+wgpu-types = "29.0"
+naga = "29.0"
+glam = "0.32.1"
+encase = "0.12"
+bytemuck = "1.25"
+
 [profile.dev.package]
 insta.opt-level = 3
 similar.opt-level = 3
