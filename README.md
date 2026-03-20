@@ -41,12 +41,12 @@ While bind groups can easily be set all at once using the `bind_groups::set_bind
 
 Organizing bind groups in this way can also help to better organize rendering resources in application code instead of redundantly storing all resources with each object. The `bindgroups::BindGroup0` may only need to be stored once while `bindgroups::BindGroup3` may be stored for each mesh in the scene. Note that bind groups store references to their underlying resource bindings, so it is not necessary to recreate a bind group if the only the uniform or storage buffer contents change. Avoid creating new bind groups during rendering if possible for best performance.
 
-# Preprocessing Libraries
+## Preprocessing Libraries
 There are a number of useful processing crates like [wesl](https://crates.io/crates/wesl) that extend or modify WGSL to add features like module imports or conditional compilation. wgsl_to_wgpu does not provide support for any of these crates directly. Instead, pass the final processed WGSL and specify the approriate name demangling logic if needed. See [Mangling](https://github.com/ScanMountGoat/wgsl_to_wgpu/blob/main/Mangling.md) and the crate documentation for details.
 
 ## Limitations
-- It may be necessary to disable running this function for shaders with unsupported types or features.
-Please make an issue if any new or existing WGSL syntax is unsupported.
+wgsl_to_wgpu only looks at the WGSL code itself and needs to makes assumptions about how it will be used by consuming code. It may be necessary in some cases to manually reimplement parts of the generated code to achieve the desired behavior or improve performance. Please make an issue if any new or existing WGSL syntax or features are unsupported.
+
 - This library is not a rendering library and will not generate any high level abstractions like a material or scene graph. 
 The goal is just to generate most of the tedious and error prone boilerplate required to use WGSL shaders with wgpu.
 - The generated code will not prevent accidentally calling a function from an unrelated generated module.
@@ -57,7 +57,7 @@ WGPU will still validate the size of the buffer binding at runtime.
 - Most but not all WGSL types are currently supported.
 - Vertex attributes using floating point types in WGSL like `vec2<f32>` are assumed to use float inputs instead of normalized attributes like unorm or snorm integers.
 - All textures are assumed to be filterable and all samplers are assumed to be filtering. This may lead to compatibility issues. This can usually be resolved by requesting the native only feature TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES.
-- All `wgpu::BindingType::Buffer` assume static offsets. Construct the `wgpu::BindGroup` and `wgpu::BindGroupLayoutDescriptor` manually to use dynamic offsets.
+- All `wgpu::BindingType::Buffer` are assumed to use static offsets. Construct the `wgpu::BindGroup` and `wgpu::BindGroupLayoutDescriptor` manually to use dynamic offsets.
 - It's possible to achieve slightly better performance than the generated code in some cases like avoiding redundant bind group bindings. This should be addressed by using some handwritten code where appropriate.
 
 ## Publishing Crates
