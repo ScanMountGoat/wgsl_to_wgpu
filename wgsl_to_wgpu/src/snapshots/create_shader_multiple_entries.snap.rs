@@ -15,6 +15,10 @@ pub mod bind_groups {
         pub j: wgpu::BufferBinding<'a>,
         pub k: wgpu::BufferBinding<'a>,
         pub l: wgpu::BufferBinding<'a>,
+        pub m: wgpu::BufferBinding<'a>,
+        pub n: wgpu::BufferBinding<'a>,
+        pub o: wgpu::BufferBinding<'a>,
+        pub p: wgpu::BufferBinding<'a>,
     }
     const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
         label: Some("LayoutDescriptor0"),
@@ -106,11 +110,7 @@ pub mod bind_groups {
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 8,
-                visibility: wgpu::ShaderStages::VERTEX
-                    .union(wgpu::ShaderStages::FRAGMENT)
-                    .union(wgpu::ShaderStages::COMPUTE)
-                    .union(wgpu::ShaderStages::TASK)
-                    .union(wgpu::ShaderStages::MESH),
+                visibility: wgpu::ShaderStages::all(),
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -140,6 +140,46 @@ pub mod bind_groups {
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 11,
+                visibility: wgpu::ShaderStages::NONE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 12,
+                visibility: wgpu::ShaderStages::NONE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 13,
+                visibility: wgpu::ShaderStages::NONE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 14,
+                visibility: wgpu::ShaderStages::NONE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 15,
                 visibility: wgpu::ShaderStages::NONE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
@@ -208,6 +248,22 @@ pub mod bind_groups {
                             wgpu::BindGroupEntry {
                                 binding: 11,
                                 resource: wgpu::BindingResource::Buffer(bindings.l),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 12,
+                                resource: wgpu::BindingResource::Buffer(bindings.m),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 13,
+                                resource: wgpu::BindingResource::Buffer(bindings.n),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 14,
+                                resource: wgpu::BindingResource::Buffer(bindings.o),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 15,
+                                resource: wgpu::BindingResource::Buffer(bindings.p),
                             },
                         ],
                         label: Some("BindGroup0"),
@@ -300,12 +356,22 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
             },
         )
 }
+pub const ENTRY_AH_MAIN: &str = "ah_main";
+pub const ENTRY_CH_MAIN: &str = "ch_main";
 pub const ENTRY_FS_MAIN: &str = "fs_main";
 pub const ENTRY_MAIN: &str = "main";
 pub const ENTRY_MAIN2: &str = "main2";
+pub const ENTRY_MISS_MAIN: &str = "miss_main";
 pub const ENTRY_MS_MAIN: &str = "ms_main";
+pub const ENTRY_RG_MAIN: &str = "rg_main";
 pub const ENTRY_TS_MAIN: &str = "ts_main";
 pub const ENTRY_VS_MAIN: &str = "vs_main";
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct HitCounters {
+    pub hit_num: u32,
+    pub selected_hit: u32,
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct MeshOutput {}

@@ -1,4 +1,5 @@
 enable wgpu_mesh_shader;
+enable wgpu_ray_tracing_pipeline;
 
 @group(0) @binding(0) var<uniform> a: f32;
 @group(0) @binding(1) var<uniform> b: f32;
@@ -12,6 +13,10 @@ enable wgpu_mesh_shader;
 @group(0) @binding(9) var<uniform> j: u32;
 @group(0) @binding(10) var<uniform> k: u32;
 @group(0) @binding(11) var<uniform> l: f64;
+@group(0) @binding(12) var<uniform> m: u32;
+@group(0) @binding(13) var<uniform> n: u32;
+@group(0) @binding(14) var<uniform> o: u32;
+@group(0) @binding(15) var<uniform> p: u32;
 
 fn inner() -> f32 {
     return d;
@@ -82,4 +87,34 @@ var<workgroup> mesh_output: MeshOutput;
 @workgroup_size(1)
 fn ms_main(@builtin(local_invocation_index) index: u32, @builtin(global_invocation_id) id: vec3<u32>) {
     mesh_output.vertex_count = index + i + k;
+}
+
+struct HitCounters {
+    hit_num: u32,
+    selected_hit: u32,
+}
+
+var<incoming_ray_payload> incoming_hit_num: HitCounters;
+
+@ray_generation
+fn rg_main() {
+    let x = i * m;
+}
+
+@any_hit
+@incoming_payload(incoming_hit_num)
+fn ah_main() {
+    let x = i * n;
+}
+
+@closest_hit
+@incoming_payload(incoming_hit_num)
+fn ch_main() {
+    let x = i * o;
+}
+
+@miss
+@incoming_payload(incoming_hit_num)
+fn miss_main() {
+    let x = i * p;
 }

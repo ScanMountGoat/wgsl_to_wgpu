@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## unreleased
 ### Added
+* Added support for ray tracing pipelines.
 * Added derive for Clone for generated bind group structs.
 * Added `inner` method for generated bind group structs for accessing the inner `wgpu::BindGroup`.
 
