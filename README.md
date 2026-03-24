@@ -55,6 +55,7 @@ It's recommended to name the shader module with the same name as the shader and 
 - Uniform and storage buffers can be initialized using the wrong generated Rust struct. 
 WGPU will still validate the size of the buffer binding at runtime.
 - Most but not all WGSL types are currently supported.
+- The buffer layout generated for each non builtin parameter for each vertex entry function assumes offset 0 and stride equal to the type's size.
 - Vertex attributes using floating point types in WGSL like `vec2<f32>` are assumed to use float inputs instead of normalized attributes like unorm or snorm integers.
 - All textures are assumed to be filterable and all samplers are assumed to be filtering. This may lead to compatibility issues. This can usually be resolved by requesting the native only feature TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES.
 - All `wgpu::BindingType::Buffer` are assumed to use static offsets. Construct the `wgpu::BindGroup` and `wgpu::BindGroupLayoutDescriptor` manually to use dynamic offsets.
