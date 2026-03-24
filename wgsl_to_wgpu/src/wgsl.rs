@@ -352,8 +352,9 @@ pub fn vertex_entry_structs<F>(
     demangle: F,
 ) -> Vec<VertexInput>
 where
-    F: Fn(&str) -> TypePath,
+    F: Fn(&str) -> TypePath + Clone,
 {
+    // An argument has to have a binding unless it is a structure.
     vertex_entry
         .function
         .arguments
@@ -361,29 +362,35 @@ where
         .filter(|a| a.binding.is_none())
         .filter_map(|argument| {
             let arg_type = &module.types[argument.ty];
-            match &arg_type.inner {
-                naga::TypeInner::Struct { members, span: _ } => {
-                    let input = VertexInput {
-                        name: demangle(arg_type.name.as_ref()?),
-                        fields: members
-                            .iter()
-                            .filter_map(|member| {
-                                // Skip builtins since they have no location binding.
-                                let location = match member.binding.as_ref().unwrap() {
-                                    naga::Binding::BuiltIn(_) => None,
-                                    naga::Binding::Location { location, .. } => Some(*location),
-                                }?;
-
-                                Some((location, member.clone()))
-                            })
-                            .collect(),
-                    };
-
-                    Some(input)
-                }
-                // An argument has to have a binding unless it is a structure.
-                _ => None,
-            }
+            vertex_entry_struct(arg_type, demangle.clone())
         })
         .collect()
+}
+
+pub fn vertex_entry_struct<F>(arg_type: &naga::Type, demangle: F) -> Option<VertexInput>
+where
+    F: Fn(&str) -> TypePath,
+{
+    match &arg_type.inner {
+        naga::TypeInner::Struct { members, span: _ } => {
+            let input = VertexInput {
+                name: demangle(arg_type.name.as_ref()?),
+                fields: members
+                    .iter()
+                    .filter_map(|member| {
+                        // Skip builtins since they have no location binding.
+                        match member.binding.as_ref().unwrap() {
+                            naga::Binding::BuiltIn(_) => None,
+                            naga::Binding::Location { location, .. } => {
+                                Some((*location, member.clone()))
+                            }
+                        }
+                    })
+                    .collect(),
+            };
+
+            Some(input)
+        }
+        _ => None,
+    }
 }

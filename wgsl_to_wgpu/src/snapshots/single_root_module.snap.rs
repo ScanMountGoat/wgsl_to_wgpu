@@ -185,14 +185,14 @@ impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
     }
 }
 pub fn vert_entry(
-    vertex_input: wgpu::VertexStepMode,
-    vertex_offset: wgpu::VertexStepMode,
+    in_step_mode: wgpu::VertexStepMode,
+    offset_step_mode: wgpu::VertexStepMode,
 ) -> VertexEntry<2> {
     VertexEntry {
         entry_point: ENTRY_VERT,
         buffers: [
-            shared::VertexInput::vertex_buffer_layout(vertex_input),
-            VertexOffset::vertex_buffer_layout(vertex_offset),
+            shared::VertexInput::vertex_buffer_layout(in_step_mode),
+            VertexOffset::vertex_buffer_layout(offset_step_mode),
         ],
         constants: Default::default(),
     }
@@ -227,14 +227,14 @@ pub mod shared {
         }
     }
     pub fn vert_entry(
-        vertex_input: wgpu::VertexStepMode,
-        vertex_offset: wgpu::VertexStepMode,
+        in_step_mode: wgpu::VertexStepMode,
+        offset_step_mode: wgpu::VertexStepMode,
     ) -> super::VertexEntry<2> {
         super::VertexEntry {
             entry_point: ENTRY_VERT,
             buffers: [
-                VertexInput::vertex_buffer_layout(vertex_input),
-                super::VertexOffset::vertex_buffer_layout(vertex_offset),
+                VertexInput::vertex_buffer_layout(in_step_mode),
+                super::VertexOffset::vertex_buffer_layout(offset_step_mode),
             ],
             constants: Default::default(),
         }

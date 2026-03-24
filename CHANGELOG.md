@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 * Fixed an issue where entry points would not use correct type paths for generated code with modules in some cases.
+* Fixed an issue where vertex entries with non struct inputs would not generate buffer layouts.
 
 ## 0.17.1 - 2025-12-26
 ### Added

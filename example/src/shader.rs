@@ -273,12 +273,12 @@ impl SetBindGroup for wgpu::RenderBundleEncoder<'_> {
     }
 }
 pub fn vs_main_entry(
-    vertex_input: wgpu::VertexStepMode,
+    in_step_mode: wgpu::VertexStepMode,
     overrides: &OverrideConstants,
 ) -> VertexEntry<1> {
     VertexEntry {
         entry_point: ENTRY_VS_MAIN,
-        buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
+        buffers: [VertexInput::vertex_buffer_layout(in_step_mode)],
         constants: overrides.constants(),
     }
 }

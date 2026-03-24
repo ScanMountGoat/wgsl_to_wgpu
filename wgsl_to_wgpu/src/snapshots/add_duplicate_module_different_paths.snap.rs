@@ -190,14 +190,14 @@ pub mod shader1 {
         }
     }
     pub fn vert_entry(
-        vertex_input: wgpu::VertexStepMode,
-        vertex_offset: wgpu::VertexStepMode,
+        in_step_mode: wgpu::VertexStepMode,
+        offset_step_mode: wgpu::VertexStepMode,
     ) -> super::VertexEntry<2> {
         super::VertexEntry {
             entry_point: ENTRY_VERT,
             buffers: [
-                super::shared::VertexInput::vertex_buffer_layout(vertex_input),
-                VertexOffset::vertex_buffer_layout(vertex_offset),
+                super::shared::VertexInput::vertex_buffer_layout(in_step_mode),
+                VertexOffset::vertex_buffer_layout(offset_step_mode),
             ],
             constants: Default::default(),
         }
@@ -320,14 +320,14 @@ pub mod shaders {
             }
         }
         pub fn vert_entry(
-            vertex_input: wgpu::VertexStepMode,
-            vertex_offset: wgpu::VertexStepMode,
+            in_step_mode: wgpu::VertexStepMode,
+            offset_step_mode: wgpu::VertexStepMode,
         ) -> super::super::VertexEntry<2> {
             super::super::VertexEntry {
                 entry_point: ENTRY_VERT,
                 buffers: [
-                    super::super::shared::VertexInput::vertex_buffer_layout(vertex_input),
-                    VertexOffset::vertex_buffer_layout(vertex_offset),
+                    super::super::shared::VertexInput::vertex_buffer_layout(in_step_mode),
+                    VertexOffset::vertex_buffer_layout(offset_step_mode),
                 ],
                 constants: Default::default(),
             }
@@ -364,14 +364,14 @@ pub mod shared {
         }
     }
     pub fn vert_entry(
-        vertex_input: wgpu::VertexStepMode,
-        vertex_offset: wgpu::VertexStepMode,
+        in_step_mode: wgpu::VertexStepMode,
+        offset_step_mode: wgpu::VertexStepMode,
     ) -> super::VertexEntry<2> {
         super::VertexEntry {
             entry_point: ENTRY_VERT,
             buffers: [
-                VertexInput::vertex_buffer_layout(vertex_input),
-                super::shaders::shader2::VertexOffset::vertex_buffer_layout(vertex_offset),
+                VertexInput::vertex_buffer_layout(in_step_mode),
+                super::shaders::shader2::VertexOffset::vertex_buffer_layout(offset_step_mode),
             ],
             constants: Default::default(),
         }

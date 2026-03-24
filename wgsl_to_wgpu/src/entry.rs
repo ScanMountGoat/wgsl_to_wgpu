@@ -5,7 +5,7 @@ use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::wgsl::vertex_entry_structs;
+use crate::wgsl::{vertex_entry_struct, vertex_format};
 use crate::{ModulePath, TypePath};
 
 pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
@@ -83,6 +83,11 @@ pub fn vertex_states<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, To
 where
     F: Fn(&str) -> TypePath + Clone,
 {
+    // Initialize the layout calculator provided by naga.
+    // TODO: only initialize the layouter once.
+    let mut layouter = naga::proc::Layouter::default();
+    layouter.update(module.to_ctx()).unwrap();
+
     module
         .entry_points
         .iter()
@@ -95,19 +100,59 @@ where
                 let const_name =
                     Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());
 
-                let vertex_inputs = vertex_entry_structs(entry_point, module, demangle.clone());
                 let mut step_mode_params = vec![];
-                let layout_expressions: Vec<TokenStream> = vertex_inputs
+                let layout_expressions: Vec<TokenStream> = entry_point
+                    .function
+                    .arguments
                     .iter()
+                    .filter(|a| !matches!(a.binding, Some(naga::Binding::BuiltIn(_))))
                     .map(|input| {
-                        let path = name_path.parent.relative_path(&input.name);
-                        let step_mode = Ident::new(&input.name.name.to_snake(), Span::call_site());
+                        // Add a suffix to avoid reserved Rust keywords.
+                        let step_mode = Ident::new(
+                            &format!("{}_step_mode", input.name.as_ref().unwrap().to_snake()),
+                            Span::call_site(),
+                        );
                         step_mode_params.push(quote!(#step_mode: wgpu::VertexStepMode));
-                        quote!(#path::vertex_buffer_layout(#step_mode))
+
+                        let arg_type = &module.types[input.ty];
+                        match vertex_entry_struct(arg_type, demangle.clone()) {
+                            Some(input) => {
+                                let path = name_path.parent.relative_path(&input.name);
+                                quote!(#path::vertex_buffer_layout(#step_mode))
+                            }
+                            None => {
+                                // Assume arguments that are not structs fill their entire buffer.
+                                let location = match input.binding.as_ref().unwrap() {
+                                    naga::Binding::BuiltIn(_) => todo!(),
+                                    naga::Binding::Location { location, .. } => location,
+                                };
+                                // TODO: Create a function for this.
+                                let format = vertex_format(arg_type);
+                                // TODO: Will the debug implementation always work with the macro?
+                                let format = Ident::new(&format!("{format:?}"), Span::call_site());
+
+                                let layout = layouter[input.ty];
+                                let stride = Literal::usize_unsuffixed(layout.size as usize);
+
+                                quote! {
+                                    wgpu::VertexBufferLayout {
+                                        array_stride: #stride,
+                                        step_mode: #step_mode,
+                                        attributes: &[
+                                            wgpu::VertexAttribute {
+                                                format: wgpu::VertexFormat::#format,
+                                                offset: 0,
+                                                shader_location: #location,
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
                     })
                     .collect();
 
-                let n = Literal::usize_unsuffixed(vertex_inputs.len());
+                let n = Literal::usize_unsuffixed(layout_expressions.len());
 
                 let overrides = if !module.overrides.is_empty() {
                     Some(quote!(overrides: &OverrideConstants))
