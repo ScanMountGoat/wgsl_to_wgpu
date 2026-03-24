@@ -2,15 +2,16 @@ use std::{ffi::OsStr, path::Path};
 
 const PATH: &str = "../src/snapshots";
 
-/// Create a file, which imports all snapshots in `PATH`.
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed={}", PATH);
 
+    // Create a file that imports all snapshots in `PATH`.
     let mut import_snapshots = String::new();
     for entry in std::fs::read_dir(PATH).unwrap() {
         let path = entry.unwrap().path().canonicalize().unwrap();
 
+        // TODO: prefer snapshot.new.rs if it exists
         if path.extension() != Some(OsStr::new("rs")) {
             continue;
         }

@@ -11,3 +11,4 @@ half = { version = "2.7", features = ["bytemuck"] }
 nalgebra = "0.34"
 serde = { version = "1.0", features = ["derive"] }
 wgpu.workspace = true
+trybuild = "1.0"
