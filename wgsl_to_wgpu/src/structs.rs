@@ -10,15 +10,12 @@ use crate::{TypePath, WriteOptions, wgsl::rust_type};
 pub fn structs<F>(
     module: &naga::Module,
     options: WriteOptions,
+    layouter: &naga::proc::Layouter,
     demangle: F,
 ) -> Vec<(TypePath, TokenStream)>
 where
     F: Fn(&str) -> TypePath + Clone,
 {
-    // Initialize the layout calculator provided by naga.
-    let mut layouter = naga::proc::Layouter::default();
-    layouter.update(module.to_ctx()).unwrap();
-
     let mut global_variable_types = HashSet::new();
     for g in module.global_variables.iter() {
         add_types_recursive(&mut global_variable_types, module, g.1.ty);
@@ -50,7 +47,7 @@ where
                 let s = rust_struct(
                     &path,
                     members,
-                    &layouter,
+                    layouter,
                     t_handle,
                     module,
                     options,
@@ -295,7 +292,10 @@ mod tests {
     use indoc::indoc;
 
     fn struct_tokens(module: &naga::Module, options: WriteOptions) -> TokenStream {
-        let structs = structs(module, options, |s| TypePath {
+        let mut layouter = naga::proc::Layouter::default();
+        layouter.update(module.to_ctx()).unwrap();
+
+        let structs = structs(module, options, &layouter, |s| TypePath {
             parent: ModulePath::default(),
             name: s.to_string(),
         });

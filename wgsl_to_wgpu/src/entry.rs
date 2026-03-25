@@ -79,15 +79,14 @@ pub fn vertex_states_shared() -> TokenStream {
     }
 }
 
-pub fn vertex_states<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>
+pub fn vertex_states<F>(
+    module: &naga::Module,
+    layouter: &naga::proc::Layouter,
+    demangle: F,
+) -> Vec<(TypePath, TokenStream)>
 where
     F: Fn(&str) -> TypePath + Clone,
 {
-    // Initialize the layout calculator provided by naga.
-    // TODO: only initialize the layouter once.
-    let mut layouter = naga::proc::Layouter::default();
-    layouter.update(module.to_ctx()).unwrap();
-
     module
         .entry_points
         .iter()

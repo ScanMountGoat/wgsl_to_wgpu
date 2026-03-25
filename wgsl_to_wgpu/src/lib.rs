@@ -456,15 +456,19 @@ impl Module {
                 .map_err(|error| CreateModuleError::ValidationError { error })?;
         }
 
+        // Use the WGSL memory layout provided by naga.
+        let mut layouter = naga::proc::Layouter::default();
+        layouter.update(module.to_ctx()).unwrap();
+
         let global_stages = wgsl::global_shader_stages(&module);
         let bind_group_data = get_bind_group_data(&module, &global_stages, demangle.clone())?;
 
         // Collect tokens for each item.
-        let structs = structs::structs(&module, options, demangle.clone());
+        let structs = structs::structs(&module, options, &layouter, demangle.clone());
         let consts = consts::consts(&module, demangle.clone());
         let vertex_methods = vertex_struct_methods(&module, demangle.clone());
         let entry_point_constants = entry_point_constants(&module, demangle.clone());
-        let vertex_states = vertex_states(&module, demangle.clone());
+        let vertex_states = vertex_states(&module, &layouter, demangle.clone());
         let fragment_states = fragment_states(&module, demangle.clone());
 
         let (shared_path, shared_items) =
