@@ -1,6 +1,6 @@
 [package]
 name = "test_compile"
-version = "0.0.1"
+version = "0.18.0"
 edition.workspace = true
 
 [dependencies]
