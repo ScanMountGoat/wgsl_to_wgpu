@@ -532,7 +532,7 @@ where
         .keys()
         .map(|group_no| {
             let group = indexed_name_to_ident("BindGroup", *group_no);
-            quote!(Some(&bind_groups::#group::get_bind_group_layout(device)))
+            quote!(&bind_groups::#group::get_bind_group_layout(device))
         })
         .collect();
 
