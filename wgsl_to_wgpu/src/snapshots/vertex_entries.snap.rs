@@ -95,7 +95,7 @@ impl Input1 {
 #[derive(Debug)]
 pub struct VertexEntry<const N: usize> {
     pub entry_point: &'static str,
-    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub buffers: [Option<wgpu::VertexBufferLayout<'static>>; N],
     pub constants: Vec<(&'static str, f64)>,
 }
 pub fn vertex_state<'a, const N: usize>(
@@ -120,9 +120,9 @@ pub fn vs_main_multiple_entry(
     VertexEntry {
         entry_point: ENTRY_VS_MAIN_MULTIPLE,
         buffers: [
-            Input0::vertex_buffer_layout(in0_step_mode),
-            Input1::vertex_buffer_layout(in1_step_mode),
-            wgpu::VertexBufferLayout {
+            Some(Input0::vertex_buffer_layout(in0_step_mode)),
+            Some(Input1::vertex_buffer_layout(in1_step_mode)),
+            Some(wgpu::VertexBufferLayout {
                 array_stride: 16,
                 step_mode: in3_step_mode,
                 attributes: &[wgpu::VertexAttribute {
@@ -130,7 +130,7 @@ pub fn vs_main_multiple_entry(
                     offset: 0,
                     shader_location: 7u32,
                 }],
-            },
+            }),
         ],
         constants: Default::default(),
     }
@@ -145,7 +145,7 @@ pub fn vs_main_none_entry() -> VertexEntry<0> {
 pub fn vs_main_single_entry(in0_step_mode: wgpu::VertexStepMode) -> VertexEntry<1> {
     VertexEntry {
         entry_point: ENTRY_VS_MAIN_SINGLE,
-        buffers: [Input0::vertex_buffer_layout(in0_step_mode)],
+        buffers: [Some(Input0::vertex_buffer_layout(in0_step_mode))],
         constants: Default::default(),
     }
 }

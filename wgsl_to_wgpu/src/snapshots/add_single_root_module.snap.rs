@@ -109,7 +109,7 @@ impl VertexOffset {
 #[derive(Debug)]
 pub struct VertexEntry<const N: usize> {
     pub entry_point: &'static str,
-    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub buffers: [Option<wgpu::VertexBufferLayout<'static>>; N],
     pub constants: Vec<(&'static str, f64)>,
 }
 pub fn vertex_state<'a, const N: usize>(
@@ -191,8 +191,8 @@ pub fn vert_entry(
     VertexEntry {
         entry_point: ENTRY_VERT,
         buffers: [
-            shared::VertexInput::vertex_buffer_layout(in_step_mode),
-            VertexOffset::vertex_buffer_layout(offset_step_mode),
+            Some(shared::VertexInput::vertex_buffer_layout(in_step_mode)),
+            Some(VertexOffset::vertex_buffer_layout(offset_step_mode)),
         ],
         constants: Default::default(),
     }
@@ -233,8 +233,8 @@ pub mod shared {
         super::VertexEntry {
             entry_point: ENTRY_VERT,
             buffers: [
-                VertexInput::vertex_buffer_layout(in_step_mode),
-                super::VertexOffset::vertex_buffer_layout(offset_step_mode),
+                Some(VertexInput::vertex_buffer_layout(in_step_mode)),
+                Some(super::VertexOffset::vertex_buffer_layout(offset_step_mode)),
             ],
             constants: Default::default(),
         }

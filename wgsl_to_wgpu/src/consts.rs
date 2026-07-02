@@ -21,6 +21,8 @@ where
                     naga::Literal::F64(v) => Some(quote!(f64 = #v)),
                     naga::Literal::F32(v) => Some(quote!(f32 = #v)),
                     naga::Literal::U32(v) => Some(quote!(u32 = #v)),
+                    naga::Literal::U16(v) => Some(quote!(u16 = #v)),
+                    naga::Literal::I16(v) => Some(quote!(i16 = #v)),
                     naga::Literal::I32(v) => Some(quote!(i32 = #v)),
                     naga::Literal::U64(v) => Some(quote!(u64 = #v)),
                     naga::Literal::Bool(v) => Some(quote!(bool = #v)),
@@ -165,10 +167,15 @@ mod tests {
     fn write_global_constants() {
         let source = indoc! {r#"
             enable f16;
+            enable wgpu_int16;
 
             const INT_CONST = -12;
-            
+
+            const INT_CONST2 = i16(-12);
+
             const UNSIGNED_CONST = 34u;
+
+            const UNSIGNED_CONST2 = u16(34u);
 
             const FLOAT_CONST = 0.1;
 
@@ -181,8 +188,9 @@ mod tests {
                 // TODO: This is valid WGSL syntax, but naga doesn't support it apparently.
                 // const C_INNER = 456;
 
-                if BOOL_CONST { 
-                    return f32(INT_CONST) * f32(UNSIGNED_CONST) * FLOAT_CONST * f32(SMALL_FLOAT_CONST);
+                if BOOL_CONST {
+                    let value = f32(UNSIGNED_CONST2) * f32(INT_CONST2) * f32(UNSIGNED_CONST);
+                    return f32(INT_CONST) * value * FLOAT_CONST * f32(SMALL_FLOAT_CONST);
                 } else {
                     return 0.0;
                 }
@@ -198,7 +206,9 @@ mod tests {
         // TODO: Why are int and float consts missing?
         assert_tokens_eq!(
             quote! {
+                pub const INT_CONST2: i16 = -12i16;
                 pub const UNSIGNED_CONST: u32 = 34u32;
+                pub const UNSIGNED_CONST2: u16 = 34u16;
                 pub const SMALL_FLOAT_CONST: half::f16 = half::f16::from_f32_const(0.25f32);
                 pub const BOOL_CONST: bool = true;
             },

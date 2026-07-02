@@ -69,18 +69,16 @@ impl CreateModuleError {
     }
 
     /// Creates a diagnostic string from the error, including a source path.
-    pub fn emit_to_string_with_path(&self, wgsl_source: &str, path: impl AsRef<Path>) -> String {
-        let path = path.as_ref();
+    pub fn emit_to_string_with_path(&self, wgsl_source: &str, path: &str) -> String {
         match self {
             CreateModuleError::ParseError { error } => {
                 error.emit_to_string_with_path(wgsl_source, path)
             }
             CreateModuleError::ValidationError { error } => {
-                let path = path.to_string_lossy();
-                error.emit_to_string_with_path(wgsl_source, &path)
+                error.emit_to_string_with_path(wgsl_source, path)
             }
             other => {
-                format!("{}: {}", path.to_string_lossy(), other)
+                format!("{path}: {other}")
             }
         }
     }

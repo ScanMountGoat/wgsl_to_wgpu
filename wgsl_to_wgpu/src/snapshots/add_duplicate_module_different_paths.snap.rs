@@ -1,7 +1,7 @@
 #[derive(Debug)]
 pub struct VertexEntry<const N: usize> {
     pub entry_point: &'static str,
-    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub buffers: [Option<wgpu::VertexBufferLayout<'static>>; N],
     pub constants: Vec<(&'static str, f64)>,
 }
 pub fn vertex_state<'a, const N: usize>(
@@ -196,8 +196,10 @@ pub mod shader1 {
         super::VertexEntry {
             entry_point: ENTRY_VERT,
             buffers: [
-                super::shared::VertexInput::vertex_buffer_layout(in_step_mode),
-                VertexOffset::vertex_buffer_layout(offset_step_mode),
+                Some(super::shared::VertexInput::vertex_buffer_layout(
+                    in_step_mode,
+                )),
+                Some(VertexOffset::vertex_buffer_layout(offset_step_mode)),
             ],
             constants: Default::default(),
         }
@@ -326,8 +328,10 @@ pub mod shaders {
             super::super::VertexEntry {
                 entry_point: ENTRY_VERT,
                 buffers: [
-                    super::super::shared::VertexInput::vertex_buffer_layout(in_step_mode),
-                    VertexOffset::vertex_buffer_layout(offset_step_mode),
+                    Some(super::super::shared::VertexInput::vertex_buffer_layout(
+                        in_step_mode,
+                    )),
+                    Some(VertexOffset::vertex_buffer_layout(offset_step_mode)),
                 ],
                 constants: Default::default(),
             }
@@ -370,8 +374,10 @@ pub mod shared {
         super::VertexEntry {
             entry_point: ENTRY_VERT,
             buffers: [
-                VertexInput::vertex_buffer_layout(in_step_mode),
-                super::shaders::shader2::VertexOffset::vertex_buffer_layout(offset_step_mode),
+                Some(VertexInput::vertex_buffer_layout(in_step_mode)),
+                Some(super::shaders::shader2::VertexOffset::vertex_buffer_layout(
+                    offset_step_mode,
+                )),
             ],
             constants: Default::default(),
         }

@@ -48,6 +48,7 @@ impl State {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .unwrap();
@@ -336,7 +337,7 @@ impl State {
         self.last_invocation_count = invocation_count;
 
         // Actually draw the frame.
-        output.present();
+        self.queue.present(output);
     }
 
     fn read_invocation_count(&self) -> u32 {
@@ -358,7 +359,10 @@ impl State {
         mapping_ready.wait();
 
         // Read the buffer contents
-        let buffer_view = self.invocation_count_readback_buffer.get_mapped_range(..);
+        let buffer_view = self
+            .invocation_count_readback_buffer
+            .get_mapped_range(..)
+            .unwrap();
         let invocation_count: u32 = bytemuck::cast_slice(&buffer_view)[0];
         drop(buffer_view);
         self.invocation_count_readback_buffer.unmap();

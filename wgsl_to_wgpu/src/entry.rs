@@ -58,7 +58,7 @@ pub fn vertex_states_shared() -> TokenStream {
         #[derive(Debug)]
         pub struct VertexEntry<const N: usize> {
             pub entry_point: &'static str,
-            pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+            pub buffers: [Option<wgpu::VertexBufferLayout<'static>>; N],
             pub constants: Vec<(&'static str, f64)>,
         }
 
@@ -117,7 +117,7 @@ where
                         match vertex_entry_struct(arg_type, demangle.clone()) {
                             Some(input) => {
                                 let path = name_path.parent.relative_path(&input.name);
-                                quote!(#path::vertex_buffer_layout(#step_mode))
+                                quote!(Some(#path::vertex_buffer_layout(#step_mode)))
                             }
                             None => {
                                 // Assume arguments that are not structs fill their entire buffer.
@@ -134,7 +134,7 @@ where
                                 let stride = Literal::usize_unsuffixed(layout.size as usize);
 
                                 quote! {
-                                    wgpu::VertexBufferLayout {
+                                    Some(wgpu::VertexBufferLayout {
                                         array_stride: #stride,
                                         step_mode: #step_mode,
                                         attributes: &[
@@ -144,7 +144,7 @@ where
                                                 shader_location: #location,
                                             }
                                         ]
-                                    }
+                                    })
                                 }
                             }
                         }

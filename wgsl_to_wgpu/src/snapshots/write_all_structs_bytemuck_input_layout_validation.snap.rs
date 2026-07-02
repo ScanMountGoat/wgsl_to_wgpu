@@ -62,7 +62,7 @@ pub struct Outer {
 #[derive(Debug)]
 pub struct VertexEntry<const N: usize> {
     pub entry_point: &'static str,
-    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub buffers: [Option<wgpu::VertexBufferLayout<'static>>; N],
     pub constants: Vec<(&'static str, f64)>,
 }
 pub fn vertex_state<'a, const N: usize>(
@@ -82,7 +82,7 @@ pub fn vertex_state<'a, const N: usize>(
 pub fn main_entry(input_step_mode: wgpu::VertexStepMode) -> VertexEntry<1> {
     VertexEntry {
         entry_point: ENTRY_MAIN,
-        buffers: [Input0::vertex_buffer_layout(input_step_mode)],
+        buffers: [Some(Input0::vertex_buffer_layout(input_step_mode))],
         constants: Default::default(),
     }
 }

@@ -197,7 +197,7 @@ impl VertexInput {
 #[derive(Debug)]
 pub struct VertexEntry<const N: usize> {
     pub entry_point: &'static str,
-    pub buffers: [wgpu::VertexBufferLayout<'static>; N],
+    pub buffers: [Option<wgpu::VertexBufferLayout<'static>>; N],
     pub constants: Vec<(&'static str, f64)>,
 }
 pub fn vertex_state<'a, const N: usize>(
@@ -278,7 +278,7 @@ pub fn vs_main_entry(
 ) -> VertexEntry<1> {
     VertexEntry {
         entry_point: ENTRY_VS_MAIN,
-        buffers: [VertexInput::vertex_buffer_layout(in_step_mode)],
+        buffers: [Some(VertexInput::vertex_buffer_layout(in_step_mode))],
         constants: overrides.constants(),
     }
 }
