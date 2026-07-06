@@ -1,6 +1,6 @@
 [package]
 name = "wgsl_to_wgpu"
-version = "0.18.0"
+version = "0.19.0"
 edition.workspace = true
 authors = ["ScanMountGoat <>"]
 description = "Generate typesafe Rust bindings from WGSL shaders to wgpu"
