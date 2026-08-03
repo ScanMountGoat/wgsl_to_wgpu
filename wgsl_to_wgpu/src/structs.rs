@@ -78,6 +78,20 @@ where
 {
     let name = &path.name;
     let struct_name = Ident::new(name, Span::call_site());
+    let has_rts_array = struct_has_rts_array_member(&members, module);
+    
+    
+    // Assume types used in global variables are host shareable and require validation.
+    // This includes storage, uniform, and workgroup variables.
+    // This also means types that are never used will not be validated.
+    // Structs used only for vertex inputs do not require validation on desktop platforms.
+    // Vertex input layout is handled already by setting the attribute offsets and types.
+    // This allows vertex input field types without padding like vec3 for positions.
+    let is_host_shareable = global_variable_types.contains(&t_handle);
+    
+    let use_encase = options.derive_encase_host_shareable && is_host_shareable;
+    let use_bytemuck = (options.derive_bytemuck_vertex && is_vertex_stage_argument(module, t_handle)) || (options.derive_bytemuck_host_shareable && is_host_shareable);
+    let is_unsized = has_rts_array && use_bytemuck;
 
     // Skip builtins since they don't require user specified data.
     let members: Vec<_> = members
@@ -110,50 +124,33 @@ where
     // TODO: Does the Rust alignment matter if it's copied to a buffer anyway?
     let struct_size = Literal::usize_unsuffixed(layout.size as usize);
     let assert_size_text = format!("size of {name} does not match WGSL");
-    let assert_size = quote! {
-        const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
+
+    let assert_size = if !is_unsized {
+        quote! {
+            const _: () = assert!(std::mem::size_of::<#struct_name>() == #struct_size, #assert_size_text);
+        }
+    } else {
+        quote! {}
     };
 
-    let has_rts_array = struct_has_rts_array_member(&members, module);
-    let members = struct_members(path, &members, module, options, demangle);
+    let members = struct_members(path, &members, module, use_bytemuck, use_encase, options, demangle);
     let mut derives = Vec::new();
 
     derives.push(quote!(Debug));
     if !has_rts_array {
         derives.push(quote!(Copy));
     }
-    derives.push(quote!(Clone));
+    if !is_unsized {
+        derives.push(quote!(Clone));
+    }
     derives.push(quote!(PartialEq));
 
-    // Assume types used in global variables are host shareable and require validation.
-    // This includes storage, uniform, and workgroup variables.
-    // This also means types that are never used will not be validated.
-    // Structs used only for vertex inputs do not require validation on desktop platforms.
-    // Vertex input layout is handled already by setting the attribute offsets and types.
-    // This allows vertex input field types without padding like vec3 for positions.
-    let is_host_shareable = global_variable_types.contains(&t_handle);
-
-    if has_rts_array && !options.derive_encase_host_shareable {
-        panic!("Runtime-sized array fields are only supported with encase");
-    }
-
-    if options.derive_bytemuck_vertex && is_vertex_stage_argument(module, t_handle) {
-        if has_rts_array {
-            panic!("Runtime-sized array fields are not supported with bytemuck");
-        }
+    if use_bytemuck && !has_rts_array {
         derives.push(quote!(bytemuck::Pod));
         derives.push(quote!(bytemuck::Zeroable));
     }
 
-    if options.derive_bytemuck_host_shareable && is_host_shareable {
-        if has_rts_array {
-            panic!("Runtime-sized array fields are not supported with bytemuck");
-        }
-        derives.push(quote!(bytemuck::Pod));
-        derives.push(quote!(bytemuck::Zeroable));
-    }
-
-    if options.derive_encase_host_shareable && is_host_shareable {
+    if use_encase {
         derives.push(quote!(encase::ShaderType));
     }
 
@@ -174,13 +171,8 @@ where
         quote!()
     };
 
-    let repr_c = if !has_rts_array {
-        quote!(#[repr(C)])
-    } else {
-        quote!()
-    };
     quote! {
-        #repr_c
+        #[repr(C)]
         #[derive(#(#derives),*)]
         pub struct #struct_name {
             #(#members),*
@@ -222,6 +214,8 @@ fn struct_members<F>(
     path: &TypePath,
     members: &[naga::StructMember],
     module: &naga::Module,
+    use_bytemuck: bool,
+    use_encase: bool,
     options: WriteOptions,
     demangle: F,
 ) -> Vec<TokenStream>
@@ -251,9 +245,22 @@ where
                     options.matrix_vector_types,
                     demangle.clone(),
                 );
+
+                let annotation = if use_encase {
+                    quote!( #[shader(size(runtime))] )
+                } else {
+                    quote!()
+                };
+
+                let member_type = if use_bytemuck {
+                    quote! { [#element_type] }
+                } else {
+                    quote! { Vec<#element_type> }
+                };
+
                 quote!(
-                    #[shader(size(runtime))]
-                    pub #member_name: Vec<#element_type>
+                    #annotation
+                    pub #member_name: #member_type
                 )
             } else {
                 let member_type = rust_type(
@@ -589,6 +596,7 @@ mod tests {
 
         assert_tokens_eq!(
             quote! {
+                #[repr(C)]
                 #[derive(Debug, Clone, PartialEq, encase::ShaderType)]
                 pub struct RtsStruct {
                     pub other_data: i32,
@@ -601,7 +609,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn write_runtime_sized_array_no_encase() {
         let source = indoc! {r#"
             struct RtsStruct {
@@ -614,16 +621,27 @@ mod tests {
         "#};
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let _structs = struct_tokens(
+        let actual = struct_tokens(
             &module,
             WriteOptions {
                 ..Default::default()
             },
         );
+        
+        assert_tokens_eq!(
+            quote! {
+                #[repr(C)]
+                #[derive(Debug, Clone, PartialEq)]
+                pub struct RtsStruct {
+                    pub other_data: i32,
+                    pub the_array: Vec<u32>,
+                }
+            },
+            actual
+        );
     }
 
     #[test]
-    #[should_panic]
     fn write_runtime_sized_array_bytemuck_vertex() {
         let source = indoc! {r#"
             struct RtsStruct {
@@ -638,7 +656,7 @@ mod tests {
         "#};
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let _structs = struct_tokens(
+        let actual = struct_tokens(
             &module,
             WriteOptions {
                 derive_encase_host_shareable: true,
@@ -647,10 +665,21 @@ mod tests {
                 ..Default::default()
             },
         );
+        
+        assert_tokens_eq!(
+            quote! {
+                #[repr(C)]
+                #[derive(Debug, PartialEq)]
+                pub struct RtsStruct {
+                    pub other_data: i32,
+                    pub the_array: [u32],
+                }
+            },
+            actual
+        );
     }
 
     #[test]
-    #[should_panic]
     fn write_runtime_sized_array_bytemuck_host_shareable() {
         let source = indoc! {r#"
             struct RtsStruct {
@@ -663,7 +692,7 @@ mod tests {
         "#};
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
-        let _structs = struct_tokens(
+        let actual = struct_tokens(
             &module,
             WriteOptions {
                 derive_encase_host_shareable: true,
@@ -671,6 +700,27 @@ mod tests {
                 derive_bytemuck_host_shareable: true,
                 ..Default::default()
             },
+        );
+        
+        assert_tokens_eq!(
+            quote! {
+                #[repr(C)]
+                #[derive(Debug, PartialEq, encase::ShaderType)]
+                pub struct RtsStruct {
+                    pub other_data: i32,
+                    #[shader(size(runtime))]
+                    pub the_array: [u32],
+                }
+                const _: () = assert!(
+                    std::mem::offset_of!(RtsStruct, other_data) == 0,
+                    "offset of RtsStruct.other_data does not match WGSL"
+                );
+                const _: () = assert!(
+                    std::mem::offset_of!(RtsStruct, the_array) == 4,
+                    "offset of RtsStruct.the_array does not match WGSL"
+                );
+            },
+            actual
         );
     }
 
