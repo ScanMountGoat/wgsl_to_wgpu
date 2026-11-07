@@ -137,13 +137,9 @@ where
         panic!("Runtime-sized array fields are only supported with encase");
     }
 
-    if options.derive_bytemuck_vertex && is_vertex_stage_argument(module, t_handle) {
-        if has_rts_array {
-            panic!("Runtime-sized array fields are not supported with bytemuck");
-        }
-        derives.push(quote!(bytemuck::Pod));
-        derives.push(quote!(bytemuck::Zeroable));
-    } else if options.derive_bytemuck_host_shareable && is_host_shareable {
+    if (options.derive_bytemuck_vertex && is_vertex_stage_argument(module, t_handle))
+        || (options.derive_bytemuck_host_shareable && is_host_shareable)
+    {
         if has_rts_array {
             panic!("Runtime-sized array fields are not supported with bytemuck");
         }
