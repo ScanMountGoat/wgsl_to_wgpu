@@ -143,9 +143,7 @@ where
         }
         derives.push(quote!(bytemuck::Pod));
         derives.push(quote!(bytemuck::Zeroable));
-    }
-
-    if options.derive_bytemuck_host_shareable && is_host_shareable {
+    } else if options.derive_bytemuck_host_shareable && is_host_shareable {
         if has_rts_array {
             panic!("Runtime-sized array fields are not supported with bytemuck");
         }
@@ -541,6 +539,76 @@ mod tests {
                     pub b: i32,
                     pub c: f64,
                 }
+            },
+            actual
+        );
+    }
+
+    #[test]
+    fn write_all_structs_vertex_input_and_storage() {
+        let source = indoc! {r#"
+            struct VertexInput0 {
+                @location(0) position0: vec4<f32>,
+                @location(1) normal0: vec4<f32>,
+                @location(2) tangent0: vec4<f32>,
+            };
+
+            @group(0) @binding(0) var<storage, read> vertices: array<VertexInput0>;
+
+            @vertex
+            fn main(input: VertexInput0) -> vec4<f32> {
+                return vec4(0.0);
+            }
+        "#};
+
+        let module = naga::front::wgsl::parse_str(source).unwrap();
+
+        let actual = struct_tokens(
+            &module,
+            WriteOptions {
+                derive_bytemuck_vertex: true,
+                derive_bytemuck_host_shareable: true,
+                derive_encase_host_shareable: true,
+                derive_serde: false,
+                matrix_vector_types: MatrixVectorTypes::Rust,
+                rustfmt: true,
+                ..Default::default()
+            },
+        );
+
+        assert_tokens_eq!(
+            quote! {
+                #[repr(C)]
+                #[derive(
+                    Debug,
+                    Copy,
+                    Clone,
+                    PartialEq,
+                    bytemuck::Pod,
+                    bytemuck::Zeroable,
+                    encase::ShaderType,
+                )]
+                pub struct VertexInput0 {
+                    pub position0: [f32; 4],
+                    pub normal0: [f32; 4],
+                    pub tangent0: [f32; 4],
+                }
+                const _: () = assert!(
+                    std::mem::size_of::<VertexInput0>() == 48,
+                    "size of VertexInput0 does not match WGSL"
+                );
+                const _: () = assert!(
+                    std::mem::offset_of!(VertexInput0, position0) == 0,
+                    "offset of VertexInput0.position0 does not match WGSL"
+                );
+                const _: () = assert!(
+                    std::mem::offset_of!(VertexInput0, normal0) == 16,
+                    "offset of VertexInput0.normal0 does not match WGSL"
+                );
+                const _: () = assert!(
+                    std::mem::offset_of!(VertexInput0, tangent0) == 32,
+                    "offset of VertexInput0.tangent0 does not match WGSL"
+                );
             },
             actual
         );
